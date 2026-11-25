@@ -210,10 +210,12 @@ internal class ExactMatcher(
     private class Answer(
         val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true,
         val waitForNames: Boolean = false, val artistVideo: String? = null,
-        val localizedUrl: (suspend (MutableSet<String>) -> String?)? = null
+        val localizedUrl: (suspend () -> String?)? = null
     )
 
-    private class ToPick(val metadata: MusicMetadata, val songs: List<Row?>, val videos: List<Row?>, val watchUrl: String, val lengthsMs: List<Long>)
+    private class ToPick(
+        val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val names: Names, val editions: Editions
+    )
 
     /**
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
@@ -241,11 +243,10 @@ internal class ExactMatcher(
             }
             if (answer != null) {
                 // A stalled localized search spends only what's left of the search time and doesn't lose the picker.
-                val otherEditions = mutableSetOf<String>()
                 val url = answer.url ?: answer.localizedUrl?.let { localize ->
-                    withTimeoutOrNull(timeoutMs - start.elapsedNow().inWholeMilliseconds) { localize(otherEditions) }
+                    withTimeoutOrNull(timeoutMs - start.elapsedNow().inWholeMilliseconds) { localize() }
                 }
-                val match = url?.let { Match.Found(it, answer.lasting) } ?: answer.toPick?.let { picked(it, answer.lasting, otherEditions) } ?: Match.Missing
+                val match = url?.let { Match.Found(it, answer.lasting) } ?: answer.toPick?.let { picked(it, answer.lasting) } ?: Match.Missing
                 return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true)
                 else Looked(match, unsure = !answer.lasting, waitForNames = answer.waitForNames, artistVideo = answer.artistVideo)
             }
@@ -269,14 +270,9 @@ internal class ExactMatcher(
     }
 
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
-    private suspend fun picked(toPick: ToPick, lasting: Boolean, otherEditions: Set<String>): Match {
-        // A localized row can rule out the same ID under a different name. Keep its slot empty.
-        fun stillOffered(rows: List<Row?>) = rows.map { row -> row?.takeUnless { it.id in otherEditions } }
+    private suspend fun picked(toPick: ToPick, lasting: Boolean): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
-            Answer(
-                pickedFrom(toPick.metadata, stillOffered(toPick.songs), toPick.watchUrl, videos = false, toPick.lengthsMs)
-                    ?: pickedFrom(toPick.metadata, stillOffered(toPick.videos), toPick.watchUrl, videos = true, toPick.lengthsMs)
-            )
+            Answer(pickedFrom(toPick, videos = false) ?: pickedFrom(toPick, videos = true))
         } ?: return Match.Failed
         return url.url?.let { Match.Found(it, lasting) } ?: Match.Missing
     }
@@ -857,10 +853,12 @@ internal class ExactMatcher(
         val items = fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
         val recording = requestedRecording(metadata.title.takeIf { isSong }.orEmpty())
         val songRows = if (isSong) items.associateWith(::row) else emptyMap()
-        val editions = MixEditions(metadata, songRows.values)
-        val eligible = songRows.values.filter { it.id != null && editions.songFits(it) }.toSet()
-        fun found(item: JSONObject, loose: Boolean): String? {
-            if (isSong && songRows[item] !in eligible) return null
+        val editions = Editions(metadata)
+        editions.learn(songRows.values, videos = false)
+        val byTitle = if (isSong) metadata.copy(title = Takes.withoutDiscoMix(metadata.title)) else metadata
+        fun found(item: JSONObject, loose: Boolean, eligible: Set<Row>): String? {
+            val songRow = songRows[item]
+            if (isSong && songRow !in eligible) return null
             val columns = item.optJSONArray("flexColumns")?.objects()
                 ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
                 ?: return null
@@ -868,11 +866,13 @@ internal class ExactMatcher(
             // The second line is "Artist • Album • 4:46" for songs and "Album • Artist • 2012" for albums.
             val details = columns.getOrNull(1).orEmpty().split(" • ")
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
+            if (songRow != null && editions.isMix(songRow) && !knownArtist(leadArtist(artist), setOf(leadArtist(metadata.artist)))) return null
             // A song's album may say what version it is, "Song" on "… Remix".
             val album = if (isSong) details.getOrNull(1).orEmpty() else ""
             if (isSong && !keepsRequestedRecording(recording, name, album)) return null
-            val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(name) else name
-            val same = if (loose) looselyMatches(metadata, named, artist) else matches(metadata, named, artist.ifEmpty { named }, album)
+            val title = if (isSong) Takes.withoutDiscoMix(name) else name
+            val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(title) else title
+            val same = if (loose) looselyMatches(byTitle, named, artist) else matches(byTitle, named, artist.ifEmpty { named }, album)
             if (!same) return null
             return when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } }
@@ -882,12 +882,16 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }
-        firstFound(loose = false)?.let { (url, length) ->
-            val edition = if (isSong) namedLinkedEdition(metadata, eligible, length) else null
-            return Answer(edition?.let { watchUrl + it.id } ?: url)
+        fun firstFound(eligible: Set<Row>): Answer? {
+            fun foundInOrder(loose: Boolean) =
+                asLongAs(metadata, items.mapNotNull { item -> found(item, loose, eligible)?.let { it to row(item).lengthMs } }) { it.second }
+            foundInOrder(loose = false)?.let { (url, length) ->
+                val edition = if (isSong) namedLinkedEdition(metadata, eligible, length) else null
+                return Answer(edition?.let { watchUrl + it.id } ?: url)
+            }
+            return if (loosely) foundInOrder(loose = true)?.let { Answer(it.first) } else null
         }
-        if (loosely) firstFound(loose = true)?.let { return Answer(it.first) }
+        if (!editions.needsStore) firstFound(songRows.values.filter { editions.allows(it) }.toSet())?.let { return it }
         if (!isSong) return Answer(null)
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
@@ -896,25 +900,28 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        val rows = eligible.toList()
         val allVideos = videos.map(::row)
-        val videoRows = allVideos.filter { editions.videoFits(it, names) }
-        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
-        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
+        editions.learn(allVideos, videos = true)
+        val rows = songRows.values.filter { editions.allows(it, names) }
+        if (editions.needsStore) firstFound(rows.toSet())?.let { return it }
+        val videoRows = allVideos.filter { editions.allows(it, names) }
+        val named = rows.firstOrNull { isTheSong(it, names, editions) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
+        val abroad = rows.filter { !editions.isMix(it) && isTheSongInAnotherScript(it, names) &&
+            keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
         // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
-        val takeNamed = named == null && rows.any { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
+        val takeNamed = named == null && rows.any { isTheSong(it, names, editions) && keepsRequestedRecording(recording, it) }
         val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
-            ?: videoNamesSong(metadata, abroad, videoRows, names)
+            ?: videoNamesSong(metadata, abroad, videoRows, names, editions)
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
-        matchingVideo(rows, videoRows, names, recording, watchUrl)?.let { return it }
-        val localize: (suspend (MutableSet<String>) -> String?)? = if (names.complete) null else { otherEditions ->
-            localizedSong(metadata, items.filter { songRows[it] in eligible }, names, recording, editions, otherEditions)?.let { watchUrl + it }
+        matchingVideo(rows, videoRows, names, recording, watchUrl, editions)?.let { return it }
+        val localize = if (names.complete) null else suspend {
+            localizedSong(byTitle, items, names, recording, editions)?.let { watchUrl + it }
         }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(
-            null, ToPick(metadata, offeredRows(songRows.values, eligible::contains), offeredRows(allVideos, videoRows::contains), watchUrl, names.lengthsMs),
+            null, ToPick(metadata, playableRows(songRows.values), playableRows(allVideos), watchUrl, names, editions),
             final = names.complete, lasting = names.everyStore, localizedUrl = localize
         )
     }
@@ -924,7 +931,7 @@ internal class ExactMatcher(
      * and one linked artist ID must agree in both replies. A second artist is not another spelling of the first.
      */
     private suspend fun localizedSong(
-        metadata: MusicMetadata, rows: List<JSONObject>, names: Names, recording: RequestedRecording, editions: MixEditions, otherEditions: MutableSet<String>
+        metadata: MusicMetadata, rows: List<JSONObject>, names: Names, recording: RequestedRecording, editions: Editions
     ): String? {
         val languages = when (SongNames.homeStore(metadata.artist)) {
             "JP" -> listOf("ja")
@@ -933,30 +940,34 @@ internal class ExactMatcher(
             "TW" -> listOf("ja", "zh-TW")
             else -> return null
         }
-        val candidates = rows.mapNotNull(::localizableRow).filter { fitsLocalizedSong(it.row, metadata, names, recording) }.associateBy { it.id }
+        val candidates = rows.mapNotNull(::localizableRow).filter { namesLocalizedSong(it.row, metadata, names, recording) }.groupBy { it.id }
         if (candidates.isEmpty()) return null
         for (language in languages) {
             val body = YouTubeMusicApi.body(language = language).put("query", searchQuery(metadata)).put("params", YOUTUBE_MUSIC_SONGS)
             val items = answeredOr(emptyList()) { fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems() }
-            val proved = items.mapNotNull(::localizableRow).mapNotNull { local ->
-                val original = candidates[local.id] ?: return@mapNotNull null
-                if (!localizedCredit(metadata.artist, original, local)) return@mapNotNull null
-                if (editions.rejectsLocalizedMix(local.row)) otherEditions += local.id
-                local.id.takeIf { it !in otherEditions && fitsLocalizedSong(local.row, metadata, names, recording) }
-            }.toSet()
+            val verified = items.mapNotNull(::localizableRow).filter { local ->
+                candidates[local.id].orEmpty().any { localizedCredit(metadata.artist, it, local) }
+            }
+            editions.learn(verified.map { it.row }, videos = false)
+            val proved = verified.filter { local ->
+                editions.allows(local.row, names) && namesLocalizedSong(local.row, metadata, names, recording) &&
+                    fitsLocalizedLengths(local, candidates[local.id].orEmpty(), names, editions)
+            }.map { it.id }.toSet()
             if (proved.isNotEmpty()) return proved.singleOrNull()
         }
         return null
     }
 
-    private fun fitsLocalizedSong(row: Row, metadata: MusicMetadata, names: Names, recording: RequestedRecording): Boolean {
-        val length = metadata.lengthMs?.takeIf { it > 0 }
-        val fitsLength = length?.let { sameRecordingLength(row.lengthMs, it) } ?: sameLength(row, names)
-        if (!fitsLength) return false
-        val album = row.details.getOrNull(1).orEmpty()
+    private fun fitsLocalizedLengths(local: LocalizableRow, originals: List<LocalizableRow>, names: Names, editions: Editions): Boolean =
+        editions.fitsCatalogLength(local.row, names, localized = true) &&
+            originals.any { it.artistId == local.artistId && editions.fitsCatalogLength(it.row, names, localized = true) }
+
+    private fun namesLocalizedSong(row: Row, metadata: MusicMetadata, names: Names, recording: RequestedRecording): Boolean {
+        val rawAlbum = row.details.getOrNull(1).orEmpty()
+        val album = if (Takes.isDiscoLabel(rawAlbum)) "" else Takes.withoutDiscoMix(rawAlbum)
         if (SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return false
         // One side of a dash could be a recording label, as in "First Love - 2022 Mix".
-        return SongNames.normalize(metadata.title) == SongNames.normalize(row.name) &&
+        return SongNames.normalize(metadata.title) == SongNames.normalize(Takes.withoutDiscoMix(row.name)) &&
             keepsRequestedRecording(recording, row) && !isAnotherTake(row, names)
     }
 
@@ -984,8 +995,8 @@ internal class ExactMatcher(
         return credit in listOf("$english ($native)", "$native ($english)", "$english $native", "$native $english")
     }
 
-    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String): Answer? {
-        val matching = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, editions: Editions): Answer? {
+        val matching = videos.filter { isTheSongsVideo(it, names, editions) && keepsRequestedRecording(recording, it, video = true) }
         val first = matching.firstOrNull() ?: return null
         val artist = matching.firstOrNull { isOwnVideo(it, names) }?.id?.let { watchUrl + it }
         // A later lookup can use the artist's video to replace what an outage left it with.
@@ -1044,9 +1055,7 @@ internal class ExactMatcher(
         return SongNames.withoutFeaturing(base).trimEnd() + title.substring(base.length)
     }
 
-    /** Keep the original picker row numbers, including slots whose recording does not fit. */
-    private fun offeredRows(rows: Collection<Row>, fits: (Row) -> Boolean): List<Row?> =
-        rows.filter { it.id != null }.take(PICK_FROM).map { it.takeIf(fits) }
+    private fun playableRows(rows: Collection<Row>): List<Row> = rows.filter { it.id != null }.take(PICK_FROM)
 
     /** The link's length can tell which recording it plays when a plain title left its recording off. */
     private fun namedLinkedEdition(metadata: MusicMetadata, rows: Collection<Row>, firstLength: Long?): Row? {
@@ -1082,58 +1091,102 @@ internal class ExactMatcher(
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
         time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
 
-    /**
-     * A store can give the same name to the song and its disco mix. The mix needs proof from the
-     * link itself. When YouTube also names the mix, other rows of that song must fit the link too.
-     */
-    private inner class MixEditions(metadata: MusicMetadata, songs: Collection<Row>) {
-        private val title = metadata.title
-        private val length = metadata.lengthMs?.takeIf { it > 0 }
-        private val titleNamesMix = Takes.saysDiscoMix(title)
-        private val askedForMix = titleNamesMix || sourceAlbumNamesDiscoMix(metadata)
-        private val mixes = songs.filter { it.id != null && songSaysDiscoMix(it) }
+    private class EditionEvidence {
+        val songs = mutableListOf<Row>()
+        val videos = mutableListOf<Row>()
+        val lengths = mutableSetOf<Long>()
+        var mix = false
 
-        fun songFits(row: Row): Boolean {
-            if (row in mixes) return mixFits(row)
-            // A song can leave the mix out of its title when its album names it.
-            if (askedForMix) return titleNamesMix && SongNames.sameVersion(title, row.name, row.details.getOrNull(1).orEmpty())
-            val wanted = length ?: return true
-            val related = mixes.filter { sameSong(row, it) }
-            if (related.isEmpty()) return true
-            // If the mix fits the tight recording window, the wider release window cannot put a different cut first.
-            if (related.any { sameRecordingLength(it.lengthMs, wanted) }) return sameRecordingLength(row.lengthMs, wanted)
-            return closeTo(row, wanted)
-        }
-
-        fun videoFits(row: Row, names: Names): Boolean {
-            if (Takes.saysDiscoMix(row.name)) return mixFits(row)
-            if (askedForMix) return false
-            val wanted = length ?: return true
-            return mixes.none { mixNamesVideo(it, row, names) } || closeTo(row, wanted)
-        }
-
-        fun rejectsLocalizedMix(row: Row): Boolean = songSaysDiscoMix(row) && !mixFits(row)
-
-        private fun mixNamesVideo(mix: Row, video: Row, names: Names): Boolean {
-            if (!knownArtist(mix.details.first(), names)) return false
-            val base = SongNames.bareTitle(mix.name)
-            return titleIn(base, video.name) && names.titles.any { title -> SongNames.titleNames(title).any { SongNames.same(it, base) } }
-        }
-
-        private fun sameSong(row: Row, mix: Row): Boolean =
-            SongNames.same(mix.details.first(), row.details.first()) && SongNames.same(SongNames.bareTitle(mix.name), SongNames.bareTitle(row.name))
-
-        private fun mixFits(row: Row): Boolean =
-            askedForMix || length?.let { sameRecordingLength(row.lengthMs, it) } == true
-
-        private fun closeTo(row: Row, wanted: Long): Boolean =
-            row.lengthMs?.let { kotlin.math.abs(it - wanted) <= SAME_LENGTH_MS } == true
+        fun fits(wanted: Long, window: Long): Boolean =
+            lengths.isNotEmpty() && lengths.all { kotlin.math.abs(it - wanted) <= window }
     }
 
-    private fun sourceAlbumNamesDiscoMix(metadata: MusicMetadata): Boolean = Takes.saysDiscoMix(metadata.album.orEmpty())
+    /** A recording keeps the same edition across tabs, languages and duplicate rows with its ID. */
+    private inner class Editions(metadata: MusicMetadata) {
+        private val length = metadata.lengthMs?.takeIf { it > 0 }
+        private val askedForMix = Takes.saysDiscoMix(metadata.title) || sourceAlbumNamesDiscoMix(metadata)
+        private val evidence = mutableMapOf<String, EditionEvidence>()
+        private val mixes = mutableSetOf<EditionEvidence>()
 
-    private fun songSaysDiscoMix(row: Row): Boolean =
-        Takes.saysDiscoMix(row.name) || Takes.saysDiscoMix(row.details.getOrNull(1).orEmpty())
+        // A store can tie two titles or artist credits together, or give a length for the named mix.
+        val needsStore: Boolean
+            get() = mixes.isNotEmpty() && (askedForMix || length != null)
+
+        fun learn(rows: Collection<Row>, videos: Boolean) {
+            for (row in rows) {
+                val id = row.id ?: continue
+                val recording = evidence.getOrPut(id, ::EditionEvidence)
+                row.lengthMs?.let(recording.lengths::add)
+                (if (videos) recording.videos else recording.songs) += row
+                if (Takes.saysDiscoMix(row.name) || !videos && albumNamesDiscoMix(row.details.getOrNull(1).orEmpty())) {
+                    recording.mix = true
+                    mixes += recording
+                }
+            }
+        }
+
+        fun isMix(row: Row): Boolean = evidence[row.id]?.mix == true
+
+        fun allows(row: Row, names: Names? = null): Boolean {
+            val recording = evidence[row.id] ?: return false
+            if (recording.mix) return fitsMix(recording, names)
+            if (askedForMix) return false
+            val wanted = length ?: return true
+            val related = mixes.filter { group -> group.songs.any { mix -> relatesTo(recording, mix, names) } }
+            if (related.isEmpty()) return true
+            // The wider release window cannot put a different cut first when the mix fits the recording window.
+            val tight = recording.songs.isNotEmpty() && related.any { it.fits(wanted, SAME_SONG_LENGTH_MS) }
+            return recording.fits(wanted, if (tight) SAME_SONG_LENGTH_MS else SAME_LENGTH_MS)
+        }
+
+        private fun fitsMix(recording: EditionEvidence, names: Names?): Boolean {
+            // A title or album says it's a mix, but cannot overrule the length on the link.
+            length?.let { return recording.fits(it, SAME_SONG_LENGTH_MS) }
+            if (!askedForMix) return false
+            val store = names?.mixLengthsMs.orEmpty()
+            return store.isEmpty() || recording.lengths.isEmpty() || store.any { recording.fits(it, SAME_SONG_LENGTH_MS) }
+        }
+
+        fun fitsCatalogLength(row: Row, names: Names, localized: Boolean = false): Boolean {
+            if (isMix(row)) return true // The decision already used the link or a store's length of the mix.
+            if (localized) length?.let { return sameRecordingLength(row.lengthMs, it) }
+            return sameLength(row, names)
+        }
+
+        fun hasVideoTiming(row: Row, names: Names): Boolean {
+            val known = if (isMix(row)) length != null || names.mixLengthsMs.isNotEmpty() else names.lengthsMs.isNotEmpty()
+            return row.lengthMs != null && known && fitsCatalogLength(row, names)
+        }
+
+        private fun relatesTo(recording: EditionEvidence, mix: Row, names: Names?): Boolean {
+            val lead = leadArtist(mix.details.first())
+            val base = editionTitle(mix.name)
+            val aliases = names?.artists.orEmpty().map(::leadArtist).toSet()
+            val titles = names?.titles.orEmpty()
+            return recording.songs.any { relatedSong(it, lead, base, aliases, titles) } ||
+                knownArtist(lead, aliases) && namesEdition(base, titles) && recording.videos.any { titleIn(base, it.name) }
+        }
+
+        private fun relatedSong(row: Row, lead: String, base: String, aliases: Set<String>, titles: Set<String>): Boolean {
+            val other = leadArtist(row.details.first())
+            val sameLead = knownArtist(lead, setOf(other)) || knownArtist(lead, aliases) && knownArtist(other, aliases)
+            val title = editionTitle(row.name)
+            return sameLead && (SongNames.same(base, title) || namesEdition(base, titles) && namesEdition(title, titles))
+        }
+    }
+
+    private fun leadArtist(credit: String): String = SongNames.artistNames(credit).firstOrNull().orEmpty()
+
+    private fun editionTitle(title: String): String = SongNames.bareTitle(Takes.withoutDiscoMix(title))
+
+    /** A dash can introduce a note. Just one name of a whole bilingual pair can also identify the song. */
+    private fun namesEdition(base: String, titles: Set<String>): Boolean = titles.any { known ->
+        SongNames.same(base, editionTitle(known)) || bilingualNames(known).any { SongNames.same(base, it) }
+    }
+
+    private fun sourceAlbumNamesDiscoMix(metadata: MusicMetadata): Boolean = albumNamesDiscoMix(metadata.album.orEmpty())
+
+    private fun albumNamesDiscoMix(album: String): Boolean = Takes.saysDiscoMix(album) || Takes.isDiscoLabel(album)
 
     private class RequestedRecording(val live: Boolean, val part: NumberedPart?, val title: String)
 
@@ -1220,12 +1273,12 @@ internal class ExactMatcher(
     }
 
     /** An artist's video can name a store recording both ways, when its album and length also match. */
-    private fun videoNamesSong(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names): Row? {
+    private fun videoNamesSong(metadata: MusicMetadata, rows: List<Row>, videos: List<Row>, names: Names, editions: Editions): Row? {
         if (rows.size < 2) return null
         val album = names.corroboratingAlbum ?: return null
         if (!plainLinkedTitle(metadata)) return null
         val title = SongNames.normalize(metadata.title)
-        val aliases = videos.filter { isTheSongsVideo(it, names) && isOwnVideo(it, names) && it.lengthMs != null && sameLength(it, names) }
+        val aliases = videos.filter { isTheSongsVideo(it, names, editions) && isOwnVideo(it, names) && it.lengthMs != null && sameLength(it, names) }
             .mapNotNull { video ->
                 val halves = video.name.split(" - ").takeIf { it.size == 2 } ?: return@mapNotNull null
                 val own = halves.indexOfFirst { SongNames.normalize(it) == title }
@@ -1302,21 +1355,25 @@ internal class ExactMatcher(
 
     /**
      * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
-     * are anyone's, and may say anything, so one far from all of the song's [lengthsMs] isn't taken: a few
+     * are anyone's, and may say anything, so one far from all of the song's catalog lengths isn't taken: a few
      * seconds for a song, more for a video, which may open with more.
      */
-    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row?>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
+    private suspend fun pickedFrom(toPick: ToPick, videos: Boolean): String? {
+        val (metadata, names, editions) = Triple(toPick.metadata, toPick.names, toPick.editions)
+        val rows = if (videos) toPick.videos else toPick.songs
         val recording = requestedRecording(metadata.title)
         val part = recording.part
-        // Keep the row numbers while omitting any names that local evidence already rules out.
-        val offered = rows.map { it?.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
+        // A later reply can rule out the same ID. Keep its original picker slot empty.
+        val offered = rows.map { it.takeIf { row -> editions.allows(row, names) && keepsRequestedRecording(recording, row, video = videos) &&
             (part == null || namesThePickedPart(part, row, videos)) } }
         if (offered.none { it != null }) return null
         val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
         val index = pick(metadata, shown, videos) ?: return null
         val row = offered.getOrNull(index) ?: return null
-        val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
-        return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
+        val url = toPick.watchUrl + row.id
+        if (editions.isMix(row)) return url // The edition decision checked only lengths that could prove this mix.
+        val off = row.lengthMs?.let { length -> names.lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
+        return url.takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
@@ -1363,6 +1420,7 @@ internal class ExactMatcher(
      */
     private class Names(
         val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
+        val mixLengthsMs: List<Long>,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
         val takeOnAlbum: Boolean,
@@ -1408,7 +1466,8 @@ internal class ExactMatcher(
         val song = found?.song
         // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
         // music app may have only the single's.
-        val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
+        val searchedRows = found?.editions.orEmpty()
+        val storeRows = searchedRows.toMutableList()
         var unanswered = emptySet<String>()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
             // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it under a
@@ -1420,6 +1479,7 @@ internal class ExactMatcher(
             val stores = NAMING_STORES + listOfNotNull("US".takeIf { SongNames.storesWriting(written).isNotEmpty() })
             val elsewhere = namesIn(stores, id, searched)
             japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")].first?.optString("trackName")?.takeIf(String::isNotBlank)
+            storeRows += elsewhere.mapNotNull { it.first }
             (listOf(song) + elsewhere.mapNotNull { it.first }).forEach {
                 titles += it.optString("trackName").ifBlank { null } ?: return@forEach
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
@@ -1428,7 +1488,7 @@ internal class ExactMatcher(
         }
         val homes = SongNames.storesWriting((titles + artists).joinToString(""))
         val asked = Asked()
-        if (lengthsMs.isEmpty()) asked.answer { deezerLength(metadata) }?.let(lengthsMs::add)
+        val times = catalogLengths(metadata, searchedRows, storeRows, asked)
         val album = found?.editions?.singleOrNull()?.takeIf {
             matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                 metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
@@ -1440,9 +1500,24 @@ internal class ExactMatcher(
         val searchFailed = (found == null && searching.failed) || asked.failed
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
         return Names(
-            titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
+            titles, artists, times.unmarked, japaneseTitle, times.mixes, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
             searchFailed, complete, unanswered
         )
+    }
+
+    private class CatalogLengths(val unmarked: List<Long>, val mixes: List<Long>)
+
+    /** A store can label the same recording only in its localized reply. Match both its ID and time. */
+    private suspend fun catalogLengths(metadata: MusicMetadata, searched: List<JSONObject>, all: List<JSONObject>, asked: Asked): CatalogLengths {
+        fun identity(row: JSONObject) = row.optLong("trackId") to row.optLong("trackTimeMillis")
+        val marked = all.filter { Takes.saysDiscoMix(it.optString("trackName")) || albumNamesDiscoMix(it.optString("collectionName")) }
+            .map(::identity).toSet()
+        val mixes = marked.map { it.second }.filter { it > 0 }.toMutableList()
+        val unmarked = searched.map(::identity).filter { it.second > 0 && it !in marked }.map { it.second }.toMutableList()
+        if (unmarked.isEmpty() && mixes.isEmpty()) asked.answer { deezerLength(metadata) }?.let {
+            (if (it.second) mixes else unmarked).add(it.first)
+        }
+        return CatalogLengths(unmarked, mixes)
     }
 
     /**
@@ -1460,9 +1535,13 @@ internal class ExactMatcher(
         }
 
     /** How long Deezer says [metadata]'s song is, when its search has it. */
-    private suspend fun deezerLength(metadata: MusicMetadata): Long? =
+    private suspend fun deezerLength(metadata: MusicMetadata): Pair<Long, Boolean>? =
         searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
-            ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
+            ?.let { row ->
+                val time = row.optLong("duration").takeIf { it > 0 } ?: return@let null
+                time * 1000 to (Takes.saysDiscoMix(MetadataParsers.deezerTitle(row)) ||
+                    albumNamesDiscoMix(row.optJSONObject("album")?.optString("title").orEmpty()))
+            }
 
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
@@ -1575,8 +1654,10 @@ internal class ExactMatcher(
     }
 
     /** A song result, "Name | Artist • Album • 4:46", under any of the song's names, by any of its artist's. */
-    private fun isTheSong(row: Row, names: Names): Boolean {
+    private fun isTheSong(row: Row, names: Names, editions: Editions): Boolean {
         if (row.id == null) return false
+        if (editions.isMix(row)) return namesEdition(editionTitle(row.name), names.titles) &&
+            knownArtist(leadArtist(row.details.first()), names.artists.map(::leadArtist).toSet())
         val album = row.details.getOrNull(1).orEmpty()
         val named = SongNames.titleNames(row.name).any { name -> names.titles.any { SongNames.sameVersion(it, name, album) } }
         val by = knownArtist(row.details.first(), names)
@@ -1584,8 +1665,10 @@ internal class ExactMatcher(
     }
 
     /** A credit can put two known names together, as "G.E.M. 鄧紫棋"; both whole names must be known. */
-    private fun knownArtist(credit: String, names: Names): Boolean {
-        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+    private fun knownArtist(credit: String, names: Names): Boolean = knownArtist(credit, names.artists)
+
+    private fun knownArtist(credit: String, aliases: Set<String>): Boolean {
+        val wanted = aliases.flatMap(SongNames::artists).toSet()
         fun known(name: String) = SongNames.artists(name).any(wanted::contains)
         if (known(credit)) return true
         return credit.indices.filter { credit[it].isWhitespace() }.any { at ->
@@ -1610,7 +1693,6 @@ internal class ExactMatcher(
         if (row.name.none { it.isLetter() && it.code > 0x7f }) return false
         val anotherScript = namedInAnotherScript(row.name)
         if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
-        if (songSaysDiscoMix(row) && names.titles.none { SongNames.same(SongNames.bareTitle(it), SongNames.bareTitle(row.name)) }) return false
         if (isAnotherTake(row, names)) return false
         return knownArtist(row.details.first(), names)
     }
@@ -1664,23 +1746,25 @@ internal class ExactMatcher(
      * Its title says nothing else but such tags outside brackets, so "Perfect Day" isn't "Perfect";
      * what's in them, "(終わらない歌 An Endless Song)", is what it's called elsewhere or said of it.
      */
-    private fun isTheSongsVideo(row: Row, names: Names): Boolean {
+    private fun isTheSongsVideo(row: Row, names: Names, editions: Editions): Boolean {
         if (row.id == null || !videoTitleMatches(row.name, names)) return false
         // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
         // "Band - Topic", "BandVEVO".
-        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && editions.hasVideoTiming(row, names)
     }
 
-    private fun videoTitleMatches(title: String, names: Names): Boolean {
-        if (names.titles.none { titleIn(it, title) }) return false
+    private fun videoTitleMatches(rawTitle: String, names: Names): Boolean {
+        val title = Takes.withoutDiscoMix(rawTitle)
+        val titles = names.titles.map(Takes::withoutDiscoMix)
+        if (titles.none { titleIn(it, title) }) return false
         if (isAnotherVideoVersion(title, names)) return false
-        val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
+        val said = titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
         val outside = outsideBrackets(title)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
         // both ways, "プラスティック・ラブ - Plastic Love", the other way is the song's name too.
-        val known = names.titles.map { SongNames.normalize(SongNames.withoutEditionTag(it)) }
+        val known = titles.map { SongNames.normalize(SongNames.withoutEditionTag(it)) }
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
@@ -1698,10 +1782,14 @@ internal class ExactMatcher(
         val latin = inAnotherScript.second.singleOrNull()?.takeIf(String::hasLatin) ?: return false
         val other = inAnotherScript.first.single()
         val titles = setOf(SongNames.normalize(latin), SongNames.normalize(other))
-        return names.titles.any { name ->
-            val pair = name.split(" - ", limit = 3).map(String::trim)
-            pair.size == 2 && pair.map(SongNames::normalize).toSet() == titles && pair.none(::isVideoTitleTag)
-        }
+        return names.titles.any { bilingualNames(it).map(SongNames::normalize).toSet() == titles }
+    }
+
+    private fun bilingualNames(name: String): List<String> {
+        val pair = name.split(" - ", limit = 3).map(String::trim)
+        if (pair.size != 2 || pair.any(::isVideoTitleTag)) return emptyList()
+        val (other, latin) = pair.partition(::namedInAnotherScript)
+        return pair.takeIf { other.size == 1 && latin.singleOrNull()?.hasLatin() == true }.orEmpty()
     }
 
     private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
@@ -1712,7 +1800,8 @@ internal class ExactMatcher(
     private fun isVideoTitleTag(name: String): Boolean {
         // Read a dash half as a note before treating it as a name, even when the store put it first.
         val asTag = "Song ($name)"
-        return SongNames.withoutEditionTag(asTag) != asTag || Takes.saysAnotherTake(asTag) != null
+        return SongNames.withoutEditionTag(asTag) != asTag || Takes.saysAnotherTake(asTag) != null ||
+            Takes.isDiscoLabel(name) || Takes.saysDiscoMix(name)
     }
 
     private fun isAnotherVideoVersion(name: String, names: Names): Boolean =

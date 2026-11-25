@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.text.Normalizer
 
 /**
  * The take of a song a name says it is: live, karaoke, a TV size. YouTube Music lists these beside the studio song, in any
@@ -28,25 +29,46 @@ internal object Takes {
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
 
     /** A disco mix is a separate recording, not a description of its genre. */
-    fun saysDiscoMix(title: String): Boolean {
-        if (!title.contains("disco", ignoreCase = true) && "ディスコ" !in title) return false
-        return tagsOf(title).any { SongNames.normalize(it) in DISCO_TAGS }
+    fun saysDiscoMix(title: String): Boolean = withoutDiscoMix(title) != title
+
+    /** A whole note can be a label, while the same words in an unmarked track title are just its name. */
+    fun isDiscoLabel(note: String): Boolean = discoLabel(Normalizer.normalize(note, Normalizer.Form.NFKC))
+
+    private fun discoLabel(note: String): Boolean = SongNames.normalize(note) in DISCO_TAGS
+
+    /** Remove only disco notes. A cover, a live note or an artist credit still needs its own check. */
+    fun withoutDiscoMix(title: String): String {
+        val written = Normalizer.normalize(title, Normalizer.Form.NFKC)
+        if (!written.contains("disco", ignoreCase = true) && "ディスコ" !in written) return title
+        val notes = tagRanges(written).filter { discoLabel(written.substring(it)) }
+        if (notes.isEmpty()) return title
+        return buildString {
+            var end = 0
+            for (note in notes.sortedBy(IntRange::first)) {
+                if (end < note.first) append(written, end, note.first)
+                end = maxOf(end, note.last + 1)
+            }
+            append(written, end, written.length)
+        }.trim()
     }
 
     private val DISCO_TAGS = listOf(
         "discoバージョン", "プロモーション用discoバージョン", "disco version", "disco mix",
-        "ディスコバージョン", "ディスコヴァージョン", "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン"
+        "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
+        "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
     ).map(SongNames::normalize).toSet()
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
-    private fun tagsOf(name: String): List<String> {
-        val tags = mutableListOf<String>()
+    private fun tagsOf(name: String): List<String> = tagRanges(name).map(name::substring)
+
+    private fun tagRanges(name: String): List<IntRange> {
+        val tags = mutableListOf<IntRange>()
         var depth = 0
         var start = 0
         name.forEachIndexed { at, char ->
             when {
-                char in TAG_BRACKET_OPENS -> if (depth++ == 0) start = at + 1
-                char in TAG_BRACKET_CLOSES && depth > 0 -> if (--depth == 0) tags += name.substring(start, at)
+                char in TAG_BRACKET_OPENS -> if (depth++ == 0) start = at
+                char in TAG_BRACKET_CLOSES && depth > 0 -> if (--depth == 0) tags += start..at
             }
         }
         return tags + afterSpacedDashes(name)
@@ -57,9 +79,9 @@ internal object Takes {
     private const val TAG_BRACKET_CLOSES = ")]】〕）］"
 
     /** What starts at each dash set apart by spaces in [name], up to the next one. */
-    private fun afterSpacedDashes(name: String): List<String> {
+    private fun afterSpacedDashes(name: String): List<IntRange> {
         val cuts = (1 until name.lastIndex).filter { name[it] in TitleDelimiters.DASHES && name[it - 1].isWhitespace() && name[it + 1].isWhitespace() }
-        return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
+        return cuts.zip(cuts.drop(1) + name.length) { from, to -> from until to }
     }
 
     private fun takeOfTag(tag: String): Take? {
