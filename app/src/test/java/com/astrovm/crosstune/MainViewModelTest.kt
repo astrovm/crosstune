@@ -4926,6 +4926,34 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anotherSongTakingOverCancelsTheOldReturnWithoutClosingThePlayer() {
+        val returnAnswer = CompletableDeferred<Boolean>()
+        val cancelled = CompletableDeferred<Unit>()
+        val (model, playback) = bringBackYouTube { phone ->
+            object : PlaybackSource by phone {
+                override suspend fun bringToFront(song: MusicMetadata, app: String?, session: Int?): Boolean {
+                    phone.broughtToFront += song
+                    return try {
+                        returnAnswer.await()
+                    } finally {
+                        if (!returnAnswer.isCompleted) cancelled.complete(Unit)
+                    }
+                }
+            }
+        }
+        try {
+            val youtube = MusicService.YOUTUBE.packageName
+            val next = MusicMetadata("Next song", "Another band")
+            playback.playing.value = null
+            playback.onThePhone = Heard.Song(next, null, app = youtube)
+            until("the player follows the new song") { model.uiState.player?.song == next }
+            assertTrue("The old app command was cancelled when the new song took over", cancelled.isCompleted)
+        } finally {
+            returnAnswer.complete(false)
+        }
+    }
+
+    @Test
     fun aSongTakingOverAfterAReturnDoesNotBlockLaterUnnamedPlayback() {
         val (model, playback) = bringBackYouTube()
         val youtube = MusicService.YOUTUBE.packageName
@@ -5404,6 +5432,8 @@ class MainViewModelTest {
     @Test
     fun failingToOpenARequestedVideoClearsPlayEvidence() {
         val phone = FakePlayback().apply { access = true; canPlaySongs = false }
+        val fallbackStarted = CompletableDeferred<Unit>()
+        val fallbackAnswer = CompletableDeferred<Following?>()
         var opened = false
         val source = object : PlaybackSource by phone {
             override fun openSong(app: String, link: String): Boolean {
@@ -5412,14 +5442,28 @@ class MainViewModelTest {
                 opened = true
                 return false
             }
+
+            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+                if (!opened || app != null) return phone.follow(song, app, session)
+                return flow {
+                    fallbackStarted.complete(Unit)
+                    emit(fallbackAnswer.await())
+                }
+            }
         }
         val model = ytMusicModel(source)
         val id = checkNotNull(RecordingKey.youTubeIdIn(ytLink))
         phone.rememberYouTubeLength(id, 253_000)
-        model.playResult()
-        until("the player falls back after the app refuses to open") { opened && !model.uiState.playingResult }
-        assertNull(model.uiState.player)
-        assertNull(phone.youTubePlayEvidence.adDuration(ytMusic, id, 33_204))
+        try {
+            model.playResult()
+            until("the fallback is waiting for the app after opening and transport both failed") { fallbackStarted.isCompleted }
+            assertTrue(model.uiState.playingResult)
+            assertNull(model.uiState.player)
+            assertNull(phone.youTubePlayEvidence.adDuration(ytMusic, id, 33_204))
+        } finally {
+            fallbackAnswer.complete(null)
+        }
+        until("the open fallback completes") { !model.uiState.playingResult }
     }
 
     @Test
