@@ -2498,7 +2498,6 @@ internal class MainViewModel(
         leftJob?.cancel()
         adJob?.cancel()
         returnToAppJob?.cancel()
-        clearYouTubeReturn()
         playerJob?.cancel()
         playerJob = null
         peekJob?.cancel()

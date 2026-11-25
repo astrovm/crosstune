@@ -4859,7 +4859,11 @@ class MainViewModelTest {
 
     @Test
     fun returningToYouTubeDoesNotReplaceTheSongWithAnUnnamedAd() {
-        val (model, playback) = bringBackYouTube(readsPausedSongUnderAd = true)
+        val (model, playback) = bringBackYouTube { phone ->
+            object : PlaybackSource by phone {
+                override fun follow(song: MusicMetadata, app: String?, session: Int?) = phone.playing
+            }
+        }
         val youtube = MusicService.YOUTUBE.packageName
         val ad = Unnamed(youtube, "YouTube", name = null)
         playback.unnamed.value = ad
@@ -4914,6 +4918,33 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSecondPlayCancelsThePendingReturnWithoutClosingThePlayer() {
+        val firstReturn = CompletableDeferred<Boolean>()
+        val youtube = MusicService.YOUTUBE.packageName
+        val (model, playback) = bringBackYouTube { phone ->
+            object : PlaybackSource by phone {
+                override suspend fun bringToFront(song: MusicMetadata, app: String?, session: Int?): Boolean {
+                    if (phone.broughtToFront.isNotEmpty()) return phone.bringToFront(song, app, session)
+                    phone.broughtToFront += song
+                    return firstReturn.await()
+                }
+            }
+        }
+        appPlays(playback, playing = false, packageName = youtube)
+        until("the same player can resume the paused song again") { model.uiState.player?.following?.clock?.playing == false }
+        model.playerPlayPause()
+        until("the second Play brings YouTube to the front") { playback.broughtToFront.size == 2 }
+
+        firstReturn.complete(false)
+        idle()
+        assertTrue("A late failure from the first Play cannot remove the second Play's cover", model.uiState.coveringApp)
+        playback.playing.value = null
+        playback.unnamed.value = Unnamed(youtube, "YouTube", name = null)
+        idle()
+        assertEquals("The second Play is still waiting through the ad", false, model.uiState.player?.songless)
+    }
+
+    @Test
     fun aNamedSongTakingOverThePlayerDoesNotInheritTheEarlierYouTubeReturnWait() {
         val (model, playback) = bringBackYouTube()
         val youtube = MusicService.YOUTUBE.packageName
@@ -4925,13 +4956,10 @@ class MainViewModelTest {
         until("the next song has no pending return to wait out") { model.uiState.player?.songless == true }
     }
 
-    private fun bringBackYouTube(returns: Boolean = true, readsPausedSongUnderAd: Boolean = false): Pair<MainViewModel, FakePlayback> {
+    private fun bringBackYouTube(returns: Boolean = true, source: (FakePlayback) -> PlaybackSource = { it }): Pair<MainViewModel, FakePlayback> {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false; startsInBackground = false }
         val youtube = MusicService.YOUTUBE.packageName
-        val source = if (readsPausedSongUnderAd) object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?, session: Int?) = playback.playing
-        } else playback
-        val model = ytMusicModel(source)
+        val model = ytMusicModel(source(playback))
         shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
         model.refreshSystemState()
         model.selectResultDestination(Destination.Service(MusicService.YOUTUBE))
@@ -5329,6 +5357,31 @@ class MainViewModelTest {
         until("the requested video is followed") { model.uiState.player?.following != null }
         assertEquals(ytLink, model.uiState.player?.song?.url)
         assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun aPlayerOpenedFromPausedLyricsWithoutALinkCanFollowTheFirstVideoItHears() {
+        val playback = FakePlayback().apply { access = true }
+        val lyrics = FakeSpotify().apply {
+            handler = { request ->
+                FakeSpotify.html(request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","duration":214,"plainLyrics":"One"}]""")
+            }
+        }
+        val finder = LyricsFinder(lyrics.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = ytMusicModel(playback, lyricsFinder = finder)
+        appPlays(playback, playing = false)
+        model.showLyrics()
+        until("the words follow the paused YouTube Music session") { model.uiState.following?.appPackage == ytMusic }
+        assertNull(model.uiState.player)
+        model.lyricsToPlayer()
+        until("the player follows the paused song") { model.uiState.player?.following?.clock?.playing == false }
+        assertNull(model.uiState.player?.link)
+        assertEquals(false, model.uiState.player?.played)
+
+        val next = MusicMetadata("Next song", "Band", url = "https://music.youtube.com/watch?v=other000000")
+        playback.playing.value = null
+        playback.onThePhone = Heard.Song(next, null, app = ytMusic)
+        until("the player follows the video even without a requested ID") { model.uiState.player?.song == next }
     }
 
     @Test

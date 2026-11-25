@@ -632,7 +632,7 @@ class PlaybackTest {
     fun anAdIsShorterThanTheLongestAdForASongNoShorterThanIt() {
         allow()
         val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
-        fun said(duration: Long) = player("com.google.android.apps.youtube.music", "YouTube Music", "Cross My Heart", "Jody Watley", album = "Larger Than Life",
+        fun said(duration: Long, album: String? = "Larger Than Life") = player("com.google.android.apps.youtube.music", "YouTube Music", "Cross My Heart", "Jody Watley", album = album,
             position = 1_000, duration = duration).also { ShadowMediaSessionManager.reset(); shadowOf(sessions).addController(it) }
         // Just before each song, YouTube Music says it's 0 long for a moment: the song, where it says.
         said(0)
@@ -641,6 +641,11 @@ class PlaybackTest {
         SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of("Cross My Heart", "Jody Watley", 210_674)
         said(LONGEST_AD_MS)
         assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = null))?.lengthMs)
+        // With no video ID there is no exact cache entry to replace the longer catalogue duration.
+        said(LONGEST_AD_MS, album = null)
+        val atCutoff = checkNotNull(followed(asked).last())
+        assertFalse(atCutoff.ad)
+        assertEquals(PlaybackClock(1_000, PLAYED_AT), atCutoff.clock)
         // And a song as long as the longest ad is longer than any.
         said(17_066)
         assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = LONGEST_AD_MS))?.lengthMs)
