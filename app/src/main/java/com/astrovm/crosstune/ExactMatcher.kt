@@ -934,7 +934,8 @@ internal class ExactMatcher(
 
     private fun fitsLocalizedSong(row: Row, metadata: MusicMetadata, names: Names, recording: RequestedRecording): Boolean {
         val length = metadata.lengthMs?.takeIf { it > 0 }
-        if (length != null && !sameRecordingLength(row.lengthMs, length)) return false
+        val fitsLength = length?.let { sameRecordingLength(row.lengthMs, it) } ?: sameLength(row, names)
+        if (!fitsLength) return false
         val album = row.details.getOrNull(1).orEmpty()
         if (SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return false
         return SongNames.titleNames(row.name).any { SongNames.sameVersion(metadata.title, it, album) } &&

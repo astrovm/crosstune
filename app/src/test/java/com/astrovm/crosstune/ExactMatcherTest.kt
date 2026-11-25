@@ -745,6 +745,17 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aLocalizedCreditDoesNotOverrideALengthAppleStillKnows() {
+        val song = MusicMetadata("Lemon", "米津玄師")
+        val original = listOf(localizedRow("Kenshi Yonezu", "original000"))
+        val local = mapOf("ja" to listOf(localizedRow(song.artist, "original000")))
+        val different = appleSong(song.title, song.artist, 280_000)
+        val matching = appleSong(song.title, song.artist, 257_000)
+        assertEquals(ExactMatcher.Match.Failed, localizedMatch(song, original, local, apple = different))
+        assertEquals(localizedFound("original000"), localizedMatch(song, original, local, apple = matching))
+    }
+
+    @Test
     fun aStalledLocalizedSearchDoesNotLoseThePicker() {
         val release = CountDownLatch(1)
         val started = AtomicBoolean(false)
@@ -768,11 +779,16 @@ class ExactMatcherTest {
 
     private fun localizedMatch(
         song: MusicMetadata, original: List<String>, localized: Map<String, List<String>>,
-        matcher: ExactMatcher = matcher(), onLocalized: () -> Unit = {}
+        matcher: ExactMatcher = matcher(), apple: String? = null, onLocalized: () -> Unit = {}
     ): ExactMatcher.Match {
         fake.handler = { request ->
             when (request.url.host) {
-                "itunes.apple.com" -> throw IOException("Apple is down")
+                "itunes.apple.com" -> {
+                    if (apple == null || request.url.queryParameter("country") != "JP" || request.url.encodedPath != "/search") {
+                        throw IOException("Apple is down")
+                    }
+                    FakeSpotify.html(request, """{"results":[$apple]}""")
+                }
                 "api.deezer.com" -> FakeSpotify.html(request, """{"data":[{"title":"Lemon","artist":{"name":"Kenshi Yonezu"},"duration":256}]}""")
                 else -> {
                     val body = JSONObject(FakeSpotify.bodyOf(request))
