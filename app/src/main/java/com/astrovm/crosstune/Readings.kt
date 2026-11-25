@@ -194,7 +194,7 @@ internal object Readings {
         return nanDa(if (other == null) wholeOldKanaWord(line, read) ?: read else read)
     }
 
-    /** IPADIC can call 何だ an interjection after a topic; both dictionaries split the call in なんだ君か. */
+    /** IPADIC can call 何だ an interjection after a topic; both dictionaries split an opening なんだ. */
     private fun nanDa(pieces: List<Piece>): List<Piece> = buildList {
         var at = 0
         while (at < pieces.size) {
@@ -227,9 +227,9 @@ internal object Readings {
     private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
+        val next = pieces.getOrNull(at + 2)
         return pieces[at].surface == "なん" && (before == null || before.surface in "、。，．,.！？!?；;：:…") &&
-            after?.surface == "だ" && after.startsCopula && pieces.getOrNull(at + 2)?.kind == "名詞" &&
-            pieces.getOrNull(at + 3)?.surface == "か"
+            after?.surface == "だ" && after.startsCopula && (next?.surface in setOf("、", ",") || next == null && before == null)
     }
 
     /**
