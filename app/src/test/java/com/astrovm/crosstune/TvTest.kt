@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.snapshots.Snapshot
@@ -873,10 +874,31 @@ class TvTest {
     }
 
     @Test
-    fun showingAnotherSongClearsTheRemoteReturnToARowThatHasNotComeBackYet() {
+    fun aRecentRowCanTakeTheRemoteIfItArrivesAfterTheCardClosed() = withPendingRecentFocus { state, first, second ->
+        val secondRow = recentRow(2)
+        secondRow.performScrollTo().requestFocus()
+        secondRow.assertIsFocused()
+        composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
+        recentRow(1).assertIsFocused()
+    }
+
+    @Test
+    fun showingAnotherSongClearsTheRemoteReturnToARowThatHasNotComeBackYet() = withPendingRecentFocus { state, first, second ->
+        val other = recentSong(3)
+        composeRule.runOnIdle { state.value = state.value.copy(link = other.link, result = other.metadata) }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { state.value = state.value.copy(link = null, result = null) }
+        val secondRow = recentRow(2)
+        secondRow.performScrollTo().requestFocus()
+        secondRow.assertIsFocused()
+        composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
+        recentRow(1).assertExists()
+        secondRow.assertIsFocused()
+    }
+
+    private fun withPendingRecentFocus(check: (MutableState<UiState>, HistoryEntry, HistoryEntry) -> Unit) {
         val first = recentSong(1)
         val second = recentSong(2)
-        val other = recentSong(3)
         val state = mutableStateOf(UiState(phone = Phone.TV, link = first.link, result = first.metadata, history = listOf(first, second)))
         val screen = Robolectric.buildActivity(ComponentActivity::class.java).setup()
         try {
@@ -891,26 +913,18 @@ class TvTest {
             }
             composeRule.waitForIdle()
             activity.onBackPressedDispatcher.onBackPressed()
-            val firstRow = composeRule.onNode(hasText("Song 1") and hasClickAction())
-            firstRow.assertDoesNotExist()
-
-            composeRule.runOnIdle { state.value = state.value.copy(link = other.link, result = other.metadata) }
-            composeRule.waitForIdle()
-            composeRule.runOnIdle { state.value = state.value.copy(link = null, result = null) }
-            val secondRow = composeRule.onNode(hasText("Song 2") and hasClickAction())
-            secondRow.performScrollTo().requestFocus()
-            secondRow.assertIsFocused()
-            composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
-            firstRow.assertExists()
-            secondRow.assertIsFocused()
+            recentRow(1).assertDoesNotExist()
+            check(state, first, second)
         } finally {
             screen.pause().stop().destroy()
         }
     }
 
+    private fun recentRow(n: Int) = composeRule.onNode(hasText("Song $n") and hasClickAction())
+
     private fun recentSong(n: Int): HistoryEntry {
         val url = "https://open.spotify.com/track/song$n"
-        return HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band"), albumChecked = true)
+        return HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band"))
     }
 
     @Test
