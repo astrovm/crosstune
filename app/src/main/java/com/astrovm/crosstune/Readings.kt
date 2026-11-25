@@ -111,7 +111,7 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      */
-    const val VERSION = 17
+    const val VERSION = 18
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1651,7 +1651,9 @@ internal object Readings {
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = (piece.kind == "助動詞" && piece.kana != "なら") ||
+            // Both dictionaries can tag たり as a particle, but it is part of the preceding predicate.
+            val tari = piece.kana in setOf("たり", "だり") && piece.kind in setOf("助詞", "助動詞")
+            val ending = if (tari) previous?.kind in setOf("動詞", "形容詞", "助動詞") else (piece.kind == "助動詞" && piece.kana != "なら") ||
                 (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.kana != "から") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English

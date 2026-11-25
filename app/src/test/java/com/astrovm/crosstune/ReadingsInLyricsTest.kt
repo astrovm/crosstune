@@ -116,6 +116,15 @@ class ReadingsInLyricsTest {
         waitUntil { composeRule.onAllNodes(hasText("da")).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    @Test
+    fun tariStaysWithTheTappableVerbInLyrics() {
+        lyricsText = "読んだりする\n食べたりする"
+        openSong()
+        openWord("読んだりする", "読んだり", rubyPiece = "読ん")
+        waitUntil { composeRule.onAllNodes(hasText("yondari suru")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodes(hasText("yondari")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     private fun openSong() {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU"))
             .setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)

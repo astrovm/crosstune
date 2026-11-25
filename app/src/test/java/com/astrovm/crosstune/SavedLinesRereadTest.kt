@@ -319,6 +319,15 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun aSavedLineReadWithVersion17JoinsTari() {
+        val line = SavedLine("読んだり", reading = "よんだり", romanized = "yon dari", title = "Demo", artist = "Band", readWith = 17)
+        val again = checkNotNull(readAgain(listOf(line))).single()
+        assertEquals("よんだり", again.reading)
+        assertEquals("yondari", again.romanized)
+        assertEquals(Readings.VERSION, again.readWith)
+    }
+
+    @Test
     fun aKanjiOnlyLineIsReadAgainFromWhatItKeepsAndAChineseLineWithNoReadingIsLeft() {
         // No kana in the line, and no other line of the song has any: it was still read as Japanese.
         val kanji = SavedLine("三本", reading = "さんほん", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 3)
