@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 19
+    const val VERSION = 20
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -191,16 +191,44 @@ internal object Readings {
         val other = uniDic
         val mixed = other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
         val read = saidAsWritten(modernPieces(splitLeadingLongMarks(line, text, mixed)))
-        return nanDa(asciiClauseNan(if (other == null) wholeOldKanaWord(line, read) ?: read else read))
+        return nanDa(clauseNan(repeatedKatakanaNanDa(particleBeforeMou(if (other == null) wholeOldKanaWord(line, read) ?: read else read))))
     }
 
-    /** ASCII clause marks can make the dictionaries read なんだ as な / ん / だ. */
-    private fun asciiClauseNan(pieces: List<Piece>): List<Piece> = buildList {
+    /** The tokenizer can make a single name out of repeated katakana calls. */
+    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = pieces.flatMap { piece ->
+        val surface = piece.surface
+        if (surface.length >= 6 && surface.length % 3 == 0 && surface.chunked(3).all { it == "ナンダ" }) {
+            surface.chunked(3).map { Piece(it, "なんだ", "感動詞", "*", reader = Reader.RULES) }
+        } else listOf(piece)
+    }
+
+    /** After the call 何だ, IPADIC can take the particle よ and adverb もう for the verb よむ. */
+    private fun particleBeforeMou(pieces: List<Piece>): List<Piece> = buildList {
         var skipUntil = 0
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
-            if (asciiClauseNanAt(pieces, at)) {
+            if (pieces.particleBeforeMouAt(at)) {
+                add(Piece("よ", "よ", "助詞", "終助詞", reader = Reader.RULES))
+                add(Piece("もう", "もう", "副詞", "一般", spoken = "もー", reader = Reader.RULES))
+                skipUntil = at + 2
+            } else add(piece)
+        }
+    }
+
+    private fun List<Piece>.particleBeforeMouAt(at: Int): Boolean {
+        val verb = get(at)
+        val afterCall = getOrNull(at - 1)?.surface == "何だ" && verb.surface == "よも" && verb.base == "よむ"
+        return afterCall && getOrNull(at + 1)?.surface == "う" && getOrNull(at + 2)?.surface != "よ"
+    }
+
+    /** Clause marks can make the dictionaries read なんだ as な / ん / だ. */
+    private fun clauseNan(pieces: List<Piece>): List<Piece> = buildList {
+        var skipUntil = 0
+        for (at in pieces.indices) {
+            if (at < skipUntil) continue
+            val piece = pieces[at]
+            if (clauseNanAt(pieces, at)) {
                 add(Piece("なん", "なん", "名詞", "代名詞", reader = Reader.RULES))
                 skipUntil = at + 2
             } else {
@@ -209,10 +237,10 @@ internal object Readings {
         }
     }
 
-    private fun asciiClauseNanAt(pieces: List<Piece>, at: Int): Boolean {
+    private fun clauseNanAt(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)?.surface ?: return false
         val copula = pieces.getOrNull(at + 2)
-        return before.firstOrNull()?.let { it in ",!?" } == true && before.all { it in ",!?" } && pieces[at].surface == "な" &&
+        return before.firstOrNull()?.let { it in ",!?～・" } == true && before.all { it in ",!?～・" } && pieces[at].surface == "な" &&
             pieces.getOrNull(at + 1)?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula
     }
 
@@ -231,16 +259,15 @@ internal object Readings {
             val before = pieces.getOrNull(at - 1)
             val after = pieces.getOrNull(at + 1)
             val subject = pieces.nanDaHasSubject(at)
-            val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
-                openingNanDaContinues(before, after)
+            val question = nanDaQuestion(piece, before, after, subject)
             val call = !subject && nanDaCall(pieces, at)
             when {
-                piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
-                    add(Piece("何", "なん", "名詞", "代名詞", reader = Reader.RULES))
-                    add(Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
+                piece.canSplitNanDa() && question -> {
+                    add(Piece(piece.surface.dropLast(1), "なん", "名詞", "代名詞", reader = Reader.RULES))
+                    add(Piece(piece.surface.takeLast(1), "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
                 }
                 call -> {
-                    add(Piece("なんだ", "なんだ", "感動詞", "*", reader = Reader.RULES))
+                    add(Piece(piece.surface + pieces[at + 1].surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
                     skipUntil = at + 2
                 }
                 else -> add(piece)
@@ -248,13 +275,21 @@ internal object Readings {
         }
     }
 
+    private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
+        val nameBeforeParticle = piece.surface == "ナンダ" && after?.kind == "助詞" && after.surface !in NAN_DA_PARTICLES
+        return !nameBeforeParticle && (subject || after?.surface in NAN_DA_PARTICLES || after?.surface in setOf("?", "？") ||
+            openingNanDaContinues(before, after))
+    }
+
+    private fun Piece.canSplitNanDa() = surface == "ナンダ" || surface in setOf("何だ", "何ダ") && kind == "感動詞"
+
     private fun List<Piece>.repeatedNanDaPieces(at: Int, length: Int): List<Piece> {
         val surface = subList(at, at + length).joinToString("") { it.surface }
         if (!nanDaHasSubject(at)) return listOf(Piece(surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
-        val head = if (surface.startsWith("何")) "何" else "なん"
+        val head = surface.dropLast(1)
         return listOf(
             Piece(head, "なん", "名詞", "代名詞", reader = Reader.RULES),
-            Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true),
+            Piece(surface.takeLast(1), "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true),
         )
     }
 
@@ -281,6 +316,8 @@ internal object Readings {
 
     private fun Piece.nanDaComma() = surface in setOf(",", "，", "、")
 
+    private val NAN_DA_PARTICLES = setOf("か", "よ", "ね", "カ", "ヨ", "ネ")
+
     // Both dictionaries can tag 一体 as an ordinary noun.
     private val NAN_DA_ADVERB_FALLBACKS = setOf("一体")
 
@@ -303,15 +340,15 @@ internal object Readings {
         val next = getOrNull(at + 1)
         val copula = getOrNull(at + 2)
         val length = when {
-            head.surface in setOf("何だ", "なんだ") -> 1
-            head.surface in setOf("何", "なん") && next?.surface == "だ" && next.startsCopula -> 2
+            head.surface in setOf("何だ", "何ダ", "なんだ", "なんダ", "ナンだ", "ナンダ") -> 1
+            head.surface in setOf("何", "なん", "ナン") && next?.surface in setOf("だ", "ダ") && next?.startsCopula == true -> 2
             head.surface == "な" && next?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula -> 3
             else -> 0
         }
-        return length.takeUnless { getOrNull(at + it)?.surface in setOf("か", "よ", "ね") } ?: 0
+        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES } ?: 0
     }
 
-    private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、" } == true && surface.all { it in " \t　,，、" }
+    private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、～・" } == true && surface.all { it in " \t　,，、～・" }
 
     private fun List<Piece>.nanDaRewriteLength(at: Int): Int {
         val repeated = repeatedNanDaLength(at)
@@ -333,7 +370,7 @@ internal object Readings {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
-        return pieces[at].surface == "なん" && after?.surface == "だ" && after.startsCopula &&
+        return pieces[at].surface in setOf("なん", "ナン") && after?.surface in setOf("だ", "ダ") && after?.startsCopula == true &&
             nanDaOpening(before) && next.endsNanDaCall()
     }
 
@@ -577,7 +614,7 @@ internal object Readings {
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += pieces[i++] else b += theirs[j++]
             // Theirs, once it can read the kana, replaces ours, which still can't.
-            out += if (a.any(Piece::missedKana) && b.none(Piece::missedKana)) b else a
+            out += if (a.any(Piece::missedKana) && b.none(Piece::missedKana) && a.last().surface != "ナンダ") b else a
         }
         return out
     }
@@ -1207,7 +1244,7 @@ internal object Readings {
                     out += piece
                 }
                 // 何 before d, t or n is なん: 何でも, 何だ, 何と, 何て, 何の, 何なの.
-                last?.surface == "何" && last.kana == "なに" && piece.surface.first() in "でだどとての" + "な" -> {
+                last?.surface == "何" && last.kana == "なに" && piece.surface.first() in "でだどとてのなデダドトテノナ" -> {
                     out[out.lastIndex] = last.read("なん")
                     out += piece
                 }
@@ -1772,7 +1809,7 @@ internal object Readings {
         if (kind in COPULA_PHRASE_KINDS || base in COPULA_PHRASE_STEMS) return true
         // 様 read よう is like ようだ, but the honorific 様 read さま belongs to the preceding name.
         if (base == "様") return subkind == "非自立" || subkind == "助動詞語幹"
-        return surface == "なん" && before?.beforeExplanatoryNan() == true
+        return surface in setOf("なん", "ナン") && before?.beforeExplanatoryNan() == true
     }
 
     private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
@@ -1818,7 +1855,7 @@ internal object Readings {
             val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
             val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
-            val beforeCopula = if (previous?.surface == "なん") pieces.beforeAdverbs(at - 1) else null
+            val beforeCopula = if (previous?.surface in setOf("なん", "ナン")) pieces.beforeAdverbs(at - 1) else null
             val separateCopula = copula && !orphanEnding && previous?.keepsCopula(beforeCopula) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true

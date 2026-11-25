@@ -114,6 +114,44 @@ class ReadingsTest {
     }
 
     @Test
+    fun particleAndKatakanaQuestionBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("何だよもう", "nan da yo moo", listOf("何", "だ", "よ", "もう")),
+        Triple("何だよもうよ", "nan da yomou yo", listOf("何", "だ", "よもう", "よ")),
+        Triple("よもうよ", "yomou yo", listOf("よもう", "よ")),
+    ))
+
+    @Test
+    fun volitionalYomouKeepsItsWord() {
+        fun words() = listOf("本を読もう", "友を呼ぼう").map { line -> Readings.words(line, Script.JAPANESE).map { it.text } }
+        val expected = listOf(listOf("本", "を", "読もう"), listOf("友", "を", "呼ぼう"))
+        assertEquals(expected, words())
+        assertEquals(expected, TestUniDic.reading(::words))
+    }
+
+    @Test
+    fun particleAndMouHaveTheirOwnLookups() {
+        fun lookups() = Readings.words("何だよもう", Script.JAPANESE).takeLast(2).map { it.lookup }
+        assertEquals(listOf("よ", "もう"), lookups())
+        assertEquals(listOf("よ", "もう"), TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun katakanaNanDaAndRepeatedCalls() = assertJapaneseBoundaries(listOf(
+        Triple("これはナンダ？", "kore wa nan da？", listOf("これ", "は", "ナン", "ダ")),
+        Triple("これは何ダ？", "kore wa nan da？", listOf("これ", "は", "何", "ダ")),
+        Triple("これはナンだ？", "kore wa nan da？", listOf("これ", "は", "ナン", "だ")),
+        Triple("ナンダ、君か", "nanda、 kimi ka", listOf("ナンダ", "君", "か")),
+        Triple("ナンダナンダ", "nanda nanda", listOf("ナンダ", "ナンダ")),
+        Triple("これは本ナンダ", "kore wa hon nanda", listOf("これ", "は", "本", "ナンダ")),
+        Triple("ナンダ", "nanda", listOf("ナンダ")),
+        Triple("ナンダの曲", "nanda no kyoku", listOf("ナンダ", "の", "曲")),
+        Triple("ナンダが歌う", "nanda ga utau", listOf("ナンダ", "が", "歌う")),
+        Triple("ナンダカンダ", "nandakanda", listOf("ナンダカンダ")),
+        Triple("なんだ～なんだ", "nanda～ nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ・なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+    ))
+
+    @Test
     fun interrogativeNanDaSeparatesAfterATopic() = assertJapaneseBoundaries(listOf(
         Triple("これは何だ", "kore wa nan da", listOf("これ", "は", "何", "だ")),
         Triple("それは何だ?", "sore wa nan da?", listOf("それ", "は", "何", "だ")),
