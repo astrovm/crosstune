@@ -529,6 +529,8 @@ class PlaybackTest {
         shadowOf(sessions).addController(controller)
         // The sleep timer and the player can use different playback sources for the same Android session.
         val timerSource = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        // This source has already read the duration cache before the player looks up the video.
+        assertNull(timerSource.knownYouTubeLength("fJ9rUzIMcZQ"))
         val timer = followed(song.copy(lengthMs = 60_046), timerSource)
         assertFalse(checkNotNull(timer.last()).ad)
 
@@ -747,6 +749,7 @@ class PlaybackTest {
     @Test
     fun aSessionWithoutAVideoIdCanUseTheCataloguesLengthOrTheNamesHistory() {
         allow()
+        sounding()
         val yt = MusicService.YOUTUBE_MUSIC.packageName
         val video = player(yt, "YouTube Music", song.title, song.artist, album = "Album", position = 100, duration = 500)
         shadowOf(sessions).addController(video)
@@ -764,7 +767,7 @@ class PlaybackTest {
         // A different media report drops the confirmation. A title history still counts after that.
         val report = video.metadata
         shadowOf(video).setMetadata(MediaMetadata.Builder(report).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
-        assertEquals(LONGEST_AD_MS, playback.recording(song)?.lengthMs)
+        assertEquals(LONGEST_AD_MS, playback.nowPlaying()?.metadata?.lengthMs)
         // Once the session identifies its cut, the name's length can no longer tell us it is an ad.
         shadowOf(video).setMetadata(MediaMetadata.Builder(report).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "longVersion").build())
         assertEquals(false, followed(song).last()?.ad)
