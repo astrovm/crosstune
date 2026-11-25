@@ -2653,6 +2653,20 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun thePickerStillReadsLiveAlbumNotesOnSongRows() = runBlocking {
+        val plain = youTubeMusicRow("別の曲", "Unknown Artist • Album • 4:41", videoId = "other000000")
+        val live = youTubeMusicRow("別名", "Unknown Artist • Live at Budokan • 4:41", videoId = "original000")
+        namesAndTabs(songs = listOf(plain, live))
+        val matcher = ExactMatcher(fake.client(), "US", pick = { _, choices, videos ->
+            assertFalse(videos)
+            assertEquals(listOf("", "別名 | Unknown Artist • Live at Budokan • 4:41"), choices)
+            1
+        })
+        val song = MusicMetadata("Song: Live", "Band")
+        assertEquals("https://music.youtube.com/watch?v=original000", matcher.find(MusicService.YOUTUBE_MUSIC, song))
+    }
+
+    @Test
     fun mixNoteReadingDoesNotNormalizeTheTitleUsedToMatch() = runBlocking {
         val titles = listOf("Suite Ⅱ" to "Suite II", "Ｓｕｉｔｅ" to "Suite", "Suﬃx" to "Suffix", "㈱ Records" to "(株) Records")
         for ((original, normalized) in titles) {
@@ -2693,6 +2707,9 @@ class ExactMatcherTest {
         for (length in listOf(0L, 1_000L)) {
             assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = length)))
         }
+        val short = youTubeMusicRow("Song", "Band • Album (Disco Version) • 0:02", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(short))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 0L)))
         val timed = youTubeMusicRow("Song", "Band • Album (Disco Version) • 7:27", videoId = "mix00000000")
         val video = youTubeMusicRow("Song (Disco Version)", "Band • 1K views • 0:00", videoId = "mix00000000")
         namesAndTabs(songs = listOf(timed), videos = listOf(video))
