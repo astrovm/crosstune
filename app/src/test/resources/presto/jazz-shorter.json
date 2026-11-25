@@ -1,0 +1,65 @@
+{
+  "status": "ok",
+  "code": 0,
+  "payload": {
+    "hasComposers": false,
+    "hasArtists": false,
+    "hasWorks": true,
+    "hasLabels": false,
+    "hasAlbums": true,
+    "totalCount": 36,
+    "results": [
+      {
+        "prestoCode": 8038751,
+        "title": "Speak No Evil",
+        "artists": "Wayne Shorter"
+      },
+      {
+        "prestoCode": 10343694,
+        "title": "Tribute to Wayne Shorter",
+        "artists": "Stefan Filey, Geoffrey Secco, China Moses, Dave McMurray (saxophone), Yannick Soccal, Memo, Ludovic Louis, Allen Hoist, Ana"
+      },
+      {
+        "prestoCode": 8631454,
+        "title": "Speak No Evil",
+        "artists": "Flora Purim, Gary Meek (flute), Russell Ferrante (keyboards), Jimmy Haslip (bass), Michito Sanchez (percussion), Airto Moreira (percussion), Jimmy Branly (drums), Airto Moreira (drums), Trey Henry (bass), Christian Jacob (keyboards), Gary Meek (alto saxophone), Gary Meek (bass clarinet), Jimmy Branly (percussion), Gary Meek (clarinet), Gary Meek (tenor saxophone), Oscar Castro-Neves (keyboards), Oscar Castro-Neves (guitar), Gary Brown (bass), Marcos Silva (keyboards), Gary Meek (soprano saxophone), Bill Cantos (keyboards), Airto Moreira (background vocalist), Oscar Castro-Neves (acoustic guitar), Diana Booker (background vocalist), Yutaka Yokokura (keyboards)"
+      },
+      {
+        "prestoCode": 9479945,
+        "title": "The Classic Blue Note Recordings: Wayne Shorter",
+        "artists": "Wayne Shorter (tenorsaxophone, sopranosaxophone), Lee Morgan (trumpet), McCoy Tyner (piano), Reggie Workman (bass), Elvin Jones (drumkit), Freddie Hubbard (trumpet), Herbie Hancock (piano), Ron Carter (bass), James Spaulding (altosaxophone, flute), Tony Williams (drumkit), Cecil McBee (bass), Joe Chambers (drumkit), Curtis Fuller (trombone), Sonny Sharrock (guitar), Miroslav Vitouš (bass), Chick Corea (drumkit), Jack DeJohnette (drumkit), John McLaughlin (guitar), David Friedman (vibraphone), Gene Bertoncini (guitar), Alphonse Mouzon (drumkit), Billy Hart (drumkit), Frank Cuomo (percussion), Art Blakey & The Jazz Messengers, Bobby Timmons (piano), Jymie Merritt (bass), Art Blakey (drumkit), Walter Davis (piano), Kiane Zawadi (euphonium), Art Davis (bass), Cedar Walton (piano), Bobby Hutcherson (vibraphone), Billy Higgins (drumkit), Michel Petrucciani (piano), Jim Hall (guitar), Manhattan Project, Lenny White (drumkit), Gil Goldstein (synthesizer), Pete Levin (synthesizer), Stanley Clarke (bass)"
+      },
+      {
+        "prestoCode": 8620873,
+        "title": "The Best Of Wayne Shorter",
+        "artists": "Wayne Shorter (tenor saxophone), Ron Carter (upright bass), Freddie Hubbard (trumpet), Herbie Hancock (piano), Elvin Jones (drums), Joe Chambers (drums), Ron Carter (bass), James Spaulding (alto saxophone), Curtis Fuller (trombone), Tony Williams (drums), McCoy Tyner (piano), Reggie Workman (bass), Lee Morgan, Reginald Workman (bass), Wayne Shorter (soprano saxophone), Chick Corea (drums), John McLaughlin (guitar), Sonny Sharrock (guitar), Miroslav Vitous (bass), Jack DeJohnette (drums), Airto Moreira (percussion)"
+      },
+      {
+        "prestoCode": 9647694,
+        "title": "Blue Spirits: 85 Years of Blue Note Records",
+        "artists": "Various Artists"
+      },
+      {
+        "prestoCode": 9480315,
+        "title": "Wayne Shorter Goes Flamenco",
+        "artists": "Oleándole, Benet Palet, Juan José Villar (handclaps), Luis Fernandez (leadvocalist), Fernando Brox, Gabriel Amargant, Violeta Barrio, Martí Serra, Jordi Bonell (electric guitar), Carles Benavent, Carola Ortiz, Marcel·Lí Bayer, Gorka Benítez, Frederico Vannini, Guillermo Calliero, Jorge Pardo, Albert Bover, Ana Brenes, Jimmy Jenks, Frank Durán, Robin Reyes"
+      },
+      {
+        "prestoCode": 8498769,
+        "title": "The Ultimate",
+        "artists": "Wayne Shorter (tenor saxophone), Elvin Jones (drums), Reginald Workman (bass), Lee Morgan (trumpet), McCoy Tyner (piano), Reggie Workman (upright bass), Ron Carter (bass), Freddie Hubbard (trumpet), Herbie Hancock (piano), Ron Carter (upright bass), Tony Williams (drums), James Spaulding (alto saxophone), Cecil McBee (bass), Joe Chambers (drums), Freddie Hubbard (flugelhorn), Grachan Moncur III (trombone), Reggie Workman (bass), Curtis Fuller (trombone), James Spaulding (flute), Wayne Shorter (soprano saxophone), John McLaughlin (guitar), Jack De Johnette (drums), Airto Moreira (percussion), Miroslav Vitous (bass), Sonny Sharrock (guitar), Chick Corea (vibraphone), Chick Corea (drums), Billy Hart (drums), Frank Cuomo (drums), Frank Cuomo (percussion), Alphonse Mouzon (drums), Dave Friedman (vibraphone), Gene Bertoncini (guitar), David Friedman (vibraphone), David Friedman (marimba), Al Mouson (drums)"
+      },
+      {
+        "prestoCode": 8620656,
+        "title": "The Classic Blue Note Recordings",
+        "artists": "Wayne Shorter (tenor saxophone), Elvin Jones (drums), Lee Morgan (trumpet), McCoy Tyner (piano), Jackie McLean (piano), Reggie Workman (bass), Freddie Hubbard (trumpet), Herbie Hancock (piano), Ron Carter (bass), Tony Williams (drums), James Spaulding (alto saxophone), Joe Chambers (drums), Cecil McBee (bass), James Spaulding (flute), Curtis Fuller (trombone), Wayne Shorter (soprano saxophone), John McLaughlin (guitar), Sonny Sharrock (guitar), Miroslav Vitous (bass), Chick Corea (drums), Jack DeJohnette (drums), Frank Cuomo (percussion), Billy Hart (drums), David Friedman (vibraphone), Gene Bertoncini (guitar), Alphonse Mouzon (drums), Art Blakey & The Jazz Messengers, Art Blakey (drums), Bobby Timmons (piano), Jymie Merritt (bass), Walter Davis (piano), Art Davis (bass), Kiane Zawadi (euphonium), Cedar Walton (piano), Billy Higgins (drums), Bobby Hutcherson (vibraphone), Michel Petrucciani (piano), Jim Hall (guitar), Manhattan Project, Stanley Clarke (bass), Pete Levin (synthesizer), Lenny White (drums), Gil Goldstein (synthesizer)"
+      },
+      {
+        "prestoCode": 8477080,
+        "title": "Blue Note 101: A Jazz Introduction",
+        "artists": "John Coltrane, Horace Silver (piano), Joe Henderson (tenor saxophone), Teddy Smith (bass), Roger Humphries (drums), Carmell Jones (trumpet), Cannonball Adderley (alto saxophone), Sam Jones (double bass), Art Blakey (drums), Hank Jones (piano), Miles Davis (trumpet), Art Blakey & The Jazz Messengers, Lee Morgan (trumpet), Jymie Merritt (bass), Bobby Timmons (piano), Benny Golson (tenor), Jimmy Smith (organ), Stanley Turrentine (tenor saxophone), Kenny Burrell (guitar), Donald Bailey (drums), Billy Higgins (drums), Bob Cranshaw (bass), Barry Harris (piano), Herbie Hancock (piano), Tony Williams (drums), Freddie Hubbard (flugelhorn), Freddie Hubbard (cornet), Ron Carter (bass), Wayne Shorter (tenor saxophone), Elvin Jones (drums), Freddie Hubbard (trumpet), McCoy Tyner (piano), Butch Warren (bass), Pete La Roca (drums), Kenny Dorham (trumpet), Rudy Van Gelder (programmer), Donald Byrd (trumpet), Coleridge Perkinson (chorus conductor), Coleridge Perkinson (director), Lex Humphries (drums), Donald Best (vibraphone), Hank Mobley (tenor saxophone)\r\nVocal Choir"
+      }
+    ]
+  },
+  "message": "Success"
+}

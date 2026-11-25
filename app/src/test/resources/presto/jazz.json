@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "code": 0,
+  "payload": {
+    "hasComposers": false,
+    "hasArtists": false,
+    "hasWorks": false,
+    "hasLabels": false,
+    "hasAlbums": true,
+    "totalCount": 6,
+    "results": [
+      {
+        "prestoCode": 8269533,
+        "title": "Kind Of Blue",
+        "artists": "Miles Davis (trumpet), Julian Cannonball Adderley (alto saxophone), John Coltrane (tenor saxophone), Paul Chambers (bass), Bill Evans (piano), Jimmy Cobb (drums), Wynton Kelly (piano)"
+      },
+      {
+        "prestoCode": 8061933,
+        "title": "The Original 1959 Mono Kind of Blue Recordings: The Complete Columbia Recordings of Miles Davis with John Coltrane, Disc 8",
+        "artists": "Miles Davis, John Coltrane, Cannonball Adderley, Wynton Kelly, Bill Evans, Paul Chambers, Jimmy Cobb"
+      },
+      {
+        "prestoCode": 8269632,
+        "title": "Kind of Blue",
+        "artists": "Miles Davis (trumpet), Julian Cannonball Adderley (alto saxophone), John Coltrane (tenor saxophone), Paul Chambers (bass), Bill Evans (piano), Jimmy Cobb (drums), Wynton Kelly (piano), Cannonball Adderley (alto saxophone)"
+      },
+      {
+        "prestoCode": 8471365,
+        "title": "Kind of Blue (Mono)",
+        "artists": "Miles Davis (trumpet), John Coltrane (tenor saxophone), Cannonball Adderley (alto saxophone), Paul Chambers (bass), Jimmy Cobb (drums), Bill Evans (piano), Wynton Kelly (piano)"
+      },
+      {
+        "prestoCode": 8545424,
+        "title": "Original Jazz Sound: Kind of Blue",
+        "artists": "Miles Davis"
+      },
+      {
+        "prestoCode": 8034477,
+        "title": "Travelin' Light",
+        "artists": "Dena DeRose (piano)"
+      }
+    ]
+  },
+  "message": "Success"
+}

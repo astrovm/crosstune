@@ -46,6 +46,21 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun oldPrestoSearchesForAlbumsAreReplacedButSongSearchesStay() {
+        val service = MusicService.PRESTO_MUSIC.name
+        val search = PreparedLink("https://streaming.prestomusic.com/explore/results/albums?search=Title", false, true)
+        val album = entry(1, type = ItemType.ALBUM).copy(destinationLinks = mapOf(service to search))
+        val song = entry(2).copy(destinationLinks = mapOf(service to search))
+        store.replace(listOf(album, song))
+        assertEquals(listOf(album, song), HistoryStore(preferences).load())
+
+        val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
+        old.getJSONObject(0).getJSONObject("destinations").getJSONObject(service).put("matcher", 11)
+        preferences.edit { putString(HistoryStore.KEY_HISTORY, old.toString()) }
+        assertEquals(listOf(album.copy(destinationLinks = emptyMap()), song), HistoryStore(preferences).load())
+    }
+
+    @Test
     fun whatsReadIsKeptUntilAnotherWritesInstead() {
         store.add(entry(1))
         val first = store.load()

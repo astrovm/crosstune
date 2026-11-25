@@ -1,0 +1,65 @@
+{
+  "status": "ok",
+  "code": 0,
+  "payload": {
+    "hasComposers": false,
+    "hasArtists": false,
+    "hasWorks": false,
+    "hasLabels": false,
+    "hasAlbums": true,
+    "totalCount": 65,
+    "results": [
+      {
+        "prestoCode": 9590596,
+        "title": "Glenn Gould, piano: Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7971975,
+        "title": "Bach, Johann Sebastian/Glenn Gould: Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8080705,
+        "title": "Glenn Gould discusses his Goldberg Variations with Tim Page",
+        "artists": "Glenn Gould, Tim Page"
+      },
+      {
+        "prestoCode": 9500478,
+        "title": "Recording Glenn Gould's Goldberg Variations - Track-by-Track by Producer Richard Einhorn",
+        "artists": "Richard Einhorn (speaker), Glenn Gould (piano, speaker), Samuel Carter (speaker)"
+      },
+      {
+        "prestoCode": 8079068,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7953381,
+        "title": "Bach - Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8020008,
+        "title": "The Best of Glenn Gould's Bach",
+        "artists": "Glenn Gould (piano), Glenn Gould (organ)\r\nColumbia Symphony Orchestra, Vladimir Golschmann"
+      },
+      {
+        "prestoCode": 8079005,
+        "title": "JS Bach: Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8820542,
+        "title": "Bach: Goldberg Variations",
+        "artists": "Royal Academy of Music Soloists Ensemble, Trevor Pinnock"
+      },
+      {
+        "prestoCode": 7996997,
+        "title": "Glenn Gould in Concert 1951-1960",
+        "artists": "Glenn Gould (piano), Kerstin Meyer (mezzo-soprano)\r\nSwedish RSO, CBC SO, Detroit SO, NYPSO, Buffalo PO, Toronto SO, Winnipeg SO, Cleveland Orchestra, G.L. Jochum, Goldschmidt, Paul Paray, Leonard Bernstein, J. Krips, Ernest MacMillan, Victor Feldbrill, Louis Lane"
+      }
+    ]
+  },
+  "message": "Success"
+}

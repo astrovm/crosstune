@@ -11,6 +11,8 @@ import org.json.JSONObject
 internal object Presto {
     const val API = "https://ajax-www.prestomusic.com/api/app/6"
 
+    fun albumUrl(code: String): String = "https://streaming.prestomusic.com/album/$code"
+
     /** Names alone, as a title starts with who wrote it: "Davis, M", "Taylor Swift, Jack Antonoff", not "Symphony No. 5". */
     private val names = phoneRegex("""^[\p{L}'’. &,-]+$""")
 
@@ -34,6 +36,8 @@ internal object Presto {
         names += name.toString()
         return names.map { it.trim().removePrefix("with ").trim() }.filter { it.isNotEmpty() }
     }
+
+    fun leader(credits: String): String = musicians(credits).firstOrNull().orEmpty()
 
     /**
      * A song as Presto names it, [title] by its [musicians], as other services do. Who wrote it comes off the title when
@@ -129,7 +133,7 @@ internal object Presto {
     fun album(json: JSONObject): MusicMetadata? {
         val album = json.optJSONObject("payload") ?: return null
         val title = album.nonBlankString("title") ?: return null
-        val leader = musicians(album.nonBlankString("artistSummary").orEmpty()).firstOrNull().orEmpty()
+        val leader = leader(album.nonBlankString("artistSummary").orEmpty())
         return MusicMetadata(title, leader, ItemType.ALBUM, cover(album))
     }
 

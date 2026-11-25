@@ -21,6 +21,7 @@ import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
 import okio.buffer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,6 +49,71 @@ class ExactMatcherTest {
 
     private fun respond(json: String) {
         fake.handler = { request: Request -> FakeSpotify.html(request, json) }
+    }
+
+    @Test
+    fun prestoFindsAnAlbumByItsTitleAndArtist() = runBlocking {
+        respond(prestoSearchFixture("jazz-shorter"))
+        val album = MusicMetadata("Speak No Evil", "Wayne Shorter", ItemType.ALBUM)
+        assertEquals("https://streaming.prestomusic.com/album/8038751", matcher().find(MusicService.PRESTO_MUSIC, album))
+        val request = fake.requestedUrls.single().toHttpUrl()
+        assertEquals("ajax-www.prestomusic.com", request.host)
+        assertEquals("/api/app/6/explore/search", request.encodedPath)
+        assertEquals("Speak No Evil Wayne Shorter", request.queryParameter("search"))
+        assertEquals("10", request.queryParameter("limit"))
+        assertEquals("0", request.queryParameter("offset"))
+        assertEquals("recommended", request.queryParameter("sort"))
+        assertEquals("album", request.queryParameter("type"))
+
+        respond(prestoSearchFixture("classical"))
+        val classical = MusicMetadata("Glenn Gould, Piano: Goldberg Variations", "Glenn Gould", ItemType.ALBUM)
+        assertEquals("https://streaming.prestomusic.com/album/9590596", matcher().find(MusicService.PRESTO_MUSIC, classical))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, classical.copy(artist = "Gould")))
+
+        val row = """{"title":"Speak No Evil","artists":"Wayne Shorter (tenor saxophone)","prestoCode":8038751}"""
+        respond("""{"status":"ok","payload":{"results":[$row,$row]}}""")
+        assertEquals("https://streaming.prestomusic.com/album/8038751", matcher().find(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoLeavesAmbiguousOrMissingAlbumsToSearch() = runBlocking {
+        respond(prestoSearchFixture("jazz"))
+        val album = MusicMetadata("Kind of Blue", "Miles Davis", ItemType.ALBUM)
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        assertEquals(1, fake.requestedUrls.size)
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, album.copy(artist = "John Coltrane")))
+
+        respond(prestoSearchFixture("pop"))
+        val pop = MusicMetadata("1989", "Taylor Swift", ItemType.ALBUM)
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+        assertFalse(canBeMissing(MusicService.PRESTO_MUSIC, album))
+
+        respond("""{"status":"ok","payload":{"results":[
+            {"title":"1989","artists":"Taylor Swift","prestoCode":"not-an-id"},
+            {"title":"1989","artists":"Taylor Swift","prestoCode":0},
+            {"title":null,"artists":"Taylor Swift","prestoCode":1},
+            {"title":"1989","artists":null,"prestoCode":2}]}}""")
+        assertEquals(ExactMatcher.Match.Missing, matcher().lookFor(MusicService.PRESTO_MUSIC, pop))
+    }
+
+    @Test
+    fun prestoDistinguishesAnOutageFromNoAlbum() = runBlocking {
+        val album = MusicMetadata("1989", "Taylor Swift", ItemType.ALBUM)
+        respond("""{"status":"error","code":54}""")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        respond("""{"status":"ok","payload":{}}""")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+        respond("not JSON")
+        assertEquals(ExactMatcher.Match.Failed, matcher().lookFor(MusicService.PRESTO_MUSIC, album))
+    }
+
+    @Test
+    fun prestoDoesNotLookUpSongsEvenWhenTheirAlbumIsKnown() = runBlocking {
+        val track = MusicMetadata("Witch Hunt", "Wayne Shorter", album = "Speak No Evil")
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track.copy(type = ItemType.ARTIST)))
+        assertNull(matcher().find(MusicService.PRESTO_MUSIC, track.copy(type = ItemType.PLAYLIST)))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test

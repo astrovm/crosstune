@@ -22,7 +22,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * The APIs behind TIDAL's, SoundCloud's and Audiomack's own websites, which need no account: what
+ * The APIs behind TIDAL's, SoundCloud's, Audiomack's and Presto Music's own sites, which need no account: what
  * each website itself asks with, for songs, albums, artists and playlists' songs. None is a public
  * API, so any of them may stop answering; everything that uses them falls back to what it did before.
  */
@@ -215,6 +215,20 @@ internal class ServiceApis(
     }
 
     // Presto Music
+
+    /** Presto's own streaming search returns albums, even when the query names a song. */
+    suspend fun prestoAlbums(query: String): List<JSONObject> {
+        val url = "${Presto.API}/explore/search".toHttpUrl().newBuilder()
+            .addQueryParameter("search", query)
+            .addQueryParameter("limit", "10")
+            .addQueryParameter("offset", "0")
+            .addQueryParameter("sort", "recommended")
+            .addQueryParameter("type", "album")
+            .build()
+        val answer = getObject(url)
+        if (answer.optString("status") != "ok") throw IOException("Presto Music answered ${answer.optInt("code")}")
+        return answer.getJSONObject("payload").getJSONArray("results").objects()
+    }
 
     /** The songs of the Presto Music [album] with this [code], by its leader where they play, with its cover. */
     suspend fun prestoTracks(code: String, album: MusicMetadata): List<MusicMetadata> =

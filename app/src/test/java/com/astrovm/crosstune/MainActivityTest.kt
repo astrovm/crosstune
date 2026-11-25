@@ -1204,6 +1204,52 @@ class MainActivityTest {
     }
 
     @Test
+    fun prestoOpensTheExactAlbumFromSpotify() {
+        val presto = MusicService.PRESTO_MUSIC
+        prefs().edit().putString("default_target", presto.name).putBoolean("links_in_crosstune", true).commit()
+        fake.handler = { request ->
+            val body = when (request.url.host) {
+                "ajax-www.prestomusic.com" -> prestoSearchFixture("jazz-shorter")
+                "open.spotify.com" -> FakeSpotify.trackPage("Speak No Evil", "Wayne Shorter · Album · 1966")
+                else -> ""
+            }
+            FakeSpotify.html(request, body)
+        }
+        launch()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        waitForDestinationReady()
+        composeRule.onNodeWithContentDescription(string(R.string.open_in_presto_music)).performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = checkNotNull(nextStartedActivity())
+        assertEquals(presto.packageName, opened.`package`)
+        assertEquals("https://streaming.prestomusic.com/album/8038751", opened.dataString)
+    }
+
+    @Test
+    fun prestoSearchesWhenMoreThanOneAlbumMatches() {
+        val presto = MusicService.PRESTO_MUSIC
+        prefs().edit().putString("default_target", presto.name).putBoolean("links_in_crosstune", true).commit()
+        fake.handler = { request ->
+            val body = when (request.url.host) {
+                "ajax-www.prestomusic.com" -> prestoSearchFixture("jazz")
+                "open.spotify.com" -> FakeSpotify.trackPage("Kind of Blue", "Miles Davis · Album · 1959")
+                else -> ""
+            }
+            FakeSpotify.html(request, body)
+        }
+        launch()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        val search = string(R.string.search_in_destination, string(presto.labelRes))
+        waitForDestinationReady()
+        click(search)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = checkNotNull(nextStartedActivity())
+        assertEquals(presto.packageName, opened.`package`)
+        assertEquals("https://streaming.prestomusic.com/explore/results/albums?search=Kind%20of%20Blue%20Miles%20Davis", opened.dataString)
+        assertTrue(fake.requestedUrls.any { "/explore/search?" in it })
+    }
+
+    @Test
     fun anAlbumOpensAsItselfAndItsSongsCanStillPlayAllAtOnce() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         collectionWithSongs(title = "Album", type = "album")

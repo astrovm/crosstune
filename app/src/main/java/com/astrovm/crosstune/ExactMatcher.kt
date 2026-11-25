@@ -53,9 +53,8 @@ internal const val MATCH_VERSION = 11
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
  * Search API and Deezer's public API, plus the search behind Bandcamp's, YouTube Music's, TIDAL's,
- * SoundCloud's and Audiomack's own websites, and Qobuz's store pages, which have no documented API.
- * Spotify and Amazon Music need an account, so they keep using a search. Any failure or uncertain
- * match returns null so the caller falls back to a search.
+ * SoundCloud's, Audiomack's and Presto Music's own sites, and Qobuz's store pages, which have no documented API.
+ * Any failure or uncertain match returns null so the caller falls back to a search.
  */
 internal class ExactMatcher(
     private val client: OkHttpClient,
@@ -174,8 +173,9 @@ internal class ExactMatcher(
 
     private suspend fun match(target: MusicService, metadata: MusicMetadata, previous: SavedAnswer? = null): Lookup {
         // A playlist whose songs aren't known may be an album put up as one, e.g. a SoundCloud set,
-        // so it's found as that album, by the same artist, or not at all.
-        val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
+        // so it's found as that album, by the same artist, or not at all. Presto only looks up album links.
+        val maybeAlbum = target != MusicService.PRESTO_MUSIC && metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()
+        val item = if (maybeAlbum) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
         if (!canMatchExactly(target, item.type)) return Lookup(Match.Missing)
         return remembered("find", target.name, item, previous) { lookUp(target, item) }
@@ -249,6 +249,7 @@ internal class ExactMatcher(
         MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
         MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
         MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
+        MusicService.PRESTO_MUSIC -> Answer(findOnPresto(metadata))
         MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
         MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
         // YouTube.
@@ -482,6 +483,17 @@ internal class ExactMatcher(
             matches(metadata, name, artist)
         }
         return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { it.optString("link").linkTo(MusicService.DEEZER) }
+    }
+
+    /** Presto credits all the players. Use the album's lead credit and leave different matching editions to the search. */
+    private suspend fun findOnPresto(metadata: MusicMetadata): String? {
+        val codes = apis.prestoAlbums(searchQuery(metadata)).mapNotNull { result ->
+            val title = result.nonBlankString("title") ?: return@mapNotNull null
+            val artist = Presto.leader(result.nonBlankString("artists").orEmpty())
+            if (!matches(metadata, title, artist)) return@mapNotNull null
+            result.optString("prestoCode").toLongOrNull()?.takeIf { it > 0 }
+        }
+        return codes.distinct().singleOrNull()?.toString()?.let(Presto::albumUrl)
     }
 
     /**
@@ -1676,20 +1688,22 @@ internal class ExactMatcher(
     }
 }
 
-/** The apps whose search needs no account. Spotify's does, so its songs are found another way, but not its albums or artists. */
+/** The apps whose search needs no account and can look up songs, albums and artists. */
 private val matchable = setOf(
     MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
-    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ, MusicService.SPOTIFY
+    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK
 )
 
 /**
- * Whether Crosstune can look [type] up in [target] itself, so that finding nothing there means it isn't
- * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else;
- * Qobuz's artists aren't told apart, see ExactMatcher.findOnQobuz.
+ * Whether Crosstune can look [type] up in [target] itself. A playlist is someone's own, and is never anywhere else.
+ * Spotify songs are found through ListenBrainz, Qobuz's artists aren't told apart, and Presto Music only lists albums.
  */
-internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
-    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST) &&
-        !(target == MusicService.SPOTIFY && type != ItemType.TRACK)
+internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean = when (target) {
+    MusicService.PRESTO_MUSIC -> type == ItemType.ALBUM
+    MusicService.QOBUZ -> type == ItemType.ALBUM || type == ItemType.TRACK
+    MusicService.SPOTIFY -> type == ItemType.TRACK
+    else -> type != ItemType.PLAYLIST && target in matchable
+}
 
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
@@ -1702,9 +1716,10 @@ internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
 
 /**
  * The apps where a song not found may still be there: on Bandcamp, SoundCloud and Audiomack only its
- * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
+ * artist's own page or a verified account counts, ListenBrainz doesn't know every Spotify song, and Presto Music
+ * may find more than one edition of the same album.
  */
-private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
+private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY, MusicService.PRESTO_MUSIC)
 
 /** [name] with what's in brackets put as a space, of any kind a title uses: "Song (An Endless Song (1987))" is "Song  ". */
 internal fun outsideBrackets(name: String) = replacingBracketTags(name, "([（【「『［", ")]）】」』］", " ")

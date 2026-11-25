@@ -62,7 +62,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 20 Kasım 2026",
+  "updated": "Son güncelleme: 24 Kasım 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -100,7 +100,7 @@
     ],
     [
       "p",
-      "Bir bağlantının şarkısını tanımak için Crosstune, bağlantının geldiği servisin herkese açık sayfasını veya API'sini okur: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam veya Google; ve kapağını yükler. Onu başka bir uygulamada açmak için başlık ve sanatçı o uygulamanın aramasına gider. Bu arama emin olamazsa Apple'ın ve Deezer'ın şarkı aramalarına da gider. Spotify için ListenBrainz'e gider, sanatçının adı MusicBrainz'e gider ve Spotify'ın herkese açık sayfaları okunur. Tümünü çal ve Karıştır bunu her şarkı için yapar; YouTube ise bulunan videolardan çalma listesini oluşturur. Yazdığınız şarkı adı Deezer ve Apple aramalarına gider. Özel bir hedef, arama kelimelerini sizin belirlediğiniz adreste alır."
+      "Bir bağlantının şarkısını tanımak için Crosstune, bağlantının geldiği servisin herkese açık sayfasını veya API'sini okur: Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, Presto Music, Shazam veya Google; ve kapağını yükler. Onu başka bir uygulamada açmak için başlık ve sanatçı o uygulamanın aramasına gider. Bu arama emin olamazsa Apple'ın ve Deezer'ın şarkı aramalarına da gider. Spotify için ListenBrainz'e gider, sanatçının adı MusicBrainz'e gider ve Spotify'ın herkese açık sayfaları okunur. Tümünü çal ve Karıştır bunu her şarkı için yapar; YouTube ise bulunan videolardan çalma listesini oluşturur. Yazdığınız şarkı adı Deezer ve Apple aramalarına gider. Özel bir hedef, arama kelimelerini sizin belirlediğiniz adreste alır. Android uygulaması, Presto Music’te bir albümü bulmak için albümün adını ve sanatçısını Presto Music’in arama API’sine gönderir."
     ],
     [
       "p",

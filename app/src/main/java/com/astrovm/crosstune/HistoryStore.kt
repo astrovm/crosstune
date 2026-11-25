@@ -115,7 +115,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
-                                .put("matchingEnabled", prepared.matchingEnabled).put("matcher", MATCH_VERSION)
+                                .put("matchingEnabled", prepared.matchingEnabled).put("matcher", destinationMatchVersion(entry.link.type, key))
                                 .putOpt("retry", prepared.retry?.toJson()))
                         }
                     })
@@ -135,7 +135,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val service = if (source == "RECOGNIZED_SONG") null else MusicService.fromName(source) ?: return null
         val url = optString("url").ifEmpty { "https://open.spotify.com/${type.name.lowercase()}/$id" }
         val link = MusicLink(service, type, id, url, optString("region").ifEmpty { null })
-        val prepared = optJSONObject("destinations")?.toDestinations().orEmpty()
+        val prepared = optJSONObject("destinations")?.toDestinations(type).orEmpty()
         val tracks = optJSONArray("tracks")?.let { list ->
             (0 until list.length()).mapNotNull { index ->
                 val song = list.optJSONArray(index) ?: return@mapNotNull null
@@ -158,19 +158,27 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         return HistoryEntry(link, metadata, prepared, albumChecked = !link.hasCatalogAlbum || has("album") || !missingAlbum)
     }
 
-    private fun JSONObject.toDestinations(): Map<String, PreparedLink> = keys().asSequence().mapNotNull { key ->
+    private fun JSONObject.toDestinations(type: ItemType): Map<String, PreparedLink> = keys().asSequence().mapNotNull { key ->
         val value = optJSONObject(key) ?: return@mapNotNull null
         val url = value.optString("url").ifBlank { return@mapNotNull null }
         val exact = value.optBoolean("exact")
-        // Found the way songs were matched before, it's found again; a search for it is the same either way.
-        if (exact && value.optInt("matcher", 1) != MATCH_VERSION) return@mapNotNull null
+        // Look up old exact links again. Presto album searches from before it could match albums also need a lookup.
+        val checkVersion = exact || isPrestoAlbumDestination(type, key)
+        if (checkVersion && value.optInt("matcher", 1) != destinationMatchVersion(type, key)) return@mapNotNull null
         val retry = value.optJSONObject("retry")?.let { ExactMatcher.Retry.fromJson(it) }
         key to PreparedLink(url, exact, value.optBoolean("matchingEnabled"), retry)
     }.toMap()
 
+    private fun destinationMatchVersion(type: ItemType, key: String): Int =
+        if (isPrestoAlbumDestination(type, key)) maxOf(MATCH_VERSION, FIRST_PRESTO_ALBUM_MATCH_VERSION) else MATCH_VERSION
+
+    private fun isPrestoAlbumDestination(type: ItemType, key: String): Boolean =
+        type == ItemType.ALBUM && key.substringBefore(Destination.BUILD_SEPARATOR) == MusicService.PRESTO_MUSIC.name
+
     companion object {
         const val KEY_HISTORY = "history"
         private const val MAX_ENTRIES = 20
+        private const val FIRST_PRESTO_ALBUM_MATCH_VERSION = 12
     }
 }
 
