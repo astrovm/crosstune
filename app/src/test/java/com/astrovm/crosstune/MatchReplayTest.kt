@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The songs scripts/matchcheck/collect.py kept, looked for on YouTube Music through the real [ExactMatcher], with
@@ -21,6 +22,7 @@ import java.io.IOException
 class MatchReplayTest {
 
     private val fake = FakeSpotify()
+    private val missingLocalizations = ConcurrentHashMap.newKeySet<String>()
     private lateinit var dir: File
 
     @Test
@@ -54,6 +56,7 @@ class MatchReplayTest {
             }
         }
         found.put("shown", shown)
+        found.put("missingLocalizations", JSONArray(missingLocalizations.sorted()))
         File(dir, "replay-${System.getenv("MATCHCHECK_LABEL") ?: "head"}.json").writeText(found.toString())
     }
 
@@ -93,11 +96,12 @@ class MatchReplayTest {
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray("deezer")).toString())
             url.host == "music.youtube.com" -> {
                 val body = JSONObject(FakeSpotify.bodyOf(request))
-                if (body.getJSONObject("context").getJSONObject("client").optString("hl") != "en") {
-                    throw IOException("No localized answer kept")
-                }
+                val language = body.getJSONObject("context").getJSONObject("client").optString("hl")
                 val videos = body.optString("params") == VIDEOS
-                FakeSpotify.html(request, answers[if (videos) "videos" else "songs"] ?: "{}")
+                val kind = if (videos) "videos" else "songs"
+                val kept = if (language == "en") answers[kind] ?: "{}" else answers["$kind-$language"]
+                    ?: throw IOException("No localized answer kept").also { missingLocalizations += "$language|${body.optString("query")}" }
+                FakeSpotify.html(request, kept)
             }
             else -> throw IOException("not kept: $url")
         }
@@ -111,7 +115,7 @@ class MatchReplayTest {
         song.takeUnless { it.isNull(kind) }?.getString(kind)?.let { path -> File(path).takeIf(File::isAbsolute) ?: File(dir, path) }
 
     private companion object {
-        val KINDS = listOf("songs", "videos")
+        val KINDS = listOf("songs", "videos", "songs-ja", "songs-ko", "songs-zh-TW")
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
         const val WHILE_MS = 60_000L
     }

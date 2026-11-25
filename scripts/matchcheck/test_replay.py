@@ -61,8 +61,8 @@ class PrepareTest(unittest.TestCase):
             os.mkdir(os.path.join(out, "raw"))
             songs = replay.ytm_path(out, song["query"], replay.collect.YTM_SONGS)
             self.assertIsNone(songs)
-            for params in (replay.collect.YTM_SONGS, replay.collect.YTM_VIDEOS):
-                body = {"context": {"client": replay.collect.YTM_CLIENT}, "query": song["query"], "params": params}
+            for params, language in ((replay.collect.YTM_SONGS, "en"), (replay.collect.YTM_VIDEOS, "en"), (replay.collect.YTM_SONGS, "ja")):
+                body = {"context": {"client": replay.collect.YTM_CLIENT | {"hl": language}}, "query": song["query"], "params": params}
                 key = hashlib.sha256((replay.collect.YTM_SEARCH + json.dumps(body, sort_keys=True)).encode()).hexdigest()[:24]
                 with open(os.path.join(out, "raw", key + ".json"), "w", encoding="utf-8") as kept:
                     json.dump({}, kept)
@@ -70,7 +70,7 @@ class PrepareTest(unittest.TestCase):
                 replay.prepare(out)
             with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
                 [prepared] = json.load(kept)
-            for name in ("songs", "videos"):
+            for name in ("songs", "videos", "songs-ja"):
                 self.assertFalse(os.path.isabs(prepared[name]))
                 self.assertTrue(prepared[name].startswith("raw" + os.sep))
                 self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))

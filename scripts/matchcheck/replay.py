@@ -19,7 +19,8 @@ no song result and no video of the artist's is right, as someone else's lyrics v
 the song is there. Every wrong open, and every video, is listed with -v, to be checked by eye.
 
 Prepare with --apple-down to fail every Apple request rather than returning no results, and with
---source-length to pass the collected recording length as if the link supplied it.
+--source-length to pass the collected recording length as if the link supplied it. Localized song
+searches use the kept response for that language. Replay lists any not kept in "missingLocalizations".
 
 Run LABEL on another checkout, e.g. origin/main, with the same test file and gradle-box.sh, and
 compare with --against. OUT stays out of git: it holds what the services answered.
@@ -48,8 +49,8 @@ def raw_path(out, url, body):
     return path if os.path.exists(path) else None
 
 
-def ytm_path(out, query, params):
-    return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT}, "query": query, "params": params})
+def ytm_path(out, query, params, language="en"):
+    return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT | {"hl": language}}, "query": query, "params": params})
 
 
 # What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
@@ -134,6 +135,8 @@ def prepare(out, *, apple_down=False, source_length=False):
         native = {}
         for n in song["native"]:
             native.setdefault(n["store"], {"trackId": song["id"], "trackName": n["title"], "artistName": n["artist"], "collectionName": n["album"], "trackTimeMillis": song["lengthMs"]})
+        localized = {f"songs-{language}": os.path.relpath(path, out) for language in ("ja", "ko", "zh-TW")
+                     if (path := ytm_path(out, query, collect.YTM_SONGS, language))}
         replay.append({
             "title": song["title"], "artist": song["artist"],
             "appleDown": apple_down, "sourceLengthMs": song["lengthMs"] if source_length else None,
@@ -144,6 +147,7 @@ def prepare(out, *, apple_down=False, source_length=False):
             # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
             "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,
+            **localized,
         })
     with open(os.path.join(out, "replay.json"), "w", encoding="utf-8") as kept:
         json.dump(replay, kept, ensure_ascii=False)
