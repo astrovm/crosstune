@@ -19,7 +19,7 @@ class ReadingsTest {
 
     @Test
     fun additionalOpeningMarksStartAPhrase() {
-        for (mark in listOf("［", "[", "‘", "〔", "｛", "{")) {
+        for (mark in listOf("［", "[", "‘", "〔", "｛", "{", "〖", "〘", "〚", "｢", "«", "‹", "⟨", "〝")) {
             val line = "${mark}からだ"
             val expected = "${mark}karada" to listOf("からだ")
             fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
