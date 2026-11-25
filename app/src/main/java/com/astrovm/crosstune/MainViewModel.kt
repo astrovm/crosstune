@@ -2094,7 +2094,9 @@ internal class MainViewModel(
         qobuzNumbers?.off()
         val chosen = destination ?: uiState.resultDestination
         adoptDefault(chosen)
+        // Opened, as asked, rather than played right away.
         pendingOpen = false
+        pendingPlay = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
             selectedDestination = destination ?: uiState.selectedDestination
@@ -2603,11 +2605,20 @@ internal class MainViewModel(
         effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
     }
 
-    /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
-    fun searchAnyway() {
+    /**
+     * Searches for the result by its name where it goes, whether or not it was found there: for another version of it,
+     * under another name, or to pick it there without it starting.
+     */
+    fun searchResult() {
         val destination = uiState.resultDestination
-        val url = uiState.destinationUrls[destination]?.url ?: return
-        effectChannel.trySend(opening(url.forSharing(), destination.packageName, finishAfterOpen = false))
+        val result = uiState.result ?: return
+        // Whatever was on its way to open or play, the search is what was asked for now.
+        pendingOpen = false
+        pendingPlay = false
+        job?.cancel()
+        // The link Copy and Share give is still made, where it waited for Android to say whether the song can play.
+        if (destination !in uiState.destinationUrls) viewModelScope.launchKept({ job = it }) { prepareDestination(destination) }
+        effectChannel.trySend(opening(destination.searchUrl(searchQuery(result)).forSharing(), destination.packageName, finishAfterOpen = false))
     }
 
     /**

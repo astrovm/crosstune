@@ -57,6 +57,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -75,12 +76,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.annotation.DrawableRes
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
@@ -130,6 +133,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusDirection
@@ -149,7 +153,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -164,8 +170,17 @@ internal const val NOW_PLAYING_TAG = "now_playing"
 /** What the main screen keeps of where the remote goes back to there, for a player that closes to hand it to the bar. */
 internal val LocalMainFocus = staticCompositionLocalOf<ScreenFocus?> { null }
 
-/** Where the remote comes back to the card's Open, when Play is its main button. */
+/** The card's icon buttons, beside its main one: a full touch target, as tall as the main button. */
+private val ICON_BUTTON = 56.dp
+
+/** The gap between the card's main button and each icon beside it. */
+private val ICON_GAP = 12.dp
+
+/** Where the remote comes back to the card's first icon, beside the main button. */
 private const val OPEN_FOCUS = "open"
+
+/** Where the remote comes back to the card's second icon, which opens the song without playing it. */
+private const val ARROW_FOCUS = "arrow"
 
 /** How many frames a Recent row has to be placed in, Recent coming back, before the remote is left where it is. */
 private const val FOCUS_FRAMES = 5
@@ -177,9 +192,6 @@ private val LocalClosedSong = compositionLocalOf<ClosedSong?> { null }
 
 /** The flat tools under a result's main button: lyrics, copy, share, keep offline. */
 internal const val CARD_TOOLS_TAG = "card_tools"
-
-/** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
-private const val STACK_BUTTONS_FROM = 1.3f
 
 internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
@@ -404,8 +416,8 @@ internal data class ScreenActions(
     /** Opens Crosstune's App info, where restricted settings are allowed. */
     val onOpenAppInfo: () -> Unit = {},
     val onThemeChange: (ThemeMode) -> Unit = {},
-    /** Searches where the result goes, though it wasn't found there. */
-    val onSearchAnyway: () -> Unit = {},
+    /** Searches for the result by its name where it goes, whether or not it was found there. */
+    val onSearchResult: () -> Unit = {},
     val onNotFoundActionChange: (NotFoundAction) -> Unit = {},
     /** Takes the not-found offer's way: where the song is, or a search where it was going. */
     val onTakeNotFoundOffer: (original: Boolean) -> Unit = {},
@@ -1537,8 +1549,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 )
             }
         }
-        val main = mainAction(result, state, actions)
-        val playDescription = stringResource(R.string.play_in_background, destination.label())
         val missing = state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH
         // It was looked for where it's going and isn't there, which is worth saying before the button.
         // Its app's icon, crossed out, says so at a glance, with a search there still a tap away, e.g. for another name.
@@ -1564,79 +1574,86 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     modifier = Modifier.padding(start = 10.dp)
                 )
                 if (state.link?.service != null) {
-                    IconButton(onClick = actions.onSearchAnyway, modifier = Modifier.padding(start = 4.dp)) {
+                    IconButton(onClick = actions.onSearchResult, modifier = Modifier.padding(start = 4.dp)) {
                         AppIcon(R.drawable.ic_search, contentDescription = stringResource(R.string.search_anyway, destination.label()))
                     }
                 }
             }
         }
-        // A song its app has, or may, can be asked to play, staying here; while it's asked, once is enough.
-        val canPlay = state.canPlayResult
-        val playEnabled = !state.playingResult && !state.isMatching
-        val playFocus = remember { FocusRequester() }
-        // Where it opens, picked for just this result. Down from it on a remote is Play, the main thing to do, not
-        // Open, which sits nearer the middle below it; while Play waits, and can't take focus, it's wherever's nearest.
-        DestinationChip(state, actions, down = playFocus.takeIf { canPlay && playEnabled })
-        // Side by side, until the words are too big for half the width; then one above the other.
-        val stacked = canPlay && LocalDensity.current.fontScale > STACK_BUTTONS_FROM
+        // The song, or a search for it, as Play right away puts first; with only one way in, that's all there is.
+        val buttons = cardActions(result, state, actions)
+        val main = buttons.first()
+        // Where it opens, picked for just this result. Down from it on a remote is the main button, wide under its middle.
+        DestinationChip(state, actions)
+        // The main way in, in a word, and the others beside it as icons. Where a big font or a long language leaves the
+        // word no room beside them, the icons go under it, so the word stays whole.
         val press = rememberPress()
-        val mainModifier = Modifier
-            .heightIn(min = 56.dp)
-            .then(press.modifier)
-            // Once it scrolls away, a floating copy of it takes over.
-            .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
-        // The icon and word say what it does, the chip above which app; screen readers hear the app's name too.
-        val label = @Composable {
-            AnimatedContent(targetState = main, transitionSpec = { swap() }, contentKey = { Triple(it.icon, it.label, it.description) }, label = "open") { shown ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = if (shown.description != shown.label) Modifier.clearAndSetSemantics { contentDescription = shown.description } else Modifier
-                ) {
-                    shown.icon?.let { DestinationIcon(it, state.installed, size = 24.dp) }
-                        ?: AppIcon(shown.drawable, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text(shown.label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+        val labelStyle = MaterialTheme.typography.labelLarge
+        val mainButton = @Composable {
+            Button(
+                onClick = main.onClick,
+                enabled = main.enabled,
+                interactionSource = press.source,
+                modifier = Modifier
+                    .returnsFocus()
+                    .heightIn(min = ICON_BUTTON)
+                    .then(press.modifier)
+                    // Once it scrolls away, a floating copy of it takes over.
+                    .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
+            ) {
+                // The icon and word say what it does, the chip above which app; screen readers hear the app's name too.
+                AnimatedContent(targetState = main, transitionSpec = { swap() }, contentKey = { Triple(it.icon, it.label, it.description) }, label = "main") { shown ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = if (shown.description != shown.label) Modifier.clearAndSetSemantics { contentDescription = shown.description } else Modifier
+                    ) {
+                        shown.icon?.let { DestinationIcon(it, state.installed, size = 24.dp) }
+                            ?: AppIcon(shown.drawable, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        // Whole on one line: smaller only where even the whole width is too narrow for it.
+                        Text(
+                            shown.label,
+                            style = labelStyle,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = labelStyle.fontSize),
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
                 }
             }
         }
-        val playButton = @Composable { modifier: Modifier ->
-            Button(
-                onClick = actions.onPlayResult,
-                enabled = playEnabled,
-                interactionSource = press.source,
-                modifier = modifier.focusRequester(playFocus).returnsFocus().heightIn(min = 56.dp).then(press.modifier)
-            ) {
-                AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text(
-                    stringResource(R.string.lyrics_play),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clearAndSetSemantics { contentDescription = playDescription }
-                )
+        val icons = @Composable {
+            buttons.drop(1).forEachIndexed { index, action ->
+                FilledTonalIconButton(
+                    onClick = action.onClick,
+                    enabled = action.enabled,
+                    modifier = Modifier.size(ICON_BUTTON).returnsFocus(if (index == 0) OPEN_FOCUS else ARROW_FOCUS)
+                ) {
+                    AppIcon(action.drawable, contentDescription = action.description, modifier = Modifier.size(24.dp))
+                }
             }
         }
-        val openButton = @Composable { modifier: Modifier ->
-            if (canPlay) {
-                FilledTonalButton(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus(OPEN_FOCUS).then(mainModifier)) { label() }
-            } else {
-                Button(onClick = main.onClick, enabled = main.enabled, interactionSource = press.source, modifier = modifier.returnsFocus().then(mainModifier)) { label() }
-            }
-        }
-        if (stacked) {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                playButton(Modifier.fillMaxWidth())
-                openButton(Modifier.fillMaxWidth())
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (canPlay) playButton(Modifier.weight(1f).fillMaxHeight())
-                openButton(Modifier.weight(1f).fillMaxHeight())
+        val measurer = rememberTextMeasurer()
+        // One layout either way, so a remote's focus stays on its button when the icons move.
+        Layout(content = { mainButton(); icons() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { measurables, constraints ->
+            val gap = ICON_GAP.roundToPx()
+            val iconPlaces = measurables.drop(1).map { it.measure(Constraints()) }
+            val iconsWidth = iconPlaces.sumOf { it.width + gap }
+            // The word, its icon and the button's own room, beside each icon and the gap before it.
+            val word = measurer.measure(main.label, labelStyle).size.width + (24.dp + ButtonDefaults.IconSpacing + 48.dp).roundToPx()
+            val under = iconPlaces.isNotEmpty() && word + iconsWidth > constraints.maxWidth
+            val button = measurables.first().measure(Constraints.fixedWidth(constraints.maxWidth - if (under) 0 else iconsWidth))
+            // The button is never shorter than an icon, so beside it the icons sit on its middle, and under it in theirs.
+            val iconsTop = button.height + 8.dp.roundToPx()
+            val height = if (under) iconsTop + iconPlaces.maxOf { it.height } else button.height
+            layout(constraints.maxWidth, height) {
+                button.placeRelative(0, 0)
+                var x = if (under) (constraints.maxWidth - iconsWidth + gap) / 2 else button.width + gap
+                iconPlaces.forEach { icon ->
+                    icon.placeRelative(x, if (under) iconsTop else (button.height - icon.height) / 2)
+                    x += icon.width + gap
+                }
             }
         }
         QueueProgress(state.queueProgress)
@@ -1719,36 +1736,60 @@ private class MainAction(
     val onClick: () -> Unit
 )
 
+/**
+ * What a result's buttons say and do, the filled one first. A song its app plays from here plays, or else it opens, and a
+ * search for it sits beside it, first when Play right away is off; one that plays can also just open, last. A playlist's
+ * songs play, and with only one way in, such as a search where the song wasn't found as itself, that's the one button.
+ */
 @Composable
-private fun mainAction(result: MusicMetadata, state: UiState, actions: ScreenActions): MainAction {
+private fun cardActions(result: MusicMetadata, state: UiState, actions: ScreenActions): List<MainAction> {
     val destination = state.resultDestination
     val app = destination.label()
     val enabled = !state.isMatching && state.queueProgress == null
     // A playlist's songs play, since a search for its name elsewhere rarely finds it.
     if (state.isSongList) {
         if (!state.canPlayAll) {
-            return MainAction(stringResource(R.string.play_first_button), stringResource(R.string.play_first_in, app), enabled, drawable = R.drawable.ic_play) {
-                actions.onOpenTrack(result.tracks.first())
-            }
+            return listOf(
+                MainAction(stringResource(R.string.play_first_button), stringResource(R.string.play_first_in, app), enabled, drawable = R.drawable.ic_play) {
+                    actions.onOpenTrack(result.tracks.first())
+                }
+            )
         }
-        return MainAction(stringResource(R.string.play_all_button), stringResource(R.string.play_all_in, app), enabled, drawable = R.drawable.ic_play, onClick = actions.onPlayAll)
+        return listOf(MainAction(stringResource(R.string.play_all_button), stringResource(R.string.play_all_in, app), enabled, drawable = R.drawable.ic_play, onClick = actions.onPlayAll))
     }
     // Not there, the song plays where it is instead, unless searching anyway was picked.
     state.link?.service?.takeIf { state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH }?.let { original ->
-        return MainAction(stringResource(R.string.open_button), stringResource(original.openLabelRes), enabled, Destination.Service(original), onClick = actions.onOpenOriginal)
+        return listOf(MainAction(stringResource(R.string.open_button), stringResource(original.openLabelRes), enabled, Destination.Service(original), onClick = actions.onOpenOriginal))
     }
-    // The chip above says which app, so one word says what it does.
-    return if (state.destinationUrls[destination]?.exact == false) {
-        MainAction(stringResource(R.string.search_button), stringResource(R.string.search_in_destination, app), enabled, drawable = R.drawable.ic_search, onClick = actions.onOpen)
-    } else {
-        MainAction(stringResource(R.string.open_button), destination.openLabel(), enabled, onClick = actions.onOpen)
-    }
+    // The chip above says which app, so one word says what each does. A search needs no match, but waits for it with
+    // the rest: until then, which buttons there are isn't known, and a remote coming back waits for the main one.
+    val search = MainAction(
+        stringResource(R.string.search_button),
+        stringResource(R.string.search_in_destination, app),
+        enabled,
+        drawable = R.drawable.ic_search,
+        onClick = actions.onSearchResult
+    )
+    val song = when {
+        state.canPlayResult -> MainAction(
+            stringResource(R.string.lyrics_play),
+            stringResource(R.string.play_in_background, app),
+            !state.playingResult && !state.isMatching,
+            drawable = R.drawable.ic_play,
+            onClick = actions.onPlayResult
+        )
+        state.destinationUrls[destination]?.exact == false -> null
+        else -> MainAction(stringResource(R.string.open_button), destination.openLabel(), enabled, onClick = actions.onOpen)
+    } ?: return listOf(search)
+    // Where the song plays from here, it can also just open there, last, where it stays put.
+    val open = MainAction(stringResource(R.string.open_button), destination.openLabel(), enabled, onClick = actions.onOpen).takeIf { state.opensApart }
+    return (if (state.playRightAway) listOf(song, search) else listOf(search, song)) + listOfNotNull(open)
 }
 
 /** The main button, floating at the bottom once the card it's on has scrolled away. */
 @Composable
 private fun PlayButton(result: MusicMetadata, state: UiState, actions: ScreenActions, visible: Boolean) {
-    val main = mainAction(result, state, actions)
+    val main = cardActions(result, state, actions).first()
     val progress = state.queueProgress
     AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
         ExtendedFloatingActionButton(
@@ -1787,10 +1828,10 @@ private fun QueueProgress(progress: Pair<Int, Int>?, modifier: Modifier = Modifi
 
 /** The app a result opens in, as a chip under the song: it lists the apps to open it in instead. */
 @Composable
-private fun DestinationChip(state: UiState, actions: ScreenActions, down: FocusRequester?) {
+private fun DestinationChip(state: UiState, actions: ScreenActions) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG).focusProperties { down?.let { this.down = it } }) {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
             DestinationIcon(state.resultDestination, state.installed, size = 20.dp)
             Spacer(Modifier.size(8.dp))
             Text(state.resultDestination.label(), style = MaterialTheme.typography.labelLarge)

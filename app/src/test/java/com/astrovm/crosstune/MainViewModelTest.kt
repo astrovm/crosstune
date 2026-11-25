@@ -4453,6 +4453,37 @@ class MainViewModelTest {
     }
 
     @Test
+    fun searchingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.searchResult()
+        until("the old open stopped") { answers.subscriptionCount.value == 0 }
+        // Only the search opens: the song it was waiting to open doesn't follow it.
+        assertTrue(answers.tryEmit(null))
+        idle()
+        assertEquals(1, effects.size)
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("/search"))
+    }
+
+    @Test
+    fun searchingBeforeAndroidSaysWhatsOnThePhoneStillMakesTheLinkToShare() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        // Android's look at apps held, so a song from Recent waits on it to know whether it can play.
+        val model = model(systemDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
+        })
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        val link = MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "1", "https://open.spotify.com/track/1")
+        model.showHistoryEntry(HistoryEntry(link, MusicMetadata("Track", "Band")), play = true)
+        idle()
+        assertNull(model.destinationUrl())
+        model.searchResult()
+        idle()
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("search"))
+        // Copy and Share still have the song's link, though the wait that was to make it is over.
+        until("the link made") { model.destinationUrl() != null }
+    }
+
+    @Test
     fun cancellingAHandoffStopsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
         model.cancelHandoff()
         until("the old open stopped") { answers.subscriptionCount.value == 0 }
@@ -5458,7 +5489,7 @@ class MainViewModelTest {
             assertEquals(1, opened(MusicService.QOBUZ))
             // Any other app's left alone, and a search has no number to swap.
             assertEquals(0, opened(MusicService.DEEZER))
-            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchResult() }))
             assertEquals(0, opened(MusicService.DEEZER, action = { it.openOriginal() }))
             assertEquals(0, opened(MusicService.DEEZER, action = {
                 it.openTrack(MusicMetadata("Next", "Artist", url = "https://www.deezer.com/track/42"))
@@ -5466,7 +5497,7 @@ class MainViewModelTest {
             // Another song, as one looked up before is opened on the number kept with it.
             found = false
             assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=aaaaaaaaaaa"))
-            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchResult() }))
         } finally {
             scope.cancel()
         }

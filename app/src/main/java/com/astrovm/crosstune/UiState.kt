@@ -286,6 +286,10 @@ internal data class UiState(
         get() = songApp?.service?.let { it.playsAskedSongs || it.playsLinkedSongs && destinationUrls[resultDestination]?.exact != false } == true &&
             !resultMissing
 
+    /** Whether the song that plays from here can also just open there, on itself: so not when all there is is a search. */
+    val opensApart: Boolean
+        get() = canPlayResult && destinationUrls[resultDestination]?.exact != false
+
     /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
     val canPlayFromLyrics: Boolean
         get() = canPlayResult && canUseAppFromLyrics
