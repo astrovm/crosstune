@@ -5339,6 +5339,57 @@ class MainViewModelTest {
     }
 
     @Test
+    fun exactVideoPlayDoesNotAcceptTheShortReportBeforeItsOwnFollowUpdates() {
+        val id = "9bZkp7q19f0"
+        val link = "https://music.youtube.com/watch?v=$id"
+        val phone = FakePlayback().apply { access = true }
+        val model = ytMusicModel(phone)
+        val requested = MusicMetadata("GANGNAM STYLE(강남스타일) M/V", "PSY")
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"contents":[{"playlistPanelVideoRenderer":{"videoId":"$id","lengthText":{"runs":[{"text":"4:13"}]}}}]}""")
+        }
+        model.showHistoryEntry(HistoryEntry(checkNotNull(MusicLinks.linkFor(link)), requested), play = true)
+        until("Play asks for the exact video after learning its duration") { phone.linksAsked == listOf(link) }
+        assertEquals(253_000L, phone.songsAsked.single().first.lengthMs)
+
+        // The home report can arrive before the request's own observer gets the same Android update.
+        val heard = MusicMetadata("Gangnam Style", "Psy", lengthMs = 10_133)
+        phone.onThePhone = Heard.Song(heard, null, offsetMs = 45, app = ytMusic)
+        idle()
+        assertTrue("The raw ad clock must not complete Play", model.uiState.playingResult)
+        assertEquals(link, model.uiState.player?.song?.url)
+        assertFalse(checkNotNull(model.uiState.player).played)
+        // For a music video the report can give the video's duration without giving a song length.
+        phone.onThePhone = Heard.Song(heard.copy(lengthMs = null), null, offsetMs = 45, app = ytMusic, sessionDurationMs = 10_133)
+        idle()
+        assertTrue(model.uiState.playingResult)
+        assertEquals(link, model.uiState.player?.song?.url)
+
+        val at = SystemClock.elapsedRealtime()
+        val waiting = Following(PlaybackClock(0, at, playing = false), "YouTube Music", canSeek = true,
+            appPackage = ytMusic, durationMs = 253_000, ad = true, adPlaying = true)
+        phone.playing.value = waiting
+        until("the request now follows the ad with the song clock stopped") { model.uiState.player?.following?.ad == true }
+        assertEquals(0L, model.uiState.player?.following?.clock?.positionMs)
+        phone.onThePhone = Heard.Song(heard.copy(lengthMs = 252_261), null, offsetMs = 27, app = ytMusic)
+        phone.playing.value = waiting.copy(clock = PlaybackClock(27, at), durationMs = 252_261, ad = false, adPlaying = false)
+        until("the first song report is followed") { model.uiState.player?.following?.clock?.positionMs == 27L }
+    }
+
+    @Test
+    fun aKnownShortYouTubeVideoCanStartFromTheGeneralReport() {
+        val phone = FakePlayback().apply { access = true; rememberYouTubeLength("sPmul8b17AU", 10_133) }
+        val model = ytMusicModel(phone)
+        val requested = checkNotNull(model.uiState.result)
+        model.playResult()
+        until("Play asks for the short video") { phone.linksAsked == listOf(ytLink) }
+        phone.onThePhone = Heard.Song(requested, null, offsetMs = 45, app = ytMusic, sessionDurationMs = 10_133)
+        until("the general report confirms the short video") { !model.uiState.playingResult }
+        assertEquals(ytLink, model.uiState.player?.song?.url)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
     fun playDoesNotAcceptAnotherVideoThroughTheNowPlayingFallback() {
         val phone = FakePlayback().apply { access = true; rememberYouTubeLength("sPmul8b17AU", 214_000) }
         val model = ytMusicModel(phone)

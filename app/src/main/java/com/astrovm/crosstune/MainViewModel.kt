@@ -2483,8 +2483,17 @@ internal class MainViewModel(
     private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
         // An ad under the song's name is no song started: free YouTube Music plays them so.
         app != null && !playing.ad && sameApp(app, playing.app, interception::isInstalled) &&
-            !playing.isAnotherYouTubeVideo(link) &&
+            !playing.isAnotherYouTubeVideo(link) && !playing.isShortReportForKnownYouTubeVideo(link) &&
             (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
+
+    /** The general report can arrive before the follower with the requested video's length sees the ad. */
+    private fun Heard.Song.isShortReportForKnownYouTubeVideo(link: String?): Boolean {
+        if (MusicService.ofPackage(app) != MusicService.YOUTUBE_MUSIC) return false
+        val id = RecordingKey.youTubeIdIn(link) ?: return false
+        val expected = playback?.knownYouTubeLength(id) ?: return false
+        val said = sessionDurationMs ?: metadata.lengthMs ?: return false
+        return isYouTubeAdLength(said, expected)
+    }
 
     private fun Heard.Song.isAnotherYouTubeVideo(link: String?): Boolean {
         if (MusicService.ofPackage(app) !in YOUTUBE_PLAYERS) return false

@@ -457,6 +457,26 @@ class PlaybackTest {
     }
 
     @Test
+    fun samsungGangnamStyleWithKnownExactLengthReplaysAsAnAd() {
+        allow()
+        sounding()
+        val controller = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Gangnam Style", "Psy",
+            album = "PSY 6 (Six Rules), Pt. 1", duration = 10_133, position = 45)
+        shadowOf(sessions).addController(controller)
+        val raw = checkNotNull(playback.nowPlaying())
+        assertFalse(raw.ad)
+        assertEquals(10_133L, raw.sessionDurationMs)
+        playback.rememberYouTubeLength("9bZkp7q19f0", 253_000)
+        val asked = MusicMetadata("GANGNAM STYLE(강남스타일) M/V", "PSY",
+            url = "https://music.youtube.com/watch?v=9bZkp7q19f0", lengthMs = 253_000)
+        val state = checkNotNull(followed(asked).last()) { "The exact Play request did not match the app's name" }
+        assertTrue(state.ad)
+        assertEquals(0L, state.clock.positionMs)
+        assertEquals(253_000L, state.durationMs)
+        assertTrue(checkNotNull(playback.nowPlaying()).ad)
+    }
+
+    @Test
     fun theNowPlayingBarKeepsTheRequestedSongClockThroughAnAdWithoutAVideoId() {
         allow()
         sounding()

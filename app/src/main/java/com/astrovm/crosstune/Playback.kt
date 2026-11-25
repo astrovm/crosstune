@@ -1036,8 +1036,7 @@ internal class MediaSessionPlayback(
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return false
         val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
         if (said !in 1 until LONGEST_AD_MS) return false
-        val expected = expectedYouTubeLength(metadata, asked, said)
-            ?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS } ?: return false
+        val expected = expectedYouTubeLength(metadata, asked, said)?.takeIf { isYouTubeAdLength(said, it) } ?: return false
         rememberYouTubeAd(metadata, asked, said, expected)
         return true
     }
@@ -1183,7 +1182,8 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f, ad = follows?.ad == true)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f,
+            ad = follows?.ad == true, sessionDurationMs = duration)
     }
 
     /**
@@ -1476,6 +1476,9 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L
+
+internal fun isYouTubeAdLength(said: Long, expected: Long): Boolean =
+    said in 1 until LONGEST_AD_MS && expected >= LONGEST_AD_MS && expected - said > SteadyLengths.SAME_MS
 
 /** Two clocks this close go on from the same: what an app says on a clock is exact to the millisecond. */
 internal const val SAME_CLOCK_MS = 50L
