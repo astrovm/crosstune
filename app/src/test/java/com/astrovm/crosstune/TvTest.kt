@@ -7,7 +7,12 @@ import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Text
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -45,6 +50,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -56,7 +62,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -838,6 +847,112 @@ class TvTest {
         assertEquals(null, model().uiState.result)
         assertFalse(activity.isFinishing)
         composeRule.onNode(hasText("Song 2") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun aRecentRowGivenTheRemoteDoesNotTakeItAgainWhenSearchBringsTheRowBack() {
+        HistoryStore(prefs()).add(recentSong(1))
+        launch()
+        val row = composeRule.onNode(hasText("Song 1") and hasClickAction())
+        row.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 1" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        row.assertIsFocused()
+
+        button(R.string.search_recent).performScrollTo().performClick()
+        val search = composeRule.onNode(hasSetTextAction() and hasText(string(R.string.search_recent)))
+        search.performTextInput("missing")
+        row.assertDoesNotExist()
+        val query = composeRule.onNode(hasSetTextAction() and hasText("missing"))
+        query.assertIsFocused()
+        query.performTextReplacement("")
+        row.assertExists()
+        search.assertIsFocused()
+    }
+
+    @Test
+    fun showingAnotherSongClearsTheRemoteReturnToARowThatHasNotComeBackYet() {
+        val first = recentSong(1)
+        val second = recentSong(2)
+        val other = recentSong(3)
+        val state = mutableStateOf(UiState(phone = Phone.TV, link = first.link, result = first.metadata, history = listOf(first, second)))
+        val screen = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        try {
+            val activity = screen.get()
+            activity.setContent {
+                CrosstuneTheme {
+                    CrosstuneScreen(state.value, ScreenActions(onClear = {
+                        // Recent is updated as the first card closes, before its row can take focus.
+                        state.value = state.value.copy(link = null, result = null, history = listOf(second))
+                    }))
+                }
+            }
+            composeRule.waitForIdle()
+            activity.onBackPressedDispatcher.onBackPressed()
+            val firstRow = composeRule.onNode(hasText("Song 1") and hasClickAction())
+            firstRow.assertDoesNotExist()
+
+            composeRule.runOnIdle { state.value = state.value.copy(link = other.link, result = other.metadata) }
+            composeRule.waitForIdle()
+            composeRule.runOnIdle { state.value = state.value.copy(link = null, result = null) }
+            val secondRow = composeRule.onNode(hasText("Song 2") and hasClickAction())
+            secondRow.performScrollTo().requestFocus()
+            secondRow.assertIsFocused()
+            composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
+            firstRow.assertExists()
+            secondRow.assertIsFocused()
+        } finally {
+            screen.pause().stop().destroy()
+        }
+    }
+
+    private fun recentSong(n: Int): HistoryEntry {
+        val url = "https://open.spotify.com/track/song$n"
+        return HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band"), albumChecked = true)
+    }
+
+    @Test
+    fun aRecentRowRetriesFocusUntilPlacedButDoesNotWaitForever() {
+        val focus = RowButtonFocus()
+        val frames = BroadcastFrameClock()
+        val scope = CoroutineScope(Dispatchers.Main.immediate + frames)
+        var ready = false
+        val screen = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        try {
+            screen.get().setContent {
+                Text("Recent song", focus.rowModifier.focusProperties { canFocus = ready }.clickable {})
+            }
+            val row = composeRule.onNodeWithText("Recent song")
+            row.assertIsNotFocused()
+            composeRule.runOnIdle {
+                val waiting = scope.launch { focus.focusOncePlaced() }
+                repeat(4) { frame ->
+                    assertFalse(waiting.isCompleted)
+                    frames.sendFrame(frame.toLong())
+                }
+                assertFalse(waiting.isCompleted)
+                ready = true
+                frames.sendFrame(4)
+                assertTrue(waiting.isCompleted)
+                assertTrue(scope.launch { focus.focusOncePlaced() }.isCompleted)
+            }
+            row.assertIsFocused()
+
+            composeRule.runOnIdle {
+                ready = false
+                val waiting = scope.launch { focus.focusOncePlaced() }
+                repeat(5) { frame ->
+                    assertFalse(waiting.isCompleted)
+                    frames.sendFrame(5 + frame.toLong())
+                }
+                assertTrue(waiting.isCompleted)
+            }
+        } finally {
+            scope.cancel()
+            screen.pause().stop().destroy()
+        }
     }
 
     @Test
