@@ -11,7 +11,7 @@ class TakesTest {
     @Test
     fun mixNotesUseCompatibilitySpellingWithoutTreatingSongNamesAsNotes() {
         val notes = listOf(
-            "Song (Disco Version)", "Song - Club Remix", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
+            "Song (Disco Version)", "Song - Club Mix", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
             "Song (ディスコ版)", "Song (ﾃﾞｨｽｺ･ﾊﾞｰｼﾞｮﾝ)", "Song (テ\u3099ィスコ・ハ\u3099ーシ\u3099ョン)",
             "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)"
         )
@@ -20,7 +20,10 @@ class TakesTest {
             assertTrue(name, Takes.albumNamesMix(name))
         }
         assertTrue(Takes.albumNamesMix("Disco Mix"))
-        val names = listOf("Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Song (Deluxe Edition)", "Song (Disco)")
+        val names = listOf(
+            "Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Song (Deluxe Edition)", "Song (Disco)",
+            "Song (Extended Remix)", "Song (feat. DJ Mix)", "Song - with DJ Mix", "Song (prod. DJ Mix)"
+        )
         for (name in names) {
             assertFalse(name, Takes.namesMix(name))
             assertFalse(name, Takes.albumNamesMix(name))

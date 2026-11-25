@@ -36,15 +36,18 @@ internal object Takes {
         return SongNames.normalize(written) in MIX_LABELS || tagsOf(written).any(::isMixNote)
     }
 
-    private fun isMixNote(note: String): Boolean =
-        SongNames.normalize(note) in MIX_LABELS || SongNames.wordList(note).lastOrNull() in MIX_WORDS
+    private fun isMixNote(note: String): Boolean {
+        if (SongNames.normalize(note) in MIX_LABELS) return true
+        val words = SongNames.wordList(note)
+        return words.lastOrNull() == "mix" && words.firstOrNull() !in CREDIT_WORDS
+    }
 
-    private val MIX_WORDS = setOf("mix", "remix")
-    private val MIX_LABELS = (listOf(
-        "disco version", "disco mix", "DISCOバージョン", "プロモーション用DISCOバージョン",
+    private val CREDIT_WORDS = setOf("feat", "ft", "featuring", "with", "prod", "produced")
+    private val MIX_LABELS = listOf(
+        "mix", "disco version", "disco mix", "DISCOバージョン", "プロモーション用DISCOバージョン",
         "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
         "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
-    ) + MIX_WORDS).map(SongNames::normalize).toSet()
+    ).map(SongNames::normalize).toSet()
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
