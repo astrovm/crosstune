@@ -194,6 +194,33 @@ class ReadingsTest {
     ))
 
     @Test
+    fun repeatedNanDaSeparatorMatrix() {
+        val spellings = listOf("なんだ", "何だ")
+        val joins = listOf("", " ", "　", "\t", ",", "，", "、", ", ", "， ", "、 ")
+        val endings = listOf("\n", "\r\n", "。", "！", "？")
+        val cases = buildList {
+            for (count in 2..3) for (mask in 0 until (1 shl count)) for (join in joins) for (end in endings) for (topic in listOf(false, true)) {
+                val words = (0 until count).map { spellings[(mask shr it) and 1] }
+                val line = (if (topic) "これは" else "") + words.joinToString(join) + end + "なんだよ"
+                val separator = if (join.any { it in ",，、" }) "${join.first()} " else " "
+                val readings = words.mapIndexed { at, _ -> if (topic && at == 0) "nan da" else "nanda" }
+                val romaji = (if (topic) "kore wa " else "") + readings.joinToString(separator) +
+                    (if (end.startsWith('\r') || end.startsWith('\n')) " " else "$end ") + "nan da yo"
+                val sheet = (if (topic) listOf("これ", "は", if (words.first() == "何だ") "何" else "なん", "だ") else listOf(words.first())) +
+                    words.drop(1) + listOf("なん", "だ", "よ")
+                add(Triple(line, romaji, sheet))
+            }
+        }
+        fun read() = Readings.of(cases.map { it.first }, Script.JAPANESE).mapIndexed { at, reading ->
+            Triple(cases[at].first, reading.romanized, Readings.words(cases[at].first, Script.JAPANESE).map { it.text })
+        }
+        val answers = listOf(read(), TestUniDic.reading(::read))
+        answers.forEachIndexed { mode, readings -> cases.zip(readings).forEach { (expected, actual) ->
+            assertEquals("dictionary $mode: ${expected.first}", expected, actual)
+        } }
+    }
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),

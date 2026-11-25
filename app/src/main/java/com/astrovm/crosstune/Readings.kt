@@ -221,15 +221,27 @@ internal object Readings {
         var at = 0
         while (at < pieces.size) {
             val piece = pieces[at]
+            val length = pieces.repeatedNanDaLength(at)
+            if (length > 0) {
+                val surface = pieces.subList(at, at + length).joinToString("") { it.surface }
+                if (pieces.nanDaHasSubject(at)) {
+                    val head = if (surface.startsWith("何")) "何" else "なん"
+                    add(Piece(head, "なん", "名詞", "代名詞", reader = Reader.RULES))
+                    add(Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
+                } else {
+                    add(Piece(surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
+                }
+                at += length
+                continue
+            }
             val before = pieces.getOrNull(at - 1)
             val after = pieces.getOrNull(at + 1)
             val subject = pieces.nanDaHasSubject(at)
             val question = subject || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
                 openingNanDaContinues(before, after)
-            val repeated = !subject && piece.surface in setOf("何だ", "なん") && pieces.nextToNanDa(at)
-            val call = nanDaCall(pieces, at, repeated)
+            val call = nanDaCall(pieces, at)
             when {
-                piece.surface == "何だ" && piece.kind == "感動詞" && question && !repeated -> {
+                piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
                     add(Piece("何", "なん", "名詞", "代名詞", reader = Reader.RULES))
                     add(Piece("だ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
                 }
@@ -244,12 +256,12 @@ internal object Readings {
     }
 
     private fun List<Piece>.nanDaHasSubject(at: Int) = when (get(at).surface) {
-        "何だ" -> beforeAdverbs(at)?.nanDaSubject() == true
-        "なん" -> beforeAdverbs(at)?.isNanDaTopic() == true
+        "何だ", "何" -> beforeAdverbs(at)?.nanDaSubject() == true
+        "なん", "な" -> beforeAdverbs(at)?.isNanDaTopic() == true
         else -> false
     }
 
-    private fun Piece.nanDaSubject() = kind == "名詞" || isNanDaTopic()
+    private fun Piece.nanDaSubject() = kind == "名詞" && surface.any(Char::isLetterOrDigit) || isNanDaTopic()
 
     private fun Piece.isNanDaTopic() = kind == "助詞" && when (kana) {
         "は", "も" -> subkind == "係助詞"
@@ -269,32 +281,38 @@ internal object Readings {
     private fun nanDaOpening(before: Piece?) =
         before == null || before.surface in OPENING || before.surface in "、。，．,.！？!?；;：:…"
 
-    private fun List<Piece>.nanDaAt(at: Int): Boolean {
-        val head = getOrNull(at) ?: return false
+    private fun List<Piece>.nanDaLength(at: Int): Int {
+        val head = getOrNull(at) ?: return 0
         val next = getOrNull(at + 1)
-        return head.surface == "何だ" && head.kind == "感動詞" ||
-            head.surface == "なん" && next?.surface == "だ" && next.startsCopula
+        val copula = getOrNull(at + 2)
+        val length = when {
+            head.surface in setOf("何だ", "なんだ") -> 1
+            head.surface in setOf("何", "なん") && next?.surface == "だ" && next.startsCopula -> 2
+            head.surface == "な" && next?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula -> 3
+            else -> 0
+        }
+        return length.takeUnless { getOrNull(at + it)?.surface in setOf("か", "よ", "ね") } ?: 0
     }
 
-    private fun List<Piece>.nextToNanDa(at: Int): Boolean {
-        val length = if (get(at).surface == "なん") 2 else 1
-        if (nanDaAt(at + length)) return true
-        if (length == 2) return false
-        return nanDaAt(at - 1) || getOrNull(at - 2)?.surface == "なん" && nanDaAt(at - 2)
+    private fun Piece.nanDaJoiner() = surface.isNotEmpty() && surface.all { it in " \t　,，、" }
+
+    private fun List<Piece>.repeatedNanDaLength(at: Int): Int {
+        val length = nanDaLength(at)
+        if (length == 0) return 0
+        var next = at + length
+        while (getOrNull(next)?.nanDaJoiner() == true) next++
+        if (nanDaLength(next) > 0) return length
+        var before = at - 1
+        while (getOrNull(before)?.nanDaJoiner() == true) before--
+        return length.takeIf { (1..3).any { width -> nanDaLength(before - width + 1) == width } } ?: 0
     }
 
-    private fun List<Piece>.nanDaBeforeSpace(at: Int): Boolean {
-        val space = getOrNull(at - 1)?.surface ?: return false
-        if (space.isEmpty() || space.any { it != ' ' && it != '　' }) return false
-        return nanDaAt(at - 2) || getOrNull(at - 3)?.surface == "なん" && nanDaAt(at - 3)
-    }
-
-    private fun nanDaCall(pieces: List<Piece>, at: Int, repeated: Boolean): Boolean {
+    private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)
         val after = pieces.getOrNull(at + 1)
         val next = pieces.getOrNull(at + 2)
         return pieces[at].surface == "なん" && after?.surface == "だ" && after.startsCopula &&
-            (repeated || pieces.nanDaBeforeSpace(at) || nanDaOpening(before) && next.endsNanDaCall())
+            nanDaOpening(before) && next.endsNanDaCall()
     }
 
     /**
