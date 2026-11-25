@@ -38,6 +38,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.ComposeUiTestConfig
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -92,7 +94,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class TvTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createEmptyComposeRule(ComposeUiTestConfig(inputMode = InputMode.Keyboard))
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
