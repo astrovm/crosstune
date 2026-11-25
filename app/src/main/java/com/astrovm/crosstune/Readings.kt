@@ -201,7 +201,8 @@ internal object Readings {
             val piece = pieces[at]
             val before = pieces.getOrNull(at - 1)
             val after = pieces.getOrNull(at + 1)
-            val question = before?.nanDaSubject() == true || after?.surface in setOf("か", "よ", "ね", "?", "？")
+            val question = before?.nanDaSubject() == true || after?.surface in setOf("か", "よ", "ね", "?", "？") ||
+                openingNanDaContinues(before, after)
             val call = nanDaCall(pieces, at)
             when {
                 piece.surface == "何だ" && piece.kind == "感動詞" && question -> {
@@ -223,6 +224,10 @@ internal object Readings {
         "が" -> subkind == "格助詞"
         else -> false
     }
+
+    private fun openingNanDaContinues(before: Piece?, after: Piece?) =
+        (before == null || before.surface in "、。，．,.！？!?；;：:…") && (before != null || after != null) &&
+            after?.surface !in setOf("、", ",")
 
     private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)

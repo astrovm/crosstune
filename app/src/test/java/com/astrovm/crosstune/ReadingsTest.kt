@@ -127,6 +127,7 @@ class ReadingsTest {
     @Test
     fun nanDaInterjectionsAndOtherExpressionsKeepTheirWords() = assertJapaneseBoundaries(listOf(
         Triple("何だ、お前か", "nanda、 omae ka", listOf("何だ", "お前", "か")),
+        Triple("何だ君か", "nan da kimi ka", listOf("何", "だ", "君", "か")),
         Triple("なんだ君か", "nan da kimi ka", listOf("なん", "だ", "君", "か")),
         Triple("なんだ、君か", "nanda、 kimi ka", listOf("なんだ", "君", "か")),
         Triple("なんだ, 君か", "nanda, kimi ka", listOf("なんだ", "君", "か")),
