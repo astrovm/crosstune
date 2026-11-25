@@ -42,6 +42,7 @@ import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -49,8 +50,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -437,6 +441,10 @@ internal class MediaSessionPlayback(
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
+    /** A song's requested video can identify an ad even when the Android session gives no video ID. */
+    private val seenYouTubeAds = MutableStateFlow<Map<MediaSession.Token, SeenYouTubeAd>>(emptyMap())
+
+    private data class SeenYouTubeAd(val names: List<String?>, val adMs: Long, val songMs: Long)
     /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
     @Volatile
     private var moves = Any()
@@ -502,10 +510,13 @@ internal class MediaSessionPlayback(
         var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         lateinit var clocks: SteadyClock
         var movesSeen = moves
+        var wasUnderAd = false
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song)?.let {
-            // Moved by Crosstune, where the app says next is believed, even a moment back.
-            if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
+            // Don't carry the last clock across a seek or a change between an ad and the song.
+            if (moves !== movesSeen || it.ad != wasUnderAd) clocks = steadyClock(controller.packageName)
+            movesSeen = moves
+            wasUnderAd = it.ad
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
                 clockLog.note("followed_clock", now) { at ->
                     put("observer", clockObserver)
@@ -565,6 +576,7 @@ internal class MediaSessionPlayback(
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
+        val stopAdUpdates = refreshOn(seenYouTubeAds.drop(1)) { pick(watched) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
@@ -572,6 +584,7 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
+            stopAdUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             followed?.unregisterCallback(callback)
@@ -924,7 +937,9 @@ internal class MediaSessionPlayback(
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
     private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
-        covers.retainSessions(controllers.map { it.sessionToken }.toSet())
+        val active = controllers.map { it.sessionToken }.toSet()
+        covers.retainSessions(active)
+        seenYouTubeAds.update { ads -> ads.filterKeys { it in active } }
     }
 
     /**
@@ -997,11 +1012,12 @@ internal class MediaSessionPlayback(
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return lengths.of(title, artist, said)
         if (said < LONGEST_AD_MS) {
-            val expected = expectedYouTubeLength(metadata, asked)
+            val expected = expectedYouTubeLength(metadata, asked, said)
             // Keep the short video's own clock steady too. An observer that doesn't know it can see the ad first.
             if (expected != null && (expected >= LONGEST_AD_MS || abs(expected - said) <= SteadyLengths.SAME_MS)) return expected
             return lengths.of(title, artist, said, keep = false)
         }
+        seenYouTubeAds.update { it - sessionToken }
         val stable = lengths.of(title, artist, said)
         val id = metadata.youTubeVideoId() ?: return stable
         val kept = lengths.video(id)
@@ -1021,21 +1037,45 @@ internal class MediaSessionPlayback(
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
         val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
         if (said !in 1 until LONGEST_AD_MS) return null
-        return expectedYouTubeLength(metadata, asked)?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS }
+        val expected = expectedYouTubeLength(metadata, asked, said)
+            ?.takeIf { it >= LONGEST_AD_MS && it - said > SteadyLengths.SAME_MS } ?: return null
+        rememberYouTubeAd(metadata, asked, said, expected)
+        return expected
     }
 
-    private fun expectedYouTubeLength(metadata: MediaMetadata, asked: MusicMetadata?): Long? {
+    private fun MediaController.expectedYouTubeLength(metadata: MediaMetadata, asked: MusicMetadata?, said: Long): Long? {
         val playingId = metadata.youTubeVideoId()
         val askedId = asked?.let(RecordingKey::youTubeId)
         val sameVideo = playingId == null || askedId == null || playingId == askedId
         val askedLength = asked?.lengthMs?.takeIf { it > 0 && sameVideo }
         val videoLength = (playingId ?: askedId)?.let(lengths::video)
+        val seenAd = seenYouTubeAdLength(metadata, said)
         // A short length for the requested video is evidence too. Don't replace it with the length of a different edit.
-        (videoLength ?: askedLength)?.let { return it }
-        if (playingId != null) return null
+        if (playingId != null) return videoLength ?: askedLength
+        (videoLength ?: askedLength.takeIf { askedId != null } ?: seenAd ?: askedLength)?.let { return it }
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
         return known.lastOrNull { it >= LONGEST_AD_MS }
     }
+
+    /** Share a catalogue-confirmed ad with other readers of the same report, not with another take by name. */
+    private fun MediaController.rememberYouTubeAd(metadata: MediaMetadata, asked: MusicMetadata?, adMs: Long, songMs: Long) {
+        val video = asked?.let(RecordingKey::youTubeId) ?: return
+        if (metadata.youTubeVideoId() != null || lengths.video(video) != songMs) return
+        val seen = SeenYouTubeAd(metadata.sessionNames(), adMs, songMs)
+        // Two link-specific followers can know different edits. The same report must not keep switching between them.
+        seenYouTubeAds.update { if (sessionToken in it) it else it + (sessionToken to seen) }
+    }
+
+    private fun MediaController.seenYouTubeAdLength(metadata: MediaMetadata, said: Long): Long? {
+        val seen = seenYouTubeAds.value[sessionToken] ?: return null
+        if (seen.adMs == said && seen.names == metadata.sessionNames()) return seen.songMs
+        seenYouTubeAds.update { if (it[sessionToken] == seen) it - sessionToken else it }
+        return null
+    }
+
+    private fun MediaMetadata.sessionNames(): List<String?> =
+        listOf(MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_ARTIST, MediaMetadata.METADATA_KEY_ALBUM,
+            MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(::getString)
 
     private fun MediaMetadata.youTubeVideoId(): String? =
         RecordingKey.youTubeSessionId(getString(MediaMetadata.METADATA_KEY_MEDIA_URI), getString(MediaMetadata.METADATA_KEY_MEDIA_ID))
@@ -1059,17 +1099,25 @@ internal class MediaSessionPlayback(
         return watchStart(asked, mustStart) { asked.clockCommand("play_from_uri") { playFromUri(Uri.parse(link), Bundle()) } }
     }
 
+    private fun CoroutineScope.refreshOn(updates: Flow<*>, read: () -> Unit): () -> Unit {
+        val refresh = Runnable { if (isActive) read() }
+        val watching = launch {
+            updates.collect {
+                handler.removeCallbacks(refresh)
+                handler.post(refresh)
+            }
+        }
+        return {
+            watching.cancel()
+            handler.removeCallbacks(refresh)
+        }
+    }
+
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         fun update() { trySend(read()) }
-        val refreshCover = Runnable { if (isActive) update() }
-        val coverChanges = launch {
-            covers.updates.collect {
-                handler.removeCallbacks(refreshCover)
-                handler.post(refreshCover)
-            }
-        }
+        val stopOtherUpdates = refreshOn(merge(covers.updates, seenYouTubeAds.drop(1)), ::update)
         fun watch(controllers: List<MediaController>) {
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
             watched = controllers.map { controller ->
@@ -1103,8 +1151,7 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) update()
         awaitClose {
-            coverChanges.cancel()
-            handler.removeCallbacks(refreshCover)
+            stopOtherUpdates()
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
@@ -1177,8 +1224,7 @@ internal class MediaSessionPlayback(
      */
     private fun ownCover(metadata: MediaMetadata, session: MediaSession.Token?): String? =
         COVERS.firstNotNullOfOrNull(metadata::getBitmap)?.let { bitmap ->
-            covers.of(bitmap, session, listOf(MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_ARTIST,
-                MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(metadata::getString))
+            covers.of(bitmap, session, metadata.sessionNames())
         }
 
     private fun following(controller: MediaController, asked: MusicMetadata?): Following? {

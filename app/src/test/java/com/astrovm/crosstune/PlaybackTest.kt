@@ -457,6 +457,117 @@ class PlaybackTest {
     }
 
     @Test
+    fun theNowPlayingBarKeepsTheRequestedSongClockThroughAnAdWithoutAVideoId() {
+        allow()
+        sounding()
+        val youtube = MusicService.YOUTUBE_MUSIC.packageName
+        val title = "Bohemian Rhapsody (Digital Remaster)"
+        val link = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ"
+        playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
+        val ad = player(youtube, "YouTube Music", title, "Queen", album = "A Night at the Opera",
+            duration = 60_046, position = 6_407)
+        shadowOf(sessions).addController(ad)
+        val asked = followed(MusicMetadata(title, "Queen", url = link, lengthMs = 360_000))
+        assertTrue(checkNotNull(asked.last()).ad)
+        // Crosstune comes into view during the ad and follows what the app reports for the bar.
+        val heard = checkNotNull(playback.nowPlaying())
+        assertTrue("The bar must not see a song playing while the player is waiting for an ad", heard.ad)
+        assertEquals(360_000L, heard.metadata.lengthMs)
+        assertNull(heard.offsetMs)
+        val bar = followed(heard.metadata)
+        assertEquals(asked.last()?.clock, bar.last()?.clock)
+        val offered = offered()
+        val paused = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 6_407, 1f, PLAYED_AT).build()
+        shadowOf(ad).setPlaybackState(paused)
+        shadowOf(ad).executeOnPlaybackStateChanged(paused)
+        shadowOf(Looper.getMainLooper()).idle()
+        val state = checkNotNull(bar.last())
+        assertTrue(state.ad)
+        assertFalse(state.playingInApp)
+        assertEquals(0L, state.clock.positionMs)
+        assertEquals(360_000L, state.durationMs)
+
+        // The first report of the song starts a new clock, not where the ad paused.
+        val song = MediaMetadata.Builder(ad.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 359_491).build()
+        shadowOf(ad).setMetadata(song)
+        val started = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 85, 1f, PLAYED_AT).build()
+        shadowOf(ad).setPlaybackState(started)
+        shadowOf(ad).executeOnMetadataChanged(song)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(checkNotNull(asked.last()).ad)
+        assertEquals(85L, asked.last()?.clock?.positionMs)
+        assertEquals(PlaybackClock(85, PLAYED_AT), followed(checkNotNull(offered.last()).metadata).last()?.clock)
+    }
+
+    @Test
+    fun aFollowAlreadyRunningLearnsOfTheAdWithoutANewAndroidReport() {
+        allow()
+        sounding()
+        val song = MusicMetadata("Bohemian Rhapsody", "Queen")
+        val controller = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist,
+            album = "A Night at the Opera", duration = 60_046, position = 500)
+        shadowOf(sessions).addController(controller)
+        val heard = offered()
+        val bare = followed(song)
+        assertFalse(checkNotNull(bare.last()).ad)
+        assertFalse(checkNotNull(heard.last()).ad)
+        playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
+        val asked = followed(song.copy(url = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ", lengthMs = 360_000))
+        assertTrue(checkNotNull(asked.last()).ad)
+        assertTrue(checkNotNull(heard.last()).ad)
+        assertEquals(360_000L, heard.last()?.metadata?.lengthMs)
+        assertTrue(checkNotNull(bare.last()).ad)
+        assertEquals(0L, bare.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun anExactShortEditStillWinsWithAnAdOfTheSameName() {
+        allow()
+        sounding()
+        val song = MusicMetadata("Bohemian Rhapsody", "Queen")
+        val session = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist,
+            album = "A Night at the Opera", duration = 60_046, position = 6_407)
+        shadowOf(sessions).addController(session)
+        playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
+        assertTrue(checkNotNull(followed(song.copy(url = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ")).last()).ad)
+        assertTrue(checkNotNull(playback.nowPlaying()).ad)
+
+        val short = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk", lengthMs = 60_000)
+        val state = checkNotNull(followed(short).last())
+        assertFalse(state.ad)
+        assertEquals(PlaybackClock(6_407, PLAYED_AT), state.clock)
+        assertEquals(60_000L, state.durationMs)
+    }
+
+    @Test
+    fun theConfirmedAdDoesNotChangeTheLengthOfAnotherReportOrSession() {
+        allow()
+        sounding()
+        val youtube = MusicService.YOUTUBE_MUSIC.packageName
+        val song = MusicMetadata("Bohemian Rhapsody", "Queen")
+        val controller = player(youtube, "YouTube Music", song.title, song.artist, album = "A Night at the Opera", duration = 60_046)
+        shadowOf(sessions).addController(controller)
+        val report = controller.metadata
+        playback.rememberYouTubeLength("fJ9rUzIMcZQ", 360_000)
+        val asked = song.copy(url = "https://music.youtube.com/watch?v=fJ9rUzIMcZQ", lengthMs = 360_000)
+        assertTrue(checkNotNull(followed(asked).last()).ad)
+        assertTrue(checkNotNull(playback.nowPlaying()).ad)
+
+        val edit = MediaMetadata.Builder(report).putString(MediaMetadata.METADATA_KEY_ALBUM, "Live").build()
+        shadowOf(controller).setMetadata(edit)
+        assertFalse(checkNotNull(playback.nowPlaying()).ad)
+        shadowOf(controller).setMetadata(report)
+        assertFalse(checkNotNull(playback.nowPlaying()).ad)
+        assertTrue(checkNotNull(followed(asked).last()).ad)
+
+        shadowOf(sessions).clearControllers()
+        assertNull(playback.nowPlaying())
+        val newSession = player(youtube, "YouTube Music", song.title, song.artist, album = "A Night at the Opera", duration = 60_046)
+        shadowOf(sessions).addController(newSession)
+        assertFalse(checkNotNull(playback.nowPlaying()).ad)
+    }
+
+    @Test
     fun anAdIsKnownByTheLengthOfTheSongAskedFor() {
         allow()
         sounding()

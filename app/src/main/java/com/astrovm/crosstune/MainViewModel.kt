@@ -1701,7 +1701,7 @@ internal class MainViewModel(
     /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
         val bar = onTheBar() ?: return
-        playback?.playPause(bar.song, bar.following?.clock?.playing == false, bar.app, bar.session)
+        playback?.playPause(bar.song, bar.following?.playingInApp == false, bar.app, bar.session)
     }
 
     fun playingNowSkip() {

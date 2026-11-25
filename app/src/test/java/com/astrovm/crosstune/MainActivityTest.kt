@@ -4775,6 +4775,29 @@ class MainActivityTest {
     }
 
     @Test
+    fun theNowPlayingBarPausesAndResumesTheAppWhileTheSongClockWaits() {
+        val youtube = MusicService.YOUTUBE_MUSIC.packageName
+        val song = MusicMetadata("Bohemian Rhapsody", "Queen", lengthMs = 360_000)
+        val ad = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
+            canSeek = true, appPackage = youtube, durationMs = 360_000, ad = true, adPlaying = true)
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, app = youtube, ad = true)
+            playing.value = ad
+        }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        waitForDescription(string(R.string.lyrics_pause))
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
+        phone.onThePhone = null
+        phone.playing.value = ad.copy(adPlaying = false)
+        waitForDescription(string(R.string.lyrics_play))
+        click(string(R.string.lyrics_play))
+        assertEquals(listOf(false, true), phone.plays)
+    }
+
+    @Test
     fun aPlayedSongShowsInCrosstunesPlayerWhichPlaysPausesSkipsAndSeeksIt() {
         val youTubeMusic = morpheMusic
         val phone = FakePlayback().apply { access = true }

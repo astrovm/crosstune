@@ -984,7 +984,7 @@ private fun PlayingBar(
     byLineMaxLines: Int = 1,
     transport: Boolean = true
 ) {
-    val playing = following?.clock?.playing != false
+    val playing = following?.playingInApp != false
     // The buttons sit inside the bar's own tap target, where a remote's search from the bar never looks.
     val bar = remember { FocusRequester() }
     val playPause = remember { FocusRequester() }
