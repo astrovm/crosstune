@@ -589,13 +589,18 @@ internal object Readings {
     private val tables = Any()
 
     /** JMdict words for old-kana readings, modern spellings that protect them, and [small] words for tokenizer searches. */
-    internal class OldKana(val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap()) {
+    internal class OldKana(
+        val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap(),
+        val adjectives: Map<String, List<String>> = emptyMap()
+    ) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
         val search = small + today
-        val longestSearch = search.keys.maxOfOrNull { it.length } ?: 0
+        val longestSearch = (search.keys + adjectives.keys).maxOfOrNull { it.length } ?: 0
         val smallByPrefix = small.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
+        val adjectivesByPrefix = adjectives.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
             .mapValues { (_, words) -> words.sortedByDescending { it.length } }
     }
 
@@ -610,10 +615,12 @@ internal object Readings {
         get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-        val (small, rest) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('+') }
+        val (adjectives, other) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('~') }
+        val (small, rest) = other.partition { it.startsWith('+') }
         val (today, modern) = rest.partition { '\t' in it }
         OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet(),
-            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') })
+            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') },
+            adjectives.associate { it.substringAfter('~').substringBefore('\t') to it.split('\t').drop(1) })
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"

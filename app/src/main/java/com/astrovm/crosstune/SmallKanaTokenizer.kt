@@ -48,7 +48,7 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
         for (wrong in tokens.indices) {
             if (wrong < next) continue
             val token = tokens[wrong]
-            val crossing = if (hasSmallKana) crossingFor(text, tokens, wrong) else null
+            val crossing = if (hasSmallKana) crossingFor(text, tokens, wrong) else adjectiveCrossing(text, token.position)
             if (!wrongStart(text, token) && crossing == null) continue
             val (first, last) = searchWindow(text, tokens, wrong, next, crossing)
             out += tokens.subList(next, first)
@@ -66,7 +66,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     internal fun crossingFor(text: String, tokens: List<Token>, at: Int): IntRange? {
         val token = tokens[at]
         if (token.isKnown && token.surface in KEPT_TSU_WORDS) return null
-        return crossingWord(text, token.position)?.takeUnless { startsInsideInflected(it, tokens.getOrNull(at - 1)) }
+        return (crossingWord(text, token.position) ?: adjectiveCrossing(text, token.position))
+            ?.takeUnless { startsInsideInflected(it, tokens.getOrNull(at - 1)) }
     }
 
     /** A kana noun such as まっちゃ must not split the inflected verb しまっ. */
@@ -208,8 +209,8 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             // A word may go on in a small vowel after it: ちょうだぃ is ちょうだい, not 長打 drawn out.
             if (drawsOut(text, end)) return@mapNotNull null
             val kana = text.substring(at, end)
-            val written = words.search[kana]?.takeIf { it != kana } ?: return@mapNotNull null
-            val wordId = lookups.getOrPut(kana) { Lookup(offeredWord(kana, written, words)) }.wordId
+            val written = listOfNotNull(words.search[kana]?.takeIf { it != kana }) + words.adjectives[kana].orEmpty()
+            val wordId = lookups.getOrPut(kana) { Lookup(written.firstNotNullOfOrNull { offeredWord(kana, it, words) }) }.wordId
             wordId?.let { ViterbiNode(it, kana, tokenInfoDictionary, at, ViterbiNode.Type.KNOWN) }
         }
     }
@@ -292,6 +293,21 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
             val prefix = (text[start].code shl 16) or text[start + 1].code
             for (candidate in known.smallByPrefix[prefix].orEmpty()) {
                 if (crossingCandidate(text, start, at, candidate, known)) return start until start + candidate.length
+            }
+        }
+        return null
+    }
+
+    /** Offer a kana adjective where it precedes な and IPADIC split it. */
+    private fun adjectiveCrossing(text: String, at: Int): IntRange? {
+        if (at == 0 || !Readings.isKana(text[at - 1]) || !Readings.isKana(text[at])) return null
+        val known = words()
+        val first = maxOf(0, at - known.longestSearch + 1)
+        for (start in first until at) {
+            val prefix = (text[start].code shl 16) or text[start + 1].code
+            for (candidate in known.adjectivesByPrefix[prefix].orEmpty()) {
+                val end = start + candidate.length
+                if (end > at && text.getOrNull(end) == 'な' && text.regionMatches(start, candidate, 0, candidate.length)) return start until end
             }
         }
         return null

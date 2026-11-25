@@ -21,7 +21,8 @@ class ReadingsTest {
     fun japaneseWordsAndParticlesHaveSeparateRomaji() {
         val lines = listOf("ありきたりな喜びきっと二人なら見つけられる", "抱きしめた温もりで溶かすから")
         val expected = listOf("arikitari na yorokobi kitto futari nara mitsukerareru", "dakishimeta nukumori de tokasu kara")
-        assertEquals(expected, Readings.of(lines, Script.JAPANESE).map { it.romanized })
+        fun readings() = Readings.of(lines, Script.JAPANESE).map { it.romanized }
+        assertEquals(listOf(expected, expected), listOf(readings(), TestUniDic.reading { readings() }))
     }
 
     @Test
