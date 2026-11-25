@@ -1605,6 +1605,7 @@ internal object Readings {
         var previous: Piece? = null
         var opened = false
         var orphan = false
+        var straightQuotes = 0
         for (piece in pieces) {
             if (piece.surface.isBlank()) {
                 previous = null
@@ -1629,13 +1630,15 @@ internal object Readings {
             val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
             // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
             val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
-                (previous.surface in setOf("\"", "'") && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
+                (previous.surface == "\"" && straightQuotes % 2 == 1) ||
+                (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
             val join = previous != null && (withPrevious || continuesWord)
             if (join) words.last() += piece else words += mutableListOf(piece)
             orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
                 (previous == null || previous.kind == "助詞" || phraseMark ||
                     (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
+            straightQuotes += piece.surface.count { it == '"' }
             previous = piece
         }
         return words
@@ -1826,7 +1829,7 @@ internal object Readings {
         return words
     }
 
-    private const val OPENING = "「『（(【〈《“"
+    private const val OPENING = "「『（(【〈《“［[‘〔｛{〖〘〚｢«‹⟨〝"
 
     /** What only spaces words in Japanese, a wide space and the ・ of アスファルト・レディ: a space in romaji. */
     private val LATIN_MARKS = mapOf('　' to ' ', '・' to ' ')

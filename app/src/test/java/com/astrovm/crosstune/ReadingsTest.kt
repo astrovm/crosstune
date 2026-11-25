@@ -18,6 +18,29 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun additionalOpeningMarksStartAPhrase() {
+        for (mark in listOf("［", "[", "‘", "〔", "｛", "{")) {
+            val line = "${mark}からだ"
+            val expected = "${mark}karada" to listOf("からだ")
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(expected, expected), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
+    fun aStraightQuoteAfterAWordCanOpenAPhrase() {
+        val cases = listOf(
+            Triple("君\"からだ\"", "kimi\" karada\"", listOf("君", "からだ")),
+            Triple("\"LOVE\"の\"からだ\"", "\" LOVE\" no\" karada\"", listOf("LOVE", "の", "からだ")),
+            Triple("君\"からだ\"からだ", "kimi\" karada\" kara da", listOf("君", "からだ", "から", "だ"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, listOf(romaji to words, romaji to words), listOf(read(), TestUniDic.reading { read() }))
+        }
+    }
+
+    @Test
     fun aClosingQuoteKeepsTheWordBeforeTheParticle() {
         val line = "「君」からだ"
         val expected = "「kimi」 kara da" to listOf("君", "から", "だ")
