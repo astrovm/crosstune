@@ -103,7 +103,7 @@ internal object Presto {
             }
         }
 
-        private fun isWho(words: List<Name>, given: List<Name>, surname: String) = surname.isNotEmpty() && words.indices.any { first ->
+        private fun isWho(words: List<Name>, given: List<Name>, surname: String) = words.indices.any { first ->
             words.drop(first).joinToString("") { it.text } == surname && given.size <= first && given.indices.all { given[it].isLike(words[it]) }
         }
     }
@@ -119,7 +119,7 @@ internal object Presto {
         words.map { Name(SongNames.normalize(it), whole(it)) }.filter { it.text.isNotEmpty() }
 
     /** One of a name's words, which a single letter is the initial of, unless it's [whole]. */
-    private class Name(val text: String, val whole: Boolean) {
+    private class Name(val text: String, private val whole: Boolean) {
         /** The same name, or one's initial: "J" is "Johann", but "Taylor" isn't "Timothy". */
         fun isLike(other: Name) =
             text == other.text || !whole && !other.whole && minOf(text.length, other.text.length) == 1 && text[0] == other.text[0]

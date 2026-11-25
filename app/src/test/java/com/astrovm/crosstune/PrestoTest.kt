@@ -87,6 +87,11 @@ class PrestoTest {
         // A short name in capitals is a name, as well as initials, on either side.
         assertEquals(MusicMetadata("Song", "LEE MORGAN"), Presto.song("Lee Morgan: Song", listOf("LEE MORGAN")))
         assertEquals(MusicMetadata("Song", "Lee Morgan"), Presto.song("LEE MORGAN: Song", listOf("Lee Morgan")))
+        // A name in capitals is whole while the initial beside it is still an initial, and three capitals are three initials.
+        assertEquals(MusicMetadata("Song", "John Lee Morgan"), Presto.song("J. LEE MORGAN: Song", listOf("John Lee Morgan")))
+        assertEquals(MusicMetadata("Song", "John Ronald Reuel Tolkien"), Presto.song("JRR Tolkien: Song", listOf("John Ronald Reuel Tolkien")))
+        // A mark on its own in a credit is no name to match.
+        assertEquals(MusicMetadata("Song", "Jack Antonoff"), Presto.song("Jack ’ Antonoff: Song", listOf("Jack Antonoff")))
     }
 
     @Test
