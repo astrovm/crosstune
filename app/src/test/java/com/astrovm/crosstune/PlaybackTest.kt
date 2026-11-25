@@ -614,6 +614,10 @@ class PlaybackTest {
         assertTrue(first.adPlaying)
         assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), first.clock)
         assertEquals(254_000L, first.durationMs)
+
+        // A saved take with its own video ID is not the Home bar's temporary duration key.
+        val savedTake = named.copy(recordingId = "${MusicService.YOUTUBE_MUSIC.packageName}:abcdefghijk")
+        assertNull(followed(savedTake, other).first())
     }
 
     @Test
