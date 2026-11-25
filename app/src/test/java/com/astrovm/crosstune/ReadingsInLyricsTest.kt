@@ -120,7 +120,7 @@ class ReadingsInLyricsTest {
     fun tariStaysWithTheTappableVerbInLyrics() {
         lyricsText = "読んだりする\n食べたりする"
         openSong()
-        openWord("読んだりする", "読んだり", rubyPiece = "読ん")
+        openWord("読んだりする", "読んだり", rubyPiece = "読")
         waitUntil { composeRule.onAllNodes(hasText("yondari suru")).fetchSemanticsNodes().isNotEmpty() }
         waitUntil { composeRule.onAllNodes(hasText("yondari")).fetchSemanticsNodes().isNotEmpty() }
     }
