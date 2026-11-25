@@ -1053,7 +1053,7 @@ private fun LayerChip(@StringRes label: Int, @StringRes name: Int, on: Boolean, 
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.heightIn(min = 56.dp).clip(shape)
             .then(if (on) Modifier.background(colors.secondaryContainer) else Modifier.border(1.dp, colors.outlineVariant, shape))
-            .toggleable(on, role = Role.Switch, onValueChange = onChange)
+            .toggleable(on, interactionSource = null, indication = focusRing(shape), role = Role.Switch, onValueChange = onChange)
             .semantics { contentDescription = description }
             .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
@@ -1427,7 +1427,7 @@ private fun AppSource(description: String, packageName: String?, playing: Boolea
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRing(CircleShape), enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
     ) {
         // The badge sits on the icon's corner, inside the button.

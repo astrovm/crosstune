@@ -4,8 +4,10 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.RippleDefaults
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -163,7 +165,13 @@ fun CrosstuneTheme(
         typography = AppTypography,
         shapes = AppShapes
     ) {
-        CompositionLocalProvider(LocalRippleThemeConfiguration provides FocusShown, content = content)
+        // Material's focus ring, but in the text's own color rather than its muted accent, to stand out on any palette.
+        val colors = MaterialTheme.colorScheme
+        CompositionLocalProvider(
+            LocalRippleThemeConfiguration provides FocusShown,
+            LocalRippleConfiguration provides RippleConfiguration(RippleConfiguration.Focus.InsetRing(outerStrokeColor = colors.onSurface, innerStrokeColor = colors.surface)),
+            content = content
+        )
     }
 }
 
