@@ -8,11 +8,11 @@ av==19.0.2
     # via faster-whisper
 click==8.5.1
     # via huggingface-hub
-ctranslate2==4.9.0
+ctranslate2==4.9.1
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
-filelock==4.2.12
+filelock==4.3.0
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
@@ -46,7 +46,7 @@ packaging==26.3
     #   onnxruntime
 protobuf==7.36.2
     # via onnxruntime
-pyyaml==6.0.3
+pyyaml==6.0.4
     # via
     #   ctranslate2
     #   huggingface-hub
