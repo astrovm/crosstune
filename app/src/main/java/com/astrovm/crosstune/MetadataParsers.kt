@@ -273,7 +273,7 @@ internal object MetadataParsers {
      * song's length; anyone else's upload is read from its title, as a YouTube link's is.
      */
     fun youtubeMusicVideo(json: JSONObject, id: String): MusicMetadata? {
-        val video = findObject(json) { it.optJSONObject("playlistPanelVideoRenderer")?.takeIf { video -> video.optString("videoId") == id } } ?: return null
+        val video = youtubeMusicVideoRow(json, id) ?: return null
         fun text(key: String) = video.optJSONObject(key).runsText()
         val title = text("title").ifBlank { return null }
         val channel = text("longBylineText").substringBefore(" • ").trim()
@@ -285,6 +285,13 @@ internal object MetadataParsers {
         val lengthMs = text("lengthText").takeIf { song }?.let(::clockMs)
         return named.copy(artworkUrl = artwork, lengthMs = lengthMs)
     }
+
+    /** The length of this exact video, even when its music starts after the video's intro. */
+    fun youtubeMusicVideoLength(json: JSONObject, id: String): Long? =
+        youtubeMusicVideoRow(json, id)?.optJSONObject("lengthText").runsText().let(::clockMs)?.takeIf { it > 0 }
+
+    private fun youtubeMusicVideoRow(json: JSONObject, id: String): JSONObject? =
+        findObject(json) { it.optJSONObject("playlistPanelVideoRenderer")?.takeIf { video -> video.optString("videoId") == id } }
 
     /** How long "3:45" or "1:02:03" is, as a clock shows a song's length; null for anything else. */
     fun clockMs(text: String): Long? = text.split(":").takeIf { it.size in 2..3 }?.map { it.toLongOrNull() ?: return null }

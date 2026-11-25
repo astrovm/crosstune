@@ -49,9 +49,10 @@ internal object RecordingKey {
         key.split('\u0000').dropLastWhile { it.startsWith(INSTRUMENTAL_ALBUM_PREFIX) }.drop(3).lastOrNull()?.toLongOrNull()
 
     /** YouTube's exact video, when the link is known. A search match isn't the playing video. */
-    fun youTubeId(song: MusicMetadata): String? {
-        return track(song.url)?.takeIf { it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
-    }
+    fun youTubeId(song: MusicMetadata): String? = youTubeIdIn(song.url)
+
+    fun youTubeIdIn(url: String?): String? =
+        track(url)?.takeIf { it.service == MusicService.YOUTUBE || it.service == MusicService.YOUTUBE_MUSIC }?.id
 
     /**
      * [song] as the app [playing] it has it: its recording and its length, and its link, or the one it
@@ -99,16 +100,30 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
     private val seen: JSONObject by lazy { runCatching { JSONObject(preferences.getString(KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
 
     @Synchronized
-    fun of(title: String, artist: String, lengthMs: Long): Long {
+    fun of(title: String, artist: String, lengthMs: Long, keep: Boolean = true): Long {
         val key = keyOf(title, artist)
         val known = seen.optJSONArray(key) ?: JSONArray()
         (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let { return it }
+        if (keep) remember(key, known.put(lengthMs))
+        return lengthMs
+    }
+
+    /** Only a duration from the exact video or one too long to be an ad is kept here. */
+    @Synchronized
+    fun rememberVideo(id: String, lengthMs: Long) {
+        val key = "youtube:$id"
+        if (seen.optJSONArray(key)?.optLong(0) != lengthMs) remember(key, JSONArray().put(lengthMs))
+    }
+
+    @Synchronized
+    fun video(id: String): Long? = seen.optJSONArray("youtube:$id")?.getLong(0)
+
+    private fun remember(key: String, lengths: JSONArray) {
         seen.remove(key)
-        seen.put(key, known.put(lengthMs))
-        // The songs heard longest ago go first once there are many.
+        seen.put(key, lengths)
+        // The songs and videos heard longest ago go first once there are many.
         while (seen.length() > MAX_SONGS) seen.remove(seen.keys().next())
         preferences.edit { putString(KEY, seen.toString()) }
-        return lengthMs
     }
 
     /** The lengths said before for the song, by any app. */

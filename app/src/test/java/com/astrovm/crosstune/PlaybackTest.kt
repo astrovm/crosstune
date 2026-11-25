@@ -454,13 +454,62 @@ class PlaybackTest {
     @Test
     fun anAdIsKnownByTheLengthOfTheSongAskedFor() {
         allow()
+        sounding()
         // Never played before, but opened from a link that says how long it is.
         val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Cross My Heart", "Jody Watley", album = "Larger Than Life",
             position = 5_000, duration = 17_066)
         shadowOf(sessions).addController(music)
         val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
+        // The home bar can read the media session before the player follows the requested length.
+        playback.nowPlaying()
+        assertEquals(emptyList<Long>(), SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+            .known(asked.title, asked.artist))
         assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(followed(asked).last()) { "Expected followed(asked).last() to be non-null" }.clock)
         assertEquals(210_674L, playback.recording(asked)?.lengthMs)
+    }
+
+    @Test
+    fun aShortEditAskedByItsLinkWinsOverTheLongVersionHeardBefore() {
+        allow()
+        val title = "Bizarre Love Triangle"
+        val artist = "New Order"
+        SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of(title, artist, 262_000)
+        val short = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", title, artist, album = "Substance",
+            position = 10_000, duration = 124_000)
+        shadowOf(sessions).addController(short)
+        val edit = MusicMetadata(title, artist, url = "https://music.youtube.com/watch?v=abcdefghijk", lengthMs = 124_000)
+        val state = checkNotNull(followed(edit).last())
+        assertFalse(state.ad)
+        assertEquals(PlaybackClock(10_000, PLAYED_AT), state.clock)
+        assertEquals(124_000L, state.durationMs)
+    }
+
+    @Test
+    fun youtubeMusicLengthsKeptByVideoDoNotLeakBetweenEditsWithTheSameName() {
+        allow()
+        sounding()
+        val yt = MusicService.YOUTUBE_MUSIC.packageName
+        val long = player(yt, "YouTube Music", "Edit", "Band", album = "Album", duration = 240_000,
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "longVersion"))
+        shadowOf(sessions).addController(long)
+        assertEquals(240_000L, playback.nowPlaying()?.metadata?.lengthMs)
+        shadowOf(long).setMetadata(MediaMetadata.Builder(long.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build())
+        assertEquals(true, playback.nowPlaying()?.ad)
+        assertEquals(240_000L, playback.nowPlaying()?.metadata?.lengthMs)
+
+        val link = "https://music.youtube.com/watch?v=abcdefghijk"
+        val short = MediaMetadata.Builder(long.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_URI, link)
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 124_000).build()
+        shadowOf(long).setMetadata(short)
+        assertEquals(false, playback.nowPlaying()?.ad)
+        val edit = MusicMetadata("Edit", "Band", url = link, lengthMs = 124_000)
+        playback.rememberYouTubeLength("abcdefghijk", 124_000)
+        val kept = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        assertEquals(124_000L, kept.video("abcdefghijk"))
+        assertEquals(240_000L, kept.video("longVersion"))
+        assertEquals(124_000L, playback.knownYouTubeLength("abcdefghijk"))
+        assertEquals(false, playback.nowPlaying()?.ad)
+        assertEquals(124_000L, playback.recording(edit)?.lengthMs)
     }
 
     @Test

@@ -46,6 +46,10 @@ internal class LinkResolver(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val apis: ServiceApis = ServiceApis(client, java.util.Locale.getDefault().country, ioDispatcher)
 ) {
+    /** The duration of the video that will play, not another version that shares the title. */
+    suspend fun youTubeVideoLength(id: String): Long? =
+        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideoLength(it, id) }
+
     suspend fun resolve(input: LinkInput): Resolution = when (input) {
         is LinkInput.Link -> resolveLink(input.link)
         is LinkInput.ShortLink -> guarded(null) { resolveShortLink(input.url) }

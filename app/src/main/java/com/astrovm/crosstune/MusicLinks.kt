@@ -287,8 +287,10 @@ internal object MusicLinks {
         return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true, frontend = frontend, frontendUrl = url.toString())
     }
 
+    fun isYouTubeVideoId(id: String): Boolean = youtubeIdRegex.matches(id)
+
     private fun youtube(service: MusicService, id: String): MusicLink? {
-        if (!youtubeIdRegex.matches(id)) return null
+        if (!isYouTubeVideoId(id)) return null
         val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
         return MusicLink(service, ItemType.TRACK, id, "$base/watch?v=$id")
     }

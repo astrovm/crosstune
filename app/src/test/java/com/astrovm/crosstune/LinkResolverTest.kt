@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -176,6 +177,19 @@ class LinkResolverTest {
             {"playlistPanelVideoRenderer":{"videoId":"$id","title":{"runs":[{"text":"$title"}]},"longBylineText":{"runs":[{"text":"$byline"}]},
             "lengthText":{"runs":[{"text":"$length"}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/small.jpg"},{"url":"https://i.ytimg.com/big.jpg"}]},
             "navigationEndpoint":{"watchEndpoint":{"watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}}}]}}}"""
+
+    @Test
+    fun theExactVideoLengthDoesNotComeFromAnotherVideoOrABlankClock() = runBlocking {
+        val id = "dQw4w9WgXcQ"
+        var next = nextFor("unknown", "Another video", "Someone", "12:34", "OMV")
+        fake.handler = { request -> FakeSpotify.html(request, next) }
+        assertNull(resolver.youTubeVideoLength(id))
+        next = nextFor(id, "Never Gonna Give You Up", "Rick Astley", "0:00", "OMV")
+        assertNull(resolver.youTubeVideoLength(id))
+        next = nextFor(id, "Never Gonna Give You Up", "Rick Astley", "3:34", "OMV")
+        assertEquals(214_000L, resolver.youTubeVideoLength(id))
+        assertEquals(List(3) { YouTubeMusicApi.NEXT_URL }, fake.requestedUrls)
+    }
 
     @Test
     fun aVideoKeptFromBeingEmbeddedIsNamedByYouTubeMusic() {

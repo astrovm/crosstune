@@ -67,6 +67,14 @@ internal class FakePlayback : PlaybackSource {
 
     override fun restricted() = restricted
 
+    private val youTubeLengths = mutableMapOf<String, Long>()
+
+    override fun knownYouTubeLength(id: String): Long? = youTubeLengths[id]
+
+    override fun rememberYouTubeLength(id: String, lengthMs: Long) {
+        youTubeLengths[id] = lengthMs
+    }
+
     /** Each song followed, once per time it's asked. */
     val followed: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 

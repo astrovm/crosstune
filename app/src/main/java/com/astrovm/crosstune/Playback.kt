@@ -240,6 +240,12 @@ internal interface PlaybackSource {
      */
     fun follow(song: MusicMetadata, app: String? = null, session: Int? = null): Flow<Following?>
 
+    /** The length known for this exact YouTube video, not for its title. */
+    fun knownYouTubeLength(id: String): Long?
+
+    /** Keeps a duration from YouTube Music's catalogue so it can also tell ads apart without a requested song. */
+    fun rememberYouTubeLength(id: String, lengthMs: Long)
+
     /** Existing sessions that have [song], including paused sessions. No app is started. */
     fun matching(song: MusicMetadata): List<PlaybackMatch>
 
@@ -456,7 +462,7 @@ internal class MediaSessionPlayback(
         val counts = active.groupingBy { it.packageName }.eachCount()
         active.filter { it.playbackState != null && it.has(song, null) }.map { controller ->
             val number = sessionNumbers.of(controller.sessionToken)
-            PlaybackMatch(following(controller, song.lengthMs)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
+            PlaybackMatch(following(controller, song)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
                 controller.playbackState?.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
         }
     }.getOrDefault(emptyList())
@@ -479,6 +485,10 @@ internal class MediaSessionPlayback(
 
     override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = followSession(song, app, null, session)
 
+    override fun knownYouTubeLength(id: String): Long? = lengths.video(id)
+
+    override fun rememberYouTubeLength(id: String, lengthMs: Long) = lengths.rememberVideo(id, lengthMs)
+
     private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?, session: Int?): Flow<Following?> = callbackFlow {
         val clockObserver = PracticeClockLog.nextId()
         clockLog.note("follow_begin", now) { put("observer", clockObserver) }
@@ -489,7 +499,7 @@ internal class MediaSessionPlayback(
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
+        fun steadily(controller: MediaController) = following(controller, song)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
@@ -921,7 +931,7 @@ internal class MediaSessionPlayback(
             .sortedWith(nearestFirst)
             // plays() already checked the session's title and artist. YouTube's video-title
             // parser can mistake a bilingual title's first half for an artist.
-            .firstNotNullOfOrNull { playing(it, song.lengthMs)?.metadata?.copy(title = song.title, artist = song.artist) }
+            .firstNotNullOfOrNull { playing(it, song)?.metadata?.copy(title = song.title, artist = song.artist) }
     }
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes(::nowPlaying)
@@ -948,10 +958,18 @@ internal class MediaSessionPlayback(
      * How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. Under
      * an ad, the song's: see [songUnderAd].
      */
-    private fun MediaController.lengthOf(metadata: MediaMetadata, asked: Long? = null): Long? =
-        metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }?.let {
-            songUnderAd(metadata, asked) ?: lengths.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), it)
-        }
+    private fun MediaController.lengthOf(metadata: MediaMetadata, asked: MusicMetadata? = null): Long? {
+        val said = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 } ?: return null
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return lengths.of(title, artist, said)
+        songUnderAd(metadata, asked)?.let { return it }
+        // An observer without the asked song can see its ad first. Never learn a possible ad's length from it.
+        if (said < LONGEST_AD_MS) return lengths.of(title, artist, said, keep = false)
+        val stable = lengths.of(title, artist, said)
+        metadata.youTubeVideoId()?.let { if (lengths.video(it) == null) lengths.rememberVideo(it, stable) }
+        return stable
+    }
 
     /**
      * How long the song is, when it's an ad that plays: free YouTube Music plays its ads under the next
@@ -959,12 +977,26 @@ internal class MediaSessionPlayback(
      * from 0. So shorter than the longest ad, said by YouTube Music for a song known to be longer, as [asked]
      * or as said before, it's an ad. A short song of no longer length known is the song.
      */
-    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: Long?): Long? {
+    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: MusicMetadata?): Long? {
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
         if (metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) !in 1 until LONGEST_AD_MS) return null
+        val playingId = metadata.youTubeVideoId()
+        val askedId = asked?.let(RecordingKey::youTubeId)
+        val sameVideo = playingId == null || askedId == null || playingId == askedId
+        val askedLength = asked?.lengthMs?.takeIf { it > 0 && sameVideo }
+        val videoLength = (playingId ?: askedId)?.let(lengths::video)
+        // A short length for the requested video is evidence too. Don't replace it with the length of a different edit.
+        val exactLength = askedLength.takeIf { askedId != null } ?: videoLength
+        (exactLength ?: askedLength)?.let { return it.takeIf { it >= LONGEST_AD_MS } }
+        if (playingId != null) return null
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
-        // The one said last, of the song's versions, when not asked for one.
-        return (listOfNotNull(asked) + known.asReversed()).firstOrNull { it >= LONGEST_AD_MS }
+        return known.lastOrNull { it >= LONGEST_AD_MS }
+    }
+
+    private fun MediaMetadata.youTubeVideoId(): String? {
+        val id = getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+        return RecordingKey.youTubeIdIn(getString(MediaMetadata.METADATA_KEY_MEDIA_URI)) ?: RecordingKey.youTubeIdIn(id)
+            ?: id?.takeIf(MusicLinks::isYouTubeVideoId)
     }
 
     /** What plays, as the app names it. */
@@ -1039,7 +1071,7 @@ internal class MediaSessionPlayback(
     }.distinctUntilChanged()
 
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
-    private fun playing(controller: MediaController, asked: Long? = null, forRecognition: Boolean = false): Heard.Song? {
+    private fun playing(controller: MediaController, asked: MusicMetadata? = null, forRecognition: Boolean = false): Heard.Song? {
         if (controller.packageName == RadioGarden.PACKAGE) return null
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
@@ -1069,7 +1101,7 @@ internal class MediaSessionPlayback(
      * once took it; null when it says nothing a song could be read from, e.g. no title, or a video that doesn't
      * say it's music. What plays is ranked by it, see [playsFirst].
      */
-    private fun said(controller: MediaController, asked: Long? = null, snapshot: MediaMetadata? = controller.metadata): MusicMetadata? {
+    private fun said(controller: MediaController, asked: MusicMetadata? = null, snapshot: MediaMetadata? = controller.metadata): MusicMetadata? {
         val metadata = snapshot ?: return null
         val (said, by) = controller.names(metadata)
         val named = controller.songName(said, by) ?: return null
@@ -1108,7 +1140,7 @@ internal class MediaSessionPlayback(
                 MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(metadata::getString))
         }
 
-    private fun following(controller: MediaController, asked: Long?): Following? {
+    private fun following(controller: MediaController, asked: MusicMetadata?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
@@ -1205,7 +1237,7 @@ internal class MediaSessionPlayback(
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
-        val length = lengthOf(playing, song.lengthMs)
+        val length = lengthOf(playing, song)
         val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
         if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
         // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
@@ -1215,10 +1247,9 @@ internal class MediaSessionPlayback(
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         if (packageName == RadioGarden.PACKAGE) return false
         val playing = metadata ?: return false
-        if (anotherRecording(playing, song)) return false
         val (title, artist) = names(playing)
-        if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
-        return SongNames.names(title, artist, song)
+        val named = if (MetadataParsers.noArtist(artist)) playsWithNoArtist(title, artist, song) else SongNames.names(title, artist, song)
+        return named && !anotherRecording(playing, song)
     }
 
     /** A station or untagged file has no artist to support a partial title match. */
