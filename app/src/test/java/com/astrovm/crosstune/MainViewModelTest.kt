@@ -5336,6 +5336,24 @@ class MainViewModelTest {
     }
 
     @Test
+    fun onlyTheRequestedAppsAdCanMarkAForegroundPlay() {
+        val (model, phone, requested) = anExactPlay(canAsk = false)
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music Morphe"))
+        val ad = Heard.Song(requested, null, app = morpheMusic, ad = true, sessionDurationMs = 33_204)
+        phone.onThePhone = ad
+        idle()
+        assertFalse(checkNotNull(model.uiState.player).startedWithAd)
+        assertTrue(model.uiState.playingResult)
+
+        shadowOf(app.packageManager).removePackage(ytMusic)
+        phone.onThePhone = ad.copy(sessionDurationMs = 33_205)
+        until("the remaining app's ad is confirmed even without a matching follower") { model.uiState.player?.startedWithAd == true }
+        assertTrue(model.uiState.playingResult)
+        assertNull(model.uiState.player?.following)
+        assertEquals(0, phone.cameBack)
+    }
+
+    @Test
     fun aConfirmedAdInTheBackgroundStartsWithTheSongAndLeavesItsEvidenceWhenTheSongArrives() {
         val (model, phone, requested) = anExactPlay(cachedLength = 253_000)
         val id = checkNotNull(RecordingKey.youTubeId(requested))

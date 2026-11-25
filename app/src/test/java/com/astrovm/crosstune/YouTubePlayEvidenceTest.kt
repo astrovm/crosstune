@@ -20,6 +20,8 @@ class YouTubePlayEvidenceTest {
         assertNull(evidence.adDuration(music, id, 33_204))
         evidence.remember(mine, 253_000)
         assertEquals(253_000L, evidence.adDuration(music, id, 60_046))
+        assertEquals(253_000L, evidence.adDuration(music, id, MIN_SHORT_AD_MS))
+        assertNull(evidence.adDuration(music, id, MIN_SHORT_AD_MS - 1))
         assertEquals(253_000L, evidence.adDuration(music, id, MEASURED_SHORT_AD_MS))
         assertNull(evidence.adDuration(music, id, MEASURED_SHORT_AD_MS + 1))
         assertNull(evidence.adDuration(music, id, 0))
@@ -37,6 +39,9 @@ class YouTubePlayEvidenceTest {
         val request = evidence.start(music, id, 81_000)
         assertNull(evidence.adDuration(music, id, 30_000))
         evidence.clear(request)
+        val longestBeforeAdInference = evidence.start(music, id, AD_DURATION_HINT_MS)
+        assertEquals(AD_DURATION_HINT_MS, evidence.adDuration(music, id, 30_000))
+        evidence.clear(longestBeforeAdInference)
     }
 
     @Test

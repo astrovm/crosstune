@@ -367,7 +367,9 @@ class PlaybackTest {
         // A missing salt would let someone with a candidate song name calculate its logged key.
         val item = listOf(fixture.title, fixture.artist, null, null, null, 56_789L)
         val noProcessSalt = UUID.nameUUIDFromBytes("null\u0000$item".toByteArray()).toString()
-        assertNotEquals(noProcessSalt, row.getString("item_hash"))
+        val hashed = row.getString("item_hash")
+        assertEquals(hashed, UUID.fromString(hashed).toString())
+        assertNotEquals(noProcessSalt, hashed)
     }
 
     @Test
@@ -697,6 +699,19 @@ class PlaybackTest {
         assertEquals(73_000L, reading.clock.positionMs)
         assertEquals(180_000L, reading.durationMs)
         playback.youTubePlayEvidence.clear(request)
+    }
+
+    @Test
+    fun exactVideoLengthsAreKeptForTheSameRecordingOnly() {
+        val id = "abcdefghijk"
+        val otherEdit = "lmnopqrstuv"
+        assertNull(playback.knownYouTubeLength(id))
+        playback.rememberYouTubeLength(id, 253_000)
+        playback.rememberYouTubeLength(otherEdit, 81_000)
+        val nextPlay = MediaSessionPlayback(app, now = { NOW }, modes = modes)
+        assertEquals(253_000L, nextPlay.knownYouTubeLength(id))
+        assertEquals(81_000L, nextPlay.knownYouTubeLength(otherEdit))
+        assertNull(nextPlay.knownYouTubeLength("zzzzzzzzzzz"))
     }
 
     @Test

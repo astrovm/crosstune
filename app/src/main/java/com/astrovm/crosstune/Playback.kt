@@ -1035,7 +1035,7 @@ internal class MediaSessionPlayback(
     }
 
     /** Adjust the display duration only after classifying the item's raw report. */
-    private fun MediaController.lengthOf(metadata: MediaMetadata, ad: Long? = null): Long? =
+    private fun MediaController.lengthOf(metadata: MediaMetadata, ad: Long?): Long? =
         metadata.reportedDurationMs()?.let { raw ->
             ad ?: lengths.of(
                 metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(),

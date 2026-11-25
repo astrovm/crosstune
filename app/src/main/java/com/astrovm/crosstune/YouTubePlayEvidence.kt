@@ -25,10 +25,11 @@ internal class YouTubePlayEvidence {
 
     fun adDuration(app: String, reportedVideo: String?, rawDuration: Long): Long? {
         val exact = active.value ?: return null
-        if (app != exact.request.app || reportedVideo != exact.request.videoId || rawDuration !in 1..MEASURED_SHORT_AD_MS) return null
+        if (app != exact.request.app || reportedVideo != exact.request.videoId || rawDuration !in MIN_SHORT_AD_MS..MEASURED_SHORT_AD_MS) return null
         return exact.durationMs?.takeIf { it >= AD_DURATION_HINT_MS }
     }
 }
 
-/** Conservative cutoff for new evidence. Samsung raw ad reports reached 60,046 ms, not 180 s. */
+/** Leave subsecond metadata and long edits alone. Samsung short reports include 10,133 to 60,046 ms. */
+internal const val MIN_SHORT_AD_MS = 5_000L
 internal const val MEASURED_SHORT_AD_MS = 65_000L

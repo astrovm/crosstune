@@ -2309,9 +2309,16 @@ internal class MainViewModel(
     /** Start as main does, except that a known ad is not the requested song. */
     private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
+        var sawAd = uiState.player?.startedWithAd == true
         val seen = withTimeoutOrNull(withinMs) {
             combine(source.follow(song).forClockLog("play_start"), source.nowPlayingUpdates()) { following, playing ->
-                readStart(following, playing, app, over, link, mustPlay)
+                if (hasAdInApp(following, playing, app)) {
+                    sawAd = true
+                    markStartUnderAd(link)
+                }
+                // Keep the startup's evidence even if the player consumes the skip first.
+                if (sawAd && playing != null && knownSkip(playing, app, link)) Seen(null, playing)
+                else readStart(following, playing, app, over, link, mustPlay)
             }.filterNotNull().first()
         } ?: return null
         // Remember a song's alternate name, never an ad's.
@@ -2320,27 +2327,26 @@ internal class MainViewModel(
         return seen
     }
 
+    private fun hasAdInApp(following: Following?, playing: Heard.Song?, app: String?): Boolean {
+        if (following?.ad == true && sameApp(app, following.appPackage, interception::isInstalled)) return true
+        return playing?.ad == true && sameApp(app, playing.app, interception::isInstalled)
+    }
+
     private fun readStart(
         following: Following?, playing: Heard.Song?, app: String?, over: MusicMetadata?, link: String, mustPlay: Boolean
     ): Seen? {
         val appFollows = following?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
-        if (appFollows?.ad == true || playing?.ad == true && sameApp(app, playing.app, interception::isInstalled)) markStartUnderAd(link)
-        // A skip during an ad can keep the old follower parked until its next callback.
-        val afterAd = appFollows?.ad == true || uiState.player?.startedWithAd == true
-        if (afterAd && playing != null && knownSkip(playing, app, link)) {
-            return Seen(null, playing)
-        }
         if (appFollows != null && (!mustPlay || appFollows.clock.playing)) return Seen(appFollows, playing)
         if (following == null && playing != null && startedAsked(playing, app, over, link)) return Seen(null, playing)
         return null
     }
 
-    private val adStartChanges = MutableStateFlow(0)
+    private val adStartChanges = MutableStateFlow(Any())
 
     private fun markStartUnderAd(link: String) {
         val player = uiState.player?.takeIf { it.link == link && !it.played && !it.startedWithAd } ?: return
         uiState = uiState.copy(player = player.copy(startedWithAd = true))
-        adStartChanges.value++
+        adStartChanges.value = Any()
     }
 
     /**
