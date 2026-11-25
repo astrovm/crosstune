@@ -2803,6 +2803,20 @@ class ExactMatcherTest {
         val first = "https://music.youtube.com/watch?v=video000000"
         assertEquals(first, findsCreditedVideo("Love", listOf("愛"), "Band - 愛, Video - Love", "Band - Love"))
         assertEquals(first, findsCreditedVideo("Love", listOf("愛"), "Video - 愛, Official - Love", "Band - Love"))
+        assertEquals(first, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), "Band - 愛, Video - Love, Band - Sunset", "Band - Love"))
+        assertEquals(first, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), "Band - 愛, Band - , Band - Love, Band - Sunset", "Band - Love"))
+    }
+
+    @Test
+    fun unbalancedBracketsKeepMainVideoSelection() {
+        val title = "Band - 愛, Band - Love, Band - Sunset (Official Video"
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), title, "Band - Love"))
+    }
+
+    @Test
+    fun bracketedSeparatorsDoNotHideAnUnprovedCredit() {
+        val title = "Band - 愛 (Official Video / Other - Sunset), Band - Love, Band - Sunset"
+        assertEquals("https://music.youtube.com/watch?v=video000001", findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), title, "Band - Love"))
     }
 
     @Test
