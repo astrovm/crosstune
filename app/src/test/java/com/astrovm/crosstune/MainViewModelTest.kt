@@ -5105,6 +5105,31 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theExactFollowerCountsTheTvAppOnlyWhenTheMusicAppIsAbsent() {
+        val tv = MusicService.YOUTUBE_TV
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback, packageName = tv)
+        assertFalse(app.hasApp(ytMusic))
+        model.playResult()
+        until("opened through YouTube Music") { playback.opened == listOf(ytMusic to ytLink) }
+        appPlays(playback, packageName = tv)
+        until("came back once the TV app played the requested song") { !model.uiState.playingResult && playback.cameBack == 1 }
+        assertEquals(ytLink, model.uiState.player?.song?.url)
+        assertEquals(tv, model.uiState.player?.following?.appPackage)
+
+        model.closePlayer()
+        playback.playing.value = null
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        model.playResult()
+        until("opened through YouTube Music again") { playback.opened.size == 2 }
+        appPlays(playback, packageName = tv)
+        pass(MainViewModel.LOAD_SONG_MS + 1)
+        assertFalse(model.uiState.playingResult)
+        assertEquals(1, playback.cameBack)
+        assertNull(model.uiState.player)
+    }
+
+    @Test
     fun aListWhoseAppPlaysNothingIsNotPlayedOn() {
         val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val file = File(app.noBackupFilesDir, "play_queue_nothing.json")
@@ -5365,6 +5390,24 @@ class MainViewModelTest {
         pass(1)
         assertFalse(model.uiState.playingResult)
         assertEquals(updated, model.uiState.player?.song)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun thePlayerTakesTheAppsTitleWithoutWaitingWhenNoDurationIsReported() =
+        theGeneralTitleStartsWithoutAnAdCheckWait(reportedLength = null)
+
+    @Test
+    fun thePlayerTakesTheAppsTitleWithoutWaitingWhenTheDurationFits() =
+        theGeneralTitleStartsWithoutAnAdCheckWait(reportedLength = 252_261)
+
+    private fun theGeneralTitleStartsWithoutAnAdCheckWait(reportedLength: Long?) {
+        val (model, phone, requested) = aPlayRequestWithNoCatalogueLength(253_000)
+        val namedByApp = requested.copy(title = "抱かれに来た女", url = null, lengthMs = null)
+        phone.onThePhone = Heard.Song(namedByApp, null, app = ytMusic, sessionDurationMs = reportedLength)
+        idle()
+        assertFalse(model.uiState.playingResult)
+        assertEquals(namedByApp, model.uiState.player?.song)
         assertTrue(phone.opened.isEmpty())
     }
 

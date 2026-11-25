@@ -68,7 +68,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.PlaybackInfoBuilder
+import org.robolectric.shadows.ShadowMediaController
 import org.robolectric.shadows.ShadowMediaSessionManager
 import org.robolectric.shadows.ShadowSettings
 
@@ -834,6 +836,51 @@ class PlaybackTest {
         // And a song as long as the longest ad is longer than any.
         said(17_066)
         assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = LONGEST_AD_MS))?.lengthMs)
+    }
+
+    @Test
+    @Config(shadows = [OneMetadataRead::class])
+    fun aReportExactlyAtTheAdCutoffDoesNotClearTheAdBeforeTheSessionChanges() {
+        allow()
+        sounding()
+        val id = "other000000"
+        val video = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist,
+            album = null, duration = LONGEST_AD_MS - 1, position = 1_000)
+        shadowOf(sessions).addController(video)
+        playback.rememberYouTubeLength(id, 253_000)
+        val asked = song.copy(url = "https://music.youtube.com/watch?v=$id", lengthMs = 253_000)
+        val before = video.metadata
+        assertTrue(checkNotNull(followed(asked).last()).ad)
+        assertEquals(true, playback.nowPlaying()?.ad)
+
+        val atCutoff = MediaMetadata.Builder(before).putLong(MediaMetadata.METADATA_KEY_DURATION, LONGEST_AD_MS).build()
+        // Android can change metadata between two reads. A report outside the ad range must not
+        // enter the ad lookup and clear proof for the short report that the session still has.
+        val android = Shadow.extract<OneMetadataRead>(video)
+        android.next = atCutoff
+        modes.watching.single()()
+        assertNull(android.next)
+        assertEquals(true, playback.nowPlaying()?.ad)
+
+        shadowOf(video).setMetadata(atCutoff)
+        val following = checkNotNull(followed(asked).last())
+        assertFalse(following.ad)
+        assertEquals(PlaybackClock(1_000, PLAYED_AT), following.clock)
+        assertEquals(LONGEST_AD_MS, following.durationMs)
+        assertEquals(253_000L, playback.knownYouTubeLength(id))
+
+        // Seeing the previous short report again without the exact request can't revive the old confirmation.
+        shadowOf(video).setMetadata(before)
+        val playing = checkNotNull(playback.nowPlaying())
+        assertFalse(playing.ad)
+    }
+
+    @Implements(MediaController::class)
+    class OneMetadataRead : ShadowMediaController() {
+        var next: MediaMetadata? = null
+
+        @Implementation
+        override fun getMetadata(): MediaMetadata? = next?.also { next = null } ?: super.getMetadata()
     }
 
     @Test
