@@ -2596,6 +2596,47 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun bayCityDoesNotBorrowTheDiscoBonusTracksLength() = runBlocking {
+        val title = "tasogare no bay city"
+        val artist = "JUNKO YAGAMI"
+        val album = MusicMetadata(title, artist, lengthMs = 281_200)
+        val single = youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s")
+        val disco = youTubeMusicRow("黄昏のBay City (DISCOバージョン) (ボーナストラック)", "八神純子 • FULL MOON • 7:27", videoId = "Wey2yM_dNfc")
+        val other = youTubeMusicRow("夜空のイヤリング", "八神純子 • LONELY GIRL • 3:59", videoId = "begH0F3uE5Q")
+        val mixVideo = youTubeMusicRow("黄昏のBAY CITY(プロモーション用DISCOバージョン) Junko Yagami [HQ]", "BentOn • 663 views • 7:27", videoId = "hyrYByy-wGs")
+        val albumVideo = youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g")
+        val appleAlbum = appleSong(title, artist, 281_200, id = 74904069, album = "full moon")
+        val appleDisco = appleSong(title, artist, 446_973, id = 74904445, album = "full moon")
+        val appleSingle = appleSong("Tasogare No Bay City", artist, 250_373, id = 260770646, album = "Tasogare No Bay City (Original Cover Art) - Single")
+        val japanese = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069, album = "Full Moon"))
+
+        namesAndTabs(
+            songs = listOf(single, disco),
+            videos = listOf(mixVideo),
+            apple = mapOf("US" to "$appleAlbum,$appleDisco"),
+            elsewhere = japanese
+        )
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
+        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(lengthMs = null)))
+        assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(lengthMs = 446_973)))
+        val explicitlyNamed = MusicMetadata("黄昏のBay City (DISCOバージョン)", "八神純子")
+        assertEquals("https://music.youtube.com/watch?v=Wey2yM_dNfc", matcher("US").find(MusicService.YOUTUBE_MUSIC, explicitlyNamed))
+
+        namesAndTabs(songs = listOf(single, disco), videos = listOf(albumVideo), apple = mapOf("US" to "$appleAlbum,$appleSingle,$appleDisco"), elsewhere = japanese)
+        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", matcher("US").find(MusicService.YOUTUBE_MUSIC, album))
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", matcher("US").find(MusicService.YOUTUBE_MUSIC, album.copy(lengthMs = 250_373)))
+
+        // If Apple is down, neither edition can be put back by the picker.
+        namesAndTabs(songs = listOf(single, disco, other), videos = listOf(mixVideo), failing = setOf("US"))
+        val picker = ExactMatcher(fake.client(), "US", pick = { _, rows, videos ->
+            assertFalse(videos)
+            assertEquals(listOf("", ""), rows.take(2))
+            0
+        })
+        assertNull(picker.find(MusicService.YOUTUBE_MUSIC, album))
+    }
+
+    @Test
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {

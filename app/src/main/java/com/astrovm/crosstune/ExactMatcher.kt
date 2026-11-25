@@ -50,8 +50,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 11 gives a missing store one retry before playing a fan upload and checks the upload again later.
  * Version 12 can confirm an untranslated search result by its own song ID in another YouTube Music language.
  * Version 13 matches two whole names in a bilingual store title when the artist's video repeats its credit.
+ * Version 14 keeps the link's recording when YouTube Music also lists a separate disco mix.
  */
-internal const val MATCH_VERSION = 13
+internal const val MATCH_VERSION = 14
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -212,7 +213,7 @@ internal class ExactMatcher(
         val localizedUrl: (suspend () -> String?)? = null
     )
 
-    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Row?>, val videos: List<Row?>, val watchUrl: String, val lengthsMs: List<Long>)
 
     /**
      * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
@@ -849,7 +850,11 @@ internal class ExactMatcher(
         val body = YouTubeMusicApi.body().put("query", searchQuery(metadata)).put("params", params)
         val items = fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
         val recording = requestedRecording(metadata.title.takeIf { isSong }.orEmpty())
+        val songRows = if (isSong) items.associateWith(::row) else emptyMap()
+        val editions = MixEditions(metadata, songRows.values)
+        val eligible = songRows.values.filter { it.id != null && editions.songFits(it) }.toSet()
         fun found(item: JSONObject, loose: Boolean): String? {
+            if (isSong && songRows[item] !in eligible) return null
             val columns = item.optJSONArray("flexColumns")?.objects()
                 ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
                 ?: return null
@@ -873,7 +878,7 @@ internal class ExactMatcher(
         // An exact match anywhere in the results beats a close one at the top.
         fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }
         firstFound(loose = false)?.let { (url, length) ->
-            val edition = if (isSong) namedLinkedEdition(metadata, items, length) else null
+            val edition = if (isSong) namedLinkedEdition(metadata, eligible, length) else null
             return Answer(edition?.let { watchUrl + it.id } ?: url)
         }
         if (loosely) firstFound(loose = true)?.let { return Answer(it.first) }
@@ -885,8 +890,9 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        val rows = items.map(::row)
-        val videoRows = videos.map(::row)
+        val rows = eligible.toList()
+        val allVideos = videos.map(::row)
+        val videoRows = allVideos.filter(editions::videoFits)
         val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
@@ -897,10 +903,12 @@ internal class ExactMatcher(
             ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
         song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
         matchingVideo(rows, videoRows, names, recording, watchUrl)?.let { return it }
-        val localize = if (names.complete) null else suspend { localizedSong(metadata, items, names, recording)?.let { watchUrl + it } }
+        val localize = if (names.complete) null else suspend {
+            localizedSong(metadata, items.filter { songRows[it] in eligible }, names, recording)?.let { watchUrl + it }
+        }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(
-            null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs),
+            null, ToPick(metadata, offeredRows(songRows.values, eligible::contains), offeredRows(allVideos, videoRows::contains), watchUrl, names.lengthsMs),
             final = names.complete, lasting = names.everyStore, localizedUrl = localize
         )
     }
@@ -1026,15 +1034,16 @@ internal class ExactMatcher(
         return SongNames.withoutFeaturing(base).trimEnd() + title.substring(base.length)
     }
 
-    /** The songs or videos among [items] that play. */
-    private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
+    /** Keep the original picker row numbers, including slots whose recording does not fit. */
+    private fun offeredRows(rows: Collection<Row>, fits: (Row) -> Boolean): List<Row?> =
+        rows.filter { it.id != null }.take(PICK_FROM).map { it.takeIf(fits) }
 
     /** The link's length can tell which recording it plays when a plain title left its recording off. */
-    private fun namedLinkedEdition(metadata: MusicMetadata, items: List<JSONObject>, firstLength: Long?): Row? {
+    private fun namedLinkedEdition(metadata: MusicMetadata, rows: Collection<Row>, firstLength: Long?): Row? {
         val link = metadata.lengthMs ?: return null
         if (firstLength == null || kotlin.math.abs(firstLength - link) <= SAME_LENGTH_MS || !plainLinkedTitle(metadata)) return null
         val recording = requestedRecording(metadata.title)
-        return playable(items).singleOrNull {
+        return rows.singleOrNull {
             keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) && sameRecordingLength(it.lengthMs, link) &&
                 sameArtist(metadata, it.details.first()) && SongNames.same(metadata.title, SongNames.bareTitle(it.name)) &&
                 takeSaysLive(it.name) == true && liveAlbum(it.details.getOrNull(1).orEmpty())
@@ -1062,6 +1071,39 @@ internal class ExactMatcher(
 
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
         time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
+
+    /**
+     * A store can give the same name to the song and its disco mix. The mix needs proof from the
+     * link itself. When YouTube also names the mix, other rows of that song must fit the link too.
+     */
+    private inner class MixEditions(metadata: MusicMetadata, songs: Collection<Row>) {
+        private val length = metadata.lengthMs?.takeIf { it > 0 }
+        private val askedForMix = Takes.saysDiscoMix(metadata.title)
+        private val mixes = songs.filter { it.id != null && Takes.saysDiscoMix(it.name) }
+
+        fun songFits(row: Row): Boolean {
+            if (row in mixes) return mixFits(row)
+            if (askedForMix) return false
+            val wanted = length ?: return true
+            return mixes.none { sameSong(row, it) } || closeTo(row, wanted)
+        }
+
+        fun videoFits(row: Row): Boolean {
+            if (Takes.saysDiscoMix(row.name)) return mixFits(row)
+            if (askedForMix) return false
+            val wanted = length ?: return true
+            return mixes.none { titleIn(SongNames.bareTitle(it.name), row.name) } || closeTo(row, wanted)
+        }
+
+        private fun sameSong(row: Row, mix: Row): Boolean =
+            SongNames.same(mix.details.first(), row.details.first()) && SongNames.same(SongNames.bareTitle(mix.name), SongNames.bareTitle(row.name))
+
+        private fun mixFits(row: Row): Boolean =
+            length?.let { sameRecordingLength(row.lengthMs, it) } ?: askedForMix
+
+        private fun closeTo(row: Row, wanted: Long): Boolean =
+            row.lengthMs?.let { kotlin.math.abs(it - wanted) <= SAME_LENGTH_MS } == true
+    }
 
     private class RequestedRecording(val live: Boolean, val part: NumberedPart?, val title: String)
 
@@ -1233,11 +1275,11 @@ internal class ExactMatcher(
      * are anyone's, and may say anything, so one far from all of the song's [lengthsMs] isn't taken: a few
      * seconds for a song, more for a video, which may open with more.
      */
-    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
+    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row?>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
         val recording = requestedRecording(metadata.title)
         val part = recording.part
         // Keep the row numbers while omitting any names that local evidence already rules out.
-        val offered = rows.map { it.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
+        val offered = rows.map { it?.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
             (part == null || namesThePickedPart(part, row, videos)) } }
         if (offered.none { it != null }) return null
         val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
@@ -1538,6 +1580,7 @@ internal class ExactMatcher(
         if (row.name.none { it.isLetter() && it.code > 0x7f }) return false
         val anotherScript = namedInAnotherScript(row.name)
         if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
+        if (Takes.saysDiscoMix(row.name) && names.titles.none { SongNames.same(SongNames.bareTitle(it), SongNames.bareTitle(row.name)) }) return false
         if (isAnotherTake(row, names)) return false
         return knownArtist(row.details.first(), names)
     }

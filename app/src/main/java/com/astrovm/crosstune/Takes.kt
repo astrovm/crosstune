@@ -27,6 +27,12 @@ internal object Takes {
      */
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
 
+    /** A disco mix is a separate recording, not a description of its genre. */
+    fun saysDiscoMix(title: String): Boolean =
+        title.contains("disco", ignoreCase = true) && tagsOf(title).any { SongNames.normalize(it) in DISCO_TAGS }
+
+    private val DISCO_TAGS = listOf("discoバージョン", "プロモーション用discoバージョン", "disco version", "disco mix").map(SongNames::normalize).toSet()
+
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
         val tags = mutableListOf<String>()

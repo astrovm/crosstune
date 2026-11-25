@@ -9,6 +9,18 @@ import org.junit.Test
 class TakesTest {
 
     @Test
+    fun aDiscoMixIsARecordingNoteNotTheSongNameOrGenre() {
+        assertTrue(Takes.saysDiscoMix("黄昏のBay City (DISCOバージョン) (ボーナストラック)"))
+        assertTrue(Takes.saysDiscoMix("黄昏のBAY CITY(プロモーション用DISCOバージョン) Junko Yagami [HQ]"))
+        assertTrue(Takes.saysDiscoMix("Song - Disco Mix"))
+        assertTrue(Takes.saysDiscoMix("Song [Disco Version]"))
+        assertFalse(Takes.saysDiscoMix("Disco Version"))
+        assertFalse(Takes.saysDiscoMix("Song (disco)"))
+        assertFalse(Takes.saysDiscoMix("Song (non-disco version)"))
+        assertFalse(Takes.saysDiscoMix("Song (Radio Edit)"))
+    }
+
+    @Test
     fun aTagThatStartsAsAnotherTakeSaysSo() {
         val live = listOf(
             "偽の歌 (ライブ)", "偽の歌 (ライヴ)", "偽の歌 (2019 ライブ)", "偽の歌 (Live from Budokan)", "偽の歌 - Live", "偽の歌 [Live]",
