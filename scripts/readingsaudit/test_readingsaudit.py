@@ -106,6 +106,8 @@ class OldKana(unittest.TestCase):
                  [("ありきたり", [], False, ["*"])], [(["adj-na"], ["uk"])]),
             word([("静か", [], True)], [("しずか", [], True, ["*"])], [(["adj-na"], [])]),
             word([("例", [], True)], [("れい", [], True, ["*"])], [(["n"], ["uk"])]),
+            word([("別", [], False)], [("", [], False, ["*"]), ("abc", [], False, ["*"])], [(["adj-na"], ["uk"])]),
+            word([("別", [], False)], [("べつ", ["rk"], False, ["*"]), ("ほか", [], False, ["違う"])], [(["adj-na"], ["uk"])]),
         ]
         self.assertEqual({"ありきたり": ["在り来たり", "在り来り"]}, readingsaudit.kana_adjectives(words))
 
