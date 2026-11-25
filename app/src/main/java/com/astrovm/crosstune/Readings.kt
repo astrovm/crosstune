@@ -111,7 +111,7 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      */
-    const val VERSION = 18
+    const val VERSION = 19
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1022,6 +1022,13 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                // Both dictionaries take ひとなでして for ひと + な + でし + て, but it is 一撫で + して.
+                piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
+                    next?.surface == "て" -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
+                    out += Piece("し", "し", "動詞", "自立", reader = Reader.RULES)
+                }
                 inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)

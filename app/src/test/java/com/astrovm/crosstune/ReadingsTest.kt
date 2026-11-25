@@ -89,6 +89,7 @@ class ReadingsTest {
 
     @Test
     fun ambiguousDeshiteKeepsTheExistingBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("ひとなでして", "hitonade shite", listOf("ひとなで", "して")),
         Triple("仕事はあとでして", "shigoto wa atodeshite", listOf("仕事", "は", "あとでして")),
         Triple("作業は二人でして", "sagyoo wa futarideshite", listOf("作業", "は", "二人でして")),
         Triple("ここは学校でして", "koko wa gakkoodeshite", listOf("ここ", "は", "学校でして")),
@@ -184,7 +185,7 @@ class ReadingsTest {
             "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
             "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
             "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
-            "ひとなでして" to "hitonadeshite"
+            "ひとなでして" to "hitonade shite"
         )
         fun readings() = Readings.of(cases.keys.toList(), Script.JAPANESE).map { it.romanized }
         val expected = cases.values.toList()
