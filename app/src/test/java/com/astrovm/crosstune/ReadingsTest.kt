@@ -18,6 +18,21 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun futariAfterANounIsNotAnOldKanaVerb() = assertJapaneseBoundaries(listOf(
+        Triple("おとなふたりとこどもひとり", "otona futari to kodomo hitori", listOf("おとな", "ふたり", "と", "こども", "ひとり")),
+        Triple("私たちふたり", "watashitachi futari", listOf("私たち", "ふたり")),
+        Triple("ふたりで", "futari de", listOf("ふたり", "で")),
+        Triple("ふたりきり", "futari kiri", listOf("ふたり", "きり")),
+    ))
+
+    @Test
+    fun tariAfterTeOrDeStaysWithTheVerb() = assertJapaneseBoundaries(listOf(
+        Triple("読んでたりする", "yondetari suru", listOf("読んでたり", "する")),
+        Triple("食べてたりする", "tabetetari suru", listOf("食べてたり", "する")),
+        Triple("車で食べたりする", "kuruma de tabetari suru", listOf("車", "で", "食べたり", "する")),
+    ))
+
+    @Test
     fun tariFormsStayWithTheirVerbOrAdjective() = assertJapaneseBoundaries(listOf(
         Triple("食べたり", "tabetari", listOf("食べたり")),
         Triple("行ったり", "ittari", listOf("行ったり")),
