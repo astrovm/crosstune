@@ -191,7 +191,29 @@ internal object Readings {
         val other = uniDic
         val mixed = other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
         val read = saidAsWritten(modernPieces(splitLeadingLongMarks(line, text, mixed)))
-        return nanDa(if (other == null) wholeOldKanaWord(line, read) ?: read else read)
+        return nanDa(asciiClauseNan(if (other == null) wholeOldKanaWord(line, read) ?: read else read))
+    }
+
+    /** ASCII clause marks can make the dictionaries read なんだ as な / ん / だ. */
+    private fun asciiClauseNan(pieces: List<Piece>): List<Piece> = buildList {
+        var at = 0
+        while (at < pieces.size) {
+            val piece = pieces[at]
+            if (asciiClauseNanAt(pieces, at)) {
+                add(Piece("なん", "なん", "名詞", "代名詞", reader = Reader.RULES))
+                at += 2
+            } else {
+                add(piece)
+                at++
+            }
+        }
+    }
+
+    private fun asciiClauseNanAt(pieces: List<Piece>, at: Int): Boolean {
+        val before = pieces.getOrNull(at - 1)?.surface ?: return false
+        val copula = pieces.getOrNull(at + 2)
+        return before.isNotEmpty() && before.all { it in ",!?" } && pieces[at].surface == "な" &&
+            pieces.getOrNull(at + 1)?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula
     }
 
     /** IPADIC can call 何だ an interjection after a topic; both dictionaries split an opening なんだ. */
@@ -262,7 +284,8 @@ internal object Readings {
     }
 
     private fun List<Piece>.nanDaBeforeSpace(at: Int): Boolean {
-        if (getOrNull(at - 1)?.surface?.isBlank() != true) return false
+        val space = getOrNull(at - 1)?.surface ?: return false
+        if (space.isEmpty() || space.any { it != ' ' && it != '　' }) return false
         return nanDaAt(at - 2) || getOrNull(at - 3)?.surface == "なん" && nanDaAt(at - 3)
     }
 

@@ -181,6 +181,19 @@ class ReadingsTest {
     ))
 
     @Test
+    fun repeatedNanDaStopsAtSentenceBreaksAndKeepsAsciiCommas() = assertJapaneseBoundaries(listOf(
+        Triple("何だ\nなんだよ", "nanda nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ\r\nなんだよ", "nanda nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("なんだ,なんだ", "nanda, nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ,なんだよ", "nanda, nan da yo", listOf("なんだ", "なん", "だ", "よ")),
+        Triple("何だ!なんだよ", "nanda! nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("なんだ?なんだよ", "nan da? nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+        Triple("何だ。なんだよ", "nanda。 nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ！なんだよ", "nanda！ nan da yo", listOf("何だ", "なん", "だ", "よ")),
+        Triple("何だ？なんだよ", "nan da？ nan da yo", listOf("何", "だ", "なん", "だ", "よ")),
+    ))
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
