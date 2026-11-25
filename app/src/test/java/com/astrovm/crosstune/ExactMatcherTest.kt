@@ -2776,10 +2776,6 @@ class ExactMatcherTest {
         assertEquals(second, findsCreditedVideo("Love", listOf("愛"), tagAsTitle, "Band - Love"))
         val unknownNote = "Band - 愛, Band - Love Sunset"
         assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), unknownNote, "Band - Love"))
-        val falseArtist = "Band - 愛, Video - Love"
-        assertEquals(second, findsCreditedVideo("Love", listOf("愛"), falseArtist, "Band - Love"))
-        val twoFalseArtists = "Video - 愛, Official - Love"
-        assertEquals(second, findsCreditedVideo("Love", listOf("愛"), twoFalseArtists, "Band - Love"))
         val emptyCatalogName = "Band - Love, Band - Video"
         assertEquals(second, findsCreditedVideo("Love", listOf("(Love)"), emptyCatalogName, "Band - Love"))
         val video = "https://music.youtube.com/watch?v=video000000"
@@ -2800,6 +2796,13 @@ class ExactMatcherTest {
             val trailing = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset,"
             assertEquals(trailing, second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), trailing, "Band - Love"))
         }
+    }
+
+    @Test
+    fun unrecognizedArtistCreditsKeepMainVideoSelection() {
+        val first = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(first, findsCreditedVideo("Love", listOf("愛"), "Band - 愛, Video - Love", "Band - Love"))
+        assertEquals(first, findsCreditedVideo("Love", listOf("愛"), "Video - 愛, Official - Love", "Band - Love"))
     }
 
     @Test
@@ -2836,6 +2839,48 @@ class ExactMatcherTest {
             val name = "愛${separator}平和"
             val title = "Band - $name, Band - Love"
             assertEquals(title, url, findsCreditedVideo("Love", listOf(name), title))
+        }
+    }
+
+    @Test
+    fun incompleteCreditDoesNotAbortVideoLookup() {
+        val first = "Band - Love / - Official Video"
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsCreditedVideo("Love", emptyList(), first, "Band - Love"))
+    }
+
+    @Test
+    fun dashesInsideNamesAndNotesKeepMainVideoSelection() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        assertEquals(url, findsCreditedVideo("Love / Hate - Again", emptyList(), "Band - Love / Hate - Again"))
+        assertEquals(url, findsCreditedVideo("Love", emptyList(), "Band - Love (Official Video / Dir. - Jane)", "Band - Love"))
+    }
+
+    @Test
+    fun jointAndGuestArtistsCanCreditVideoNames() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Band & Other - Love, Band - 愛", "Band • 1K views • 4:00", videoId = "video000000"),
+                youTubeMusicRow("Band - Love", "Band • 1K views • 4:00", videoId = "video000001")),
+            apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛", "Other", 240_000))
+        )
+        assertEquals(url, runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000)) })
+        val artist = "Band feat. Guest"
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Band ft. Guest - Love, Band feat. Guest - 愛", "$artist • 1K views • 4:00", videoId = "video000000"),
+                youTubeMusicRow("$artist - Love", "$artist • 1K views • 4:00", videoId = "video000001")),
+            apple = mapOf("US" to appleSong("Love", artist, 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛", artist, 240_000))
+        )
+        assertEquals(url, runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", artist, lengthMs = 240_000)) })
+    }
+
+    @Test
+    fun videoLabelsAreAllowedOnEveryCredit() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (note in listOf("Official Video", "MV", "Lyric Video", "公式", "2024")) {
+            val title = "Band - 愛 $note, Band - Love"
+            assertEquals(title, url, findsCreditedVideo("Love", listOf("愛"), title, "Band - Love"))
         }
     }
 

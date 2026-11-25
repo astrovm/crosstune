@@ -1655,21 +1655,25 @@ internal class ExactMatcher(
     private fun creditedVideoNamesMatch(title: String, names: Names): Boolean {
         val parts = videoCreditParts(title)
         if (parts.size < 2) return true
-        val artists = names.artists.map(SongNames::normalize).toSet()
+        val artists = names.artists.flatMap(SongNames::artists).toSet()
         val credited = parts.map { creditedVideoTitle(it, artists) }
-        if (credited.any { it == null }) return false
+        if (credited.any { it == null }) return true
         val complete = credited.filterNotNull()
         if (videoCreditKnown(complete.joinToString(" "), names.titles, false)) return true
-        if (complete.withIndex().all { (index, credit) -> videoCreditKnown(credit, names.titles, index == complete.lastIndex) }) return true
+        if (complete.all { credit -> videoCreditKnown(credit, names.titles, true) }) return true
         return repeatsBilingualTitle(title, names) || repeatsParenthesizedTitle(title, names)
     }
 
     /** A separator inside a title is not a new credit unless an artist and dash follow it. */
     private fun videoCreditParts(title: String): List<String> {
+        val opens = "([（【「『［"
+        val closes = ")]）】」』］"
+        if (!bracketsInOrder(title, opens, closes)) return listOf(title)
+        val brackets = bracketTags(title, opens, closes)
         val parts = mutableListOf<String>()
         var start = 0
         title.forEachIndexed { index, char ->
-            if (char in VIDEO_CREDIT_SEPARATORS) {
+            if (char in VIDEO_CREDIT_SEPARATORS && brackets.none { index in it }) {
                 val next = title.substring(index + 1).takeWhile { it !in VIDEO_CREDIT_SEPARATORS }
                 val before = title.substring(start, index)
                 if (VIDEO_CREDIT_DASHES.any(before::contains) && VIDEO_CREDIT_DASHES.any(next::contains)) {
@@ -1714,8 +1718,10 @@ internal class ExactMatcher(
         val artist = aliasText(names.requestedArtist)
         val credited = parts.map { part ->
             val pair = part.split(" - ", limit = 2)
-            if (pair.size != 2 || !aliasText(pair[0]).equals(artist, ignoreCase = true)) return false
-            aliasText(pair[1])
+            val credit = pair.getOrNull(0) ?: return false
+            val name = pair.getOrNull(1) ?: return false
+            if (pair.size != 2 || !aliasText(credit).equals(artist, ignoreCase = true)) return false
+            aliasText(name)
         }.toSet()
         val requested = aliasText(names.requestedTitle)
         return names.titles.any { name ->
@@ -1764,12 +1770,12 @@ internal class ExactMatcher(
         val parts = title.split(',', '，', limit = 3)
         if (parts.size != 2) return false
         if (parts.any { part -> VIDEO_CREDIT_DASHES.none(part::contains) }) return false
-        val artists = names.artists.map(SongNames::normalize).toSet()
-        val first = creditedVideoTitle(parts[0], artists) ?: return false
-        val second = creditedVideoTitle(parts[1], artists) ?: return false
+        val artists = names.artists.flatMap(SongNames::artists).toSet()
+        val first = parts.getOrNull(0)?.let { creditedVideoTitle(it, artists) } ?: return false
+        val second = parts.getOrNull(1)?.let { creditedVideoTitle(it, artists) } ?: return false
         val inAnotherScript = listOf(first, second).partition(::namedInAnotherScript)
         val latin = inAnotherScript.second.singleOrNull()?.takeIf(String::hasLatin) ?: return false
-        val other = inAnotherScript.first.single()
+        val other = inAnotherScript.first.singleOrNull() ?: return false
         val titles = setOf(SongNames.normalize(latin), SongNames.normalize(other))
         return names.titles.any { name ->
             val pair = name.split(" - ", limit = 3).map(String::trim)
@@ -1778,10 +1784,13 @@ internal class ExactMatcher(
     }
 
     private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
-        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first != -1 }.minBy { it.first }
+        val dash = VIDEO_CREDIT_DASHES.map { part.indexOf(it) to it }.filter { it.first != -1 }.minByOrNull { it.first } ?: return null
         val credit = part.substring(0, dash.first)
         val title = part.substring(dash.first + dash.second.length)
-        return title.trim().takeIf { SongNames.normalize(credit) in artists }
+        val full = SongNames.normalize(SongNames.withoutArticle(credit))
+        val members = SongNames.artists(credit) - full
+        val known = full in artists || members.isNotEmpty() && members.all { it in artists }
+        return title.trim().takeIf { known && it.isNotEmpty() }
     }
 
     private fun isVideoTitleTag(name: String): Boolean {
