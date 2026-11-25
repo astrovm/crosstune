@@ -153,7 +153,7 @@ private fun KindRow(kind: CardType, line: SavedLine, last: Boolean, onToggle: (B
         Row(
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f).heightIn(min = 48.dp).clip(MaterialTheme.shapes.medium)
-                .toggleable(kind.on, enabled = !(kind.on && last), role = Role.Switch, onValueChange = onToggle)
+                .toggleable(kind.on, interactionSource = null, indication = focusRing(MaterialTheme.shapes.medium), enabled = !(kind.on && last), role = Role.Switch, onValueChange = onToggle)
                 .semantics { contentDescription = title }
         ) {
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { SideMarks(kind.options.front, script, first = true, size = 24.dp) }
@@ -344,7 +344,7 @@ private fun CardLayer(
                     drawRoundRect(line.copy(alpha = 0.4f), cornerRadius = CornerRadius(12.dp.toPx()), style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))))
                 }
             )
-            .combinedClickable(role = Role.Switch, onClick = { onToggle(!on) }, onLongClick = onHold)
+            .combinedClickable(interactionSource = null, indication = focusRing(shape), role = Role.Switch, onClick = { onToggle(!on) }, onLongClick = onHold)
             .semantics {
                 contentDescription = name
                 toggleableState = ToggleableState(on)

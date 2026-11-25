@@ -251,7 +251,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .then(if (crossing) Modifier.fades(moving) else Modifier.moves("names", moving))
                     .clip(MaterialTheme.shapes.small)
-                    .then(if (player.songless) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
+                    .then(if (player.songless) Modifier else Modifier.clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
                     .padding(vertical = 8.dp)
             ) {
                 Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, modifier = Modifier.basicMarquee())
@@ -366,7 +366,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                                         modifier = Modifier
                                             .moves("cover", moving)
                                             .clip(MaterialTheme.shapes.small)
-                                            .clickable(onClickLabel = stringResource(R.string.dismiss_button)) { upNext = false }
+                                            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = stringResource(R.string.dismiss_button)) { upNext = false }
                                     )
                                     Spacer(Modifier.width(16.dp))
                                 }
@@ -577,7 +577,7 @@ private fun ModeButton(on: Boolean, @DrawableRes icon: Int, name: String, how: S
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .toggleable(value = on, role = Role.Checkbox, onValueChange = { onToggle() })
+            .toggleable(value = on, interactionSource = null, indication = focusRing(CircleShape), role = Role.Checkbox, onValueChange = { onToggle() })
             .semantics {
                 contentDescription = name
                 if (how != null) stateDescription = how
@@ -634,7 +634,7 @@ private fun PlayingFrom(from: String, modifier: Modifier, onOpen: () -> Unit) {
         modifier = modifier
             .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClickLabel = upNext, onClick = onOpen)
+            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = upNext, onClick = onOpen)
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) { contentDescription = "$upNext, $from" }
     ) {
@@ -863,7 +863,7 @@ private fun SleepButton(sleep: Sleep?, songEnds: Boolean, actions: ScreenActions
                 .heightIn(min = 48.dp)
                 .widthIn(min = 48.dp)
                 .clip(MaterialTheme.shapes.small)
-                .clickable(onClickLabel = name) { open = true }
+                .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = name) { open = true }
                 .padding(horizontal = 12.dp)
                 .semantics(mergeDescendants = true) { contentDescription = name }
         ) {
@@ -938,7 +938,7 @@ private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Follow
             .clip(MaterialTheme.shapes.large)
             .background(tint.copy(alpha = 0.24f))
             .returnsFocus(Screen.LYRICS)
-            .clickable(onClickLabel = name, onClick = onLyrics)
+            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.large), onClickLabel = name, onClick = onLyrics)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // Named as the button it stands in for: the line changes as it's sung, which a screen reader would read out each time.

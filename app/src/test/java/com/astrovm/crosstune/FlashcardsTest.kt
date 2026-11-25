@@ -25,7 +25,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
@@ -73,7 +72,7 @@ import org.robolectric.annotation.Config
 class FlashcardsTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()

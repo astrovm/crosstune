@@ -1516,7 +1516,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 .padding(top = 4.dp)
                 .testTag(RESULT_TEXT_TAG)
                 .clip(MaterialTheme.shapes.small)
-                .clickable(onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
+                .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
                 // Inset inside the clip so the rounded corner doesn't cut into the first glyph.
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
@@ -2009,7 +2009,7 @@ private fun HistoryRow(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
                 .then(focus.rowModifier)
-                .clickable { actions.onHistoryEntryClick(entry) }
+                .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.medium)) { actions.onHistoryEntryClick(entry) }
                 // Swiping isn't something TalkBack can do, so removing is an action of its own there.
                 .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
                 .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),

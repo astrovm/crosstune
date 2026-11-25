@@ -39,7 +39,7 @@ internal fun SemanticsNodeInteractionsProvider.assertWordsWhole(where: String, s
             val stop = text.indexOf(' ', end).takeIf { it >= 0 } ?: text.length
             val word = text.substring(start, stop)
             // In its own bold or not, as it's drawn.
-            val wide = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver, spanStyles = input.text.subSequence(start, stop).spanStyles).maxIntrinsicWidth
+            val wide = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver, input.defaultLocaleList, spanStyles = input.text.subSequence(start, stop).spanStyles).maxIntrinsicWidth
             val fits = room(node)
             assertTrue("$said breaks inside \"$word\", ${wide.toInt()} px in ${fits.toInt()} px", wide > fits)
         }
@@ -53,5 +53,5 @@ internal fun TextLayoutResult.lettersWide(line: Int): Float {
     val input = layoutInput
     val start = getLineStart(line)
     val end = getLineEnd(line, visibleEnd = true)
-    return Paragraph(input.text.text.substring(start, end), input.style, Constraints(), input.density, input.fontFamilyResolver, spanStyles = input.text.subSequence(start, end).spanStyles).maxIntrinsicWidth
+    return Paragraph(input.text.text.substring(start, end), input.style, Constraints(), input.density, input.fontFamilyResolver, input.defaultLocaleList, spanStyles = input.text.subSequence(start, end).spanStyles).maxIntrinsicWidth
 }

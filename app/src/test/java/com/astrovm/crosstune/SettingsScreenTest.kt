@@ -208,7 +208,7 @@ class SettingsScreenTest {
             // wider than the whole row, as "automáticamente" is at the biggest font, which nothing could fit.
             val input = layout.layoutInput
             val row = with(input.density) { (composeRule.onRoot().getBoundsInRoot().right - 40.dp).toPx() }
-            fun widerThanTheRow(word: String) = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver).maxIntrinsicWidth > row
+            fun widerThanTheRow(word: String) = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver, input.defaultLocaleList).maxIntrinsicWidth > row
             val pieces = name.split(' ', '-').size
             val ends = (0 until layout.lineCount - 1).map { line -> name.substring(0, layout.getLineEnd(line, visibleEnd = true)).trimEnd() }
             val inWords = ends.filterNot { end -> end.isEmpty() || end.endsWith('-') || name.getOrNull(end.length) == ' ' }

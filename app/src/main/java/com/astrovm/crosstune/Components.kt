@@ -1,5 +1,10 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Shape
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.annotation.DrawableRes
@@ -15,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -156,40 +162,44 @@ internal fun SectionHeader(
  */
 @Composable
 internal fun Group(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val shape = MaterialTheme.shapes.large
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(Motion.size),
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-        // Where each hairline goes, from the last time the rows were placed, for drawing them there.
-        val between = remember { mutableListOf<Int>() }
-        Layout(
-            content = content,
-            modifier = Modifier.drawWithContent {
-                drawContent()
-                val inset = GROUP_INSET.toPx()
-                val thickness = DividerDefaults.Thickness.toPx()
-                between.forEach { top ->
-                    val y = top + thickness / 2
-                    drawLine(color, Offset(inset, y), Offset(size.width - inset, y), thickness)
-                }
-            }
-        ) { measurables, constraints ->
-            val thickness = DividerDefaults.Thickness.roundToPx()
-            val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
-            val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
-            // As wide as the group, which fills its width.
-            layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
-                between.clear()
-                var y = 0
-                rows.forEachIndexed { index, row ->
-                    if (index > 0) {
-                        between += y
-                        y += thickness
+        // Its rows' focus rings take its rounded shape, so the first and the last aren't cut off at its corners.
+        CompositionLocalProvider(LocalIndication provides focusRing(shape)) {
+            val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            // Where each hairline goes, from the last time the rows were placed, for drawing them there.
+            val between = remember { mutableListOf<Int>() }
+            Layout(
+                content = content,
+                modifier = Modifier.drawWithContent {
+                    drawContent()
+                    val inset = GROUP_INSET.toPx()
+                    val thickness = DividerDefaults.Thickness.toPx()
+                    between.forEach { top ->
+                        val y = top + thickness / 2
+                        drawLine(color, Offset(inset, y), Offset(size.width - inset, y), thickness)
                     }
-                    row.placeRelative(0, y)
-                    y += row.height
+                }
+            ) { measurables, constraints ->
+                val thickness = DividerDefaults.Thickness.roundToPx()
+                val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
+                val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
+                // As wide as the group, which fills its width.
+                layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+                    between.clear()
+                    var y = 0
+                    rows.forEachIndexed { index, row ->
+                        if (index > 0) {
+                            between += y
+                            y += thickness
+                        }
+                        row.placeRelative(0, y)
+                        y += row.height
+                    }
                 }
             }
         }
@@ -355,16 +365,16 @@ internal fun AppSlider(
     val dragged by held.collectIsDraggedAsState()
     val knob by animateDpAsState(if (pressed || dragged) 20.dp else 14.dp, label = "knob")
     val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f))
+    val state = remember(steps, valueRange) { SliderState(value, steps, valueRange) }
+    state.value = value
     Slider(
-        value = value,
+        state = state,
         onValueChange = onValueChange,
         modifier = modifier,
         enabled = enabled,
         onValueChangeFinished = onValueChangeFinished,
         colors = colors,
         interactionSource = held,
-        steps = steps,
-        valueRange = valueRange,
         thumb = { Box(Modifier.size(knob).background(if (enabled) colors.thumbColor else colors.disabledThumbColor, CircleShape)) },
         track = { slider ->
             SliderDefaults.Track(
@@ -465,3 +475,9 @@ private const val FOCUS_FRAMES = 5
 
 @Composable
 internal fun rememberRowButtonFocus(): RowButtonFocus = remember { RowButtonFocus() }
+
+/**
+ * Press and focus for a control clipped to [shape], so a remote's focus ring follows that shape. With the default
+ * ripple the ring is square, and the clip cuts its corners off.
+ */
+internal fun focusRing(shape: Shape): IndicationNodeFactory = ripple(focusRingShape = shape)

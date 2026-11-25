@@ -24,8 +24,9 @@ import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -181,7 +182,7 @@ internal fun ScreenSheet(onDismiss: () -> Unit, opener: FocusRequester? = null, 
         // Open all the way, so one back closes it rather than lowering it halfway first. Kept clear of the
         // status bar by hand: Material's own pads its top by however much of it the sheet is under, so one
         // about as tall as the screen grew as it was dragged up, which moved it again, and it shook.
-        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = Modifier.statusBarsPadding(), content = content)
+        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberBottomSheetState(SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)), modifier = Modifier.statusBarsPadding(), content = content)
     } else {
         InOverlay(overlays, opener) { InlineSheet(onDismiss, content = content) }
     }
