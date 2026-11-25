@@ -18,6 +18,13 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun japaneseWordsAndParticlesHaveSeparateRomaji() {
+        val lines = listOf("ありきたりな喜びきっと二人なら見つけられる", "抱きしめた温もりで溶かすから")
+        val expected = listOf("arikitari na yorokobi kitto futari nara mitsukerareru", "dakishimeta nukumori de tokasu kara")
+        assertEquals(expected, Readings.of(lines, Script.JAPANESE).map { it.romanized })
+    }
+
+    @Test
     fun theScriptIsWhatTheLinesAreWrittenIn() {
         assertEquals(Script.JAPANESE, Readings.scriptOf(listOf("Hello", "夜空に星が")))
         // Kanji alone, with no kana anywhere, is Chinese.
@@ -2508,7 +2515,7 @@ class ReadingsTest {
             val line = read("雲がまだ2人の影を残すから")
             assertEquals("$withUniDic", "くもがまだふたりのかげをのこすから", line.reading)
             assertTrue("$withUniDic", Ruby("2人", "ふたり") in line.parts)
-            assertEquals("$withUniDic", "kumo ga mada futari no kage o nokosukara", line.romanized)
+            assertEquals("$withUniDic", "kumo ga mada futari no kage o nokosu kara", line.romanized)
             assertEquals("$withUniDic", "ひとつになる", read("1つになる").reading)
             assertEquals("$withUniDic", "ふたりで", read("２人で").reading)
             // Part of a bigger number, it's that number.

@@ -1603,7 +1603,8 @@ internal object Readings {
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
+            val ending = (piece.kind == "助動詞" && piece.surface != "なら") ||
+                (piece.kind == "助詞" && piece.subkind == "接続助詞" && piece.surface != "から") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
