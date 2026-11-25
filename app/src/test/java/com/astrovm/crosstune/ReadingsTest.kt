@@ -18,6 +18,44 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun particlesDoNotSplitOtherWords() {
+        val cases = listOf(
+            Triple("さようなら", "sayoonara", listOf("さようなら")),
+            Triple("並ぶ星", "narabu hoshi", listOf("並ぶ", "星")),
+            Triple("ならぶ", "narabu", listOf("ならぶ")),
+            Triple("習う", "narau", listOf("習う")),
+            Triple("ならう", "narau", listOf("ならう")),
+            Triple("体", "karada", listOf("体")),
+            Triple("からだ", "karada", listOf("からだ")),
+            Triple("からだが熱い", "karada ga atsui", listOf("からだ", "が", "熱い")),
+            Triple("僕のからだが熱い", "boku no karada ga atsui", listOf("僕", "の", "からだ", "が", "熱い")),
+            Triple("君のからだが", "kimi no karada ga", listOf("君", "の", "からだ", "が")),
+            Triple("僕にからだを", "boku ni karada o", listOf("僕", "に", "からだ", "を")),
+            Triple("「からだが熱い」", "「karada ga atsui」", listOf("からだ", "が", "熱い")),
+            Triple("、からだが熱い", "、 karada ga atsui", listOf("からだ", "が", "熱い")),
+            Triple("君 からだが熱い", "kimi karada ga atsui", listOf("君", "からだ", "が", "熱い")),
+            Triple("空から降る", "sora kara furu", listOf("空", "から", "降る")),
+            Triple("のなら", "no nara", listOf("の", "なら")),
+            Triple("からい", "karai", listOf("からい")),
+            Triple("からす", "karasu", listOf("からす")),
+            Triple("空っぽ", "karappo", listOf("空っぽ")),
+            Triple("からっぽ", "karappo", listOf("からっぽ")),
+            Triple("それなら", "sorenara", listOf("それなら")),
+            Triple("だから", "dakara", listOf("だから")),
+            Triple("なぜなら", "nazenara", listOf("なぜなら")),
+            Triple("奈良", "nara", listOf("奈良")),
+            Triple("ありきたりな喜びきっと二人なら見つけられる", "arikitari na yorokobi kitto futari nara mitsukerareru",
+                listOf("ありきたり", "な", "喜び", "きっと", "二人", "なら", "見つけられる")),
+            Triple("抱きしめた温もりで溶かすから", "dakishimeta nukumori de tokasu kara", listOf("抱きしめた", "温もり", "で", "溶かす", "から"))
+        )
+        for ((line, romaji, words) in cases) {
+            fun read() = Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text }
+            assertEquals(line, romaji to words, read())
+            assertEquals(line, romaji to words, TestUniDic.reading { read() })
+        }
+    }
+
+    @Test
     fun japaneseWordsAndParticlesHaveSeparateRomaji() {
         val lines = listOf("ありきたりな喜びきっと二人なら見つけられる", "抱きしめた温もりで溶かすから", "誰かを想いやりゃあだになり")
         val expected = listOf(
@@ -788,6 +826,18 @@ class ReadingsTest {
         val words = Readings.OldKana(mapOf("あい" to "愛"), setOf("あ"), mapOf("あいうえ" to "上", "あい" to "藍"))
         assertEquals(4, words.longestSearch)
         assertEquals("愛", words.search["あい"])
+    }
+
+    @Test
+    fun adjectiveCandidatesMustCrossTheTokenBoundary() {
+        val vocabulary = Readings.OldKana(
+            emptyMap(), setOf("あ"), mapOf("あいうえ" to "亜"),
+            mapOf("あほ" to listOf("阿呆"), "あり" to listOf("有り"))
+        )
+        val tokenizer = SmallKanaTokenizer { vocabulary }
+        val plain = Tokenizer.Builder().build()
+        assertEquals(0..1, tokenizer.crossingFor("あほな", plain.tokenize("あほな"), 1))
+        assertNull(tokenizer.crossingFor("ありな", plain.tokenize("ありな"), 1))
     }
 
     @Test

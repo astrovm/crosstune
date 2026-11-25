@@ -1604,9 +1604,11 @@ internal object Readings {
         val words = mutableListOf<MutableList<Piece>>()
         var previous: Piece? = null
         var opened = false
+        var orphan = false
         for (piece in pieces) {
             if (piece.surface.isBlank()) {
                 previous = null
+                orphan = false
                 continue
             }
             val opening = piece.surface in OPENING
@@ -1621,8 +1623,15 @@ internal object Readings {
             val mark = (piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening
             val withPrevious = opened || english || longMark || mark
             // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
-            val continuesWord = ending && previous?.kind != "助詞" && previous?.surface?.any { it != 'ー' } == true
-            if (previous != null && (withPrevious || continuesWord)) words.last() += piece else words += mutableListOf(piece)
+            // A から without a preceding word can start a noun: keep its ending, then split the next particle.
+            val orphanEnding = orphan && previous?.surface == "から" && piece.kind == "助動詞"
+            val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
+            val continuesWord = ending && !afterOrphan && (previous?.kind != "助詞" || orphanEnding) && previous?.surface?.any { it != 'ー' } == true
+            val join = previous != null && (withPrevious || continuesWord)
+            if (join) words.last() += piece else words += mutableListOf(piece)
+            orphan = if (orphanEnding && join) true else piece.surface == "から" && piece.kind == "助詞" &&
+                (previous == null || previous.kind in setOf("助詞", "記号") ||
+                    (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
             previous = piece
         }
