@@ -2626,6 +2626,8 @@ class ExactMatcherTest {
             assertEquals(originalUrl, matcher("US").find(MusicService.YOUTUBE_MUSIC, source))
             assertEquals(mixUrl, matcher.find(MusicService.YOUTUBE_MUSIC, disco))
             assertEquals(originalUrl, matcher.find(MusicService.YOUTUBE_MUSIC, source))
+            // A plain song keeps the key the playlist widget reads before looking up a song again.
+            assertEquals(originalUrl, cache.get("find@$MATCH_VERSION|YOUTUBE_MUSIC|TRACK|Song|Band|"))
             val linked = source.copy(url = "https://open.spotify.com/track/1234567890123456789012")
             val linkedUrl = "https://music.youtube.com/watch?v=linked00000"
             namesAndTabs(songs = listOf(youTubeMusicRow("Song", "Band • Album • 4:41", videoId = "linked00000")))

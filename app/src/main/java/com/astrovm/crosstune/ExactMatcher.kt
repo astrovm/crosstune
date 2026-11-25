@@ -281,8 +281,8 @@ internal class ExactMatcher(
 
     /** By the song's length too, when it's known, as an edit of a song is often named just like it; and by how songs are matched, so what was found before is looked for again. */
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata): String {
-        val disco = metadata.namesDisco()
-        return (listOf("$kind@$MATCH_VERSION/$disco", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) +
+        val edition = if (metadata.namesDisco()) "/disco" else ""
+        return (listOf("$kind@$MATCH_VERSION$edition", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) +
             listOfNotNull(metadata.lengthMs)).joinToString("|")
     }
 
