@@ -250,7 +250,9 @@ internal object Readings {
 
     private fun List<Piece>.nextToNanDa(at: Int): Boolean {
         val length = if (get(at).surface == "なん") 2 else 1
-        return nanDaAt(at + length) || nanDaAt(at - 1) || getOrNull(at - 2)?.surface == "なん" && nanDaAt(at - 2)
+        if (nanDaAt(at + length)) return true
+        if (length == 2) return false
+        return nanDaAt(at - 1) || getOrNull(at - 2)?.surface == "なん" && nanDaAt(at - 2)
     }
 
     private fun nanDaCall(pieces: List<Piece>, at: Int, repeated: Boolean): Boolean {
@@ -1742,7 +1744,7 @@ internal object Readings {
             val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
             val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
-            val beforeCopula = if (previous?.surface == "なん") pieces.beforeAdverbs(at - 1) else pieces.getOrNull(at - 2)
+            val beforeCopula = if (previous?.surface == "なん") pieces.beforeAdverbs(at - 1) else null
             val separateCopula = copula && !orphanEnding && previous?.keepsCopula(beforeCopula) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true
