@@ -245,7 +245,7 @@ class ReadingsTest {
     @Test
     fun nanDaAcrossAdverbsAndCommas() {
         val spellings = listOf("なんだ", "何だ")
-        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "一体全体" to "ittaizentai", "結局" to "kekkyoku", "今" to "ima")
+        val adverbs = listOf("一体" to "ittai", "いったい" to "ittai", "一体全体" to "ittaizentai")
         val cases = buildList {
             for ((adverb, reading) in adverbs) for (comma in listOf("", "、", ",")) {
                 for (count in 1..2) for (mask in 0 until (1 shl count)) for (topic in listOf(false, true)) {
@@ -268,11 +268,27 @@ class ReadingsTest {
     fun nanDaAdverbClauseBoundaries() = assertJapaneseBoundaries(listOf(
         Triple("君はもうなんだ", "kimi wa moo nan da", listOf("君", "は", "もう", "なん", "だ")),
         Triple("それはなんだ、なんだ", "sore wa nan da、 nanda", listOf("それ", "は", "なん", "だ", "なんだ")),
+        Triple("彼はなんだ、なんだと騒ぐ", "kare wa nan da、 nanda to sawagu", listOf("彼", "は", "なん", "だ", "なんだ", "と", "騒ぐ")),
         Triple("これは一体。なんだなんだ", "kore wa ittai。 nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
         Triple("これは一体！なんだなんだ", "kore wa ittai！ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
         Triple("これは一体？なんだなんだ", "kore wa ittai？ nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
         Triple("これは一体\nなんだなんだ", "kore wa ittai nanda nanda", listOf("これ", "は", "一体", "なんだ", "なんだ")),
         Triple("これは猫、なんだなんだ", "kore wa neko、 nanda nanda", listOf("これ", "は", "猫", "なんだ", "なんだ")),
+    ))
+
+    @Test
+    fun predicateNounsBeforeNanDaStayWhole() = assertJapaneseBoundaries(listOf(
+        Triple("僕は今日なんだ", "boku wa kyoo nanda", listOf("僕", "は", "今日", "なんだ")),
+        Triple("君は全部なんだ", "kimi wa zenbu nanda", listOf("君", "は", "全部", "なんだ")),
+        Triple("僕は明日なんだ", "boku wa ashita nanda", listOf("僕", "は", "明日", "なんだ")),
+        Triple("それは前なんだ", "sore wa mae nanda", listOf("それ", "は", "前", "なんだ")),
+        Triple("これは今なんだ", "kore wa ima nanda", listOf("これ", "は", "今", "なんだ")),
+        Triple("これは結局なんだ", "kore wa kekkyoku nanda", listOf("これ", "は", "結局", "なんだ")),
+        Triple("これは結局なんだなんだ", "kore wa kekkyoku nanda nanda", listOf("これ", "は", "結局", "なんだ", "なんだ")),
+        Triple("これは今なんだなんだ", "kore wa ima nanda nanda", listOf("これ", "は", "今", "なんだ", "なんだ")),
+        Triple("これは本当なんだ", "kore wa hontoo nanda", listOf("これ", "は", "本当", "なんだ")),
+        Triple("本なんだ", "hon nanda", listOf("本", "なんだ")),
+        Triple("これはもうなんだ", "kore wa moo nan da", listOf("これ", "は", "もう", "なん", "だ")),
     ))
 
     @Test
@@ -296,7 +312,7 @@ class ReadingsTest {
         Triple("なんだって？", "nan datte？", listOf("なん", "だって")),
         Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
         Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
-        Triple("猫が好きなんだ", "neko ga sukina nda", listOf("猫", "が", "好きな", "んだ")),
+        Triple("猫が好きなんだ", "neko ga suki nanda", listOf("猫", "が", "好き", "なんだ")),
         Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
     ))
 
@@ -343,7 +359,7 @@ class ReadingsTest {
             "読んだ" to "yonda", "死んだ" to "shinda", "泳いだ" to "oyoida", "読んだら" to "yondara", "読んだり" to "yondari",
             "読んだそうだ" to "yonda sooda", "読むそうだ" to "yomu sooda", "泳ぐようだ" to "oyogu yooda", "夢のようだ" to "yume no yooda",
             "そうだ" to "sooda", "そうです" to "soodesu", "読むのだ" to "yomu noda", "読むんだ" to "yomu nda", "のだ" to "noda", "んだ" to "nda",
-            "本なんだ" to "honna nda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
+            "本なんだ" to "hon nanda", "夢なのだ" to "yumena noda", "本じゃない" to "hon ja nai", "本ではない" to "hon de wa nai",
             "本である" to "hondearu", "綺麗な" to "kireena", "人ですら" to "hitode sura",
             "夢の様だ" to "yume no yooda", "夜景みたいだ" to "yakee mitaida", "会いたくなんだ" to "aitaku nanda", "痛くなんだ" to "itaku nanda",
             "ひとなでして" to "hitonadeshite"

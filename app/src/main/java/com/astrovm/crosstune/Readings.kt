@@ -281,14 +281,12 @@ internal object Readings {
 
     private fun Piece.nanDaComma() = surface in setOf(",", "，", "、")
 
-    // Both dictionaries can tag 一体 as an ordinary noun. 今 can be a prefix before an ASCII comma.
-    private val NAN_DA_ADVERB_FALLBACKS = setOf("一体", "今")
+    // Both dictionaries can tag 一体 as an ordinary noun.
+    private val NAN_DA_ADVERB_FALLBACKS = setOf("一体")
 
     private fun List<Piece>.adverbOrComma(at: Int): Boolean {
         val piece = get(at)
-        // UniDic can also split 一体全体 into two ordinary nouns.
-        return piece.kind == "副詞" || piece.subkind == "副詞可能" || piece.surface in NAN_DA_ADVERB_FALLBACKS ||
-            (piece.surface == "全体" && getOrNull(at - 1)?.surface == "一体") || piece.nanDaComma()
+        return piece.kind == "副詞" || piece.surface in NAN_DA_ADVERB_FALLBACKS || piece.nanDaComma()
     }
 
     private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
@@ -318,7 +316,8 @@ internal object Readings {
     private fun List<Piece>.nanDaRewriteLength(at: Int): Int {
         val repeated = repeatedNanDaLength(at)
         if (repeated > 0) return repeated
-        return nanDaLength(at).takeIf { it == 3 && nanDaHasSubject(at) } ?: 0
+        val before = beforeAdverbs(at)
+        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞" && before.surface != "何") } ?: 0
     }
 
     private fun List<Piece>.repeatedNanDaLength(at: Int): Int {
