@@ -68,6 +68,24 @@ class ReadingsTest {
     ))
 
     @Test
+    fun bothDictionariesGiveTheTwoUsesOfDeshiteTheSameTags() {
+        val ipadic = Tokenizer.Builder().build()
+        val unidic = TestUniDic.tokenizer
+        fun ending(type: String, form: String) = listOf(
+            listOf("でし", "助動詞", "*", type, form),
+            listOf("て", "助詞", "接続助詞", "*", "*")
+        )
+        for (line in listOf("仕事はあとでして", "作業は二人でして", "ここは学校でして")) {
+            assertEquals(line, ending("特殊・デス", "連用形"), ipadic.tokenize(line).takeLast(2).map {
+                listOf(it.surface, it.partOfSpeechLevel1, it.partOfSpeechLevel2, it.conjugationType, it.conjugationForm)
+            })
+            assertEquals(line, ending("助動詞-デス", "連用形-一般"), unidic.tokenize(line).takeLast(2).map {
+                listOf(it.surface, it.partOfSpeechLevel1, it.partOfSpeechLevel2, it.conjugationType, it.conjugationForm)
+            })
+        }
+    }
+
+    @Test
     fun explanatoryNandaStaysWholeAndInterrogativeNanSeparates() = assertJapaneseBoundaries(listOf(
         Triple("今日はここまでなんだ", "kyoo wa koko made nanda", listOf("今日", "は", "ここ", "まで", "なんだ")),
         Triple("つらいからなんだよ", "tsurai kara nanda yo", listOf("つらい", "から", "なんだ", "よ")),
@@ -81,11 +99,30 @@ class ReadingsTest {
     ))
 
     @Test
+    fun onlyTheInterrogativeNanWithACopulaGetsANewBoundary() = assertJapaneseBoundaries(listOf(
+        Triple("なんだよ", "nan da yo", listOf("なん", "だ", "よ")),
+        Triple("なんだよ、この音は", "nan da yo、 kono oto wa", listOf("なん", "だ", "よ", "この", "音", "は")),
+        Triple("なんだか眠い", "nandaka nemui", listOf("なんだか", "眠い")),
+        Triple("なんだって？", "nan datte？", listOf("なん", "だって")),
+        Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
+        Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
+        Triple("猫が好きなんだ", "neko ga sukina nda", listOf("猫", "が", "好きな", "んだ")),
+        Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
+    ))
+
+    @Test
     fun katakanaCopulasAndConnectivesGetTheSameBoundaries() = assertJapaneseBoundaries(listOf(
         Triple("無駄ダカラ", "muda da kara", listOf("無駄", "ダ", "カラ")),
         Triple("無駄だから", "muda da kara", listOf("無駄", "だ", "から")),
         Triple("無駄ナラバ", "muda naraba", listOf("無駄", "ナラバ")),
         Triple("無駄ならば", "muda naraba", listOf("無駄", "ならば")),
+    ))
+
+    @Test
+    fun unattachedKatakanaKaraAndOtherKatakanaParticlesKeepTheirBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("カラダが熱い", "karada ga atsui", listOf("カラダ", "が", "熱い")),
+        Triple("僕ノカラダガ熱イ", "boku no karada ga atsui", listOf("僕", "ノ", "カラダ", "ガ", "熱イ")),
+        Triple("車デ帰る", "kuruma de kaeru", listOf("車", "デ", "帰る")),
     ))
 
     @Test
