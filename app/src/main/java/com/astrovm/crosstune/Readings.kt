@@ -531,12 +531,6 @@ internal object Readings {
         return katakana.takeIf(tokenizer::isNoun)
     }
 
-    /** Let the dictionary distinguish particles after an adjective from a word such as いろいろ. */
-    private fun adjectiveParticles(suffix: String): List<com.atilika.kuromoji.ipadic.Token>? {
-        val tokens = tokenizer.tokenize("高い" + suffix)
-        return tokens.drop(1).takeIf { tokens.first().surface == "高い" && it.all { token -> token.partOfSpeechLevel1 == "助詞" } }
-    }
-
     private val DRAWN_AUXILIARY_HEADS = setOf("副詞", "感動詞")
     // IPADIC has no entry for these words, even in katakana.
     private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
@@ -1200,6 +1194,21 @@ internal object Readings {
         private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
+    /** Read whole pieces after だり as after 高い; a particle may span several original pieces. */
+    private fun adjectiveParticles(pieces: List<Piece>, start: Int): Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? {
+        val suffix = StringBuilder()
+        var found: Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? = null
+        val candidates = pieces.drop(start).take(8).takeWhile { it.surface.all(Char::isLetter) }
+        for ((index, piece) in candidates.withIndex()) {
+            suffix.append(if (index == 0) piece.surface.drop(1) else piece.surface)
+            val tokens = tokenizer.tokenize("高い" + suffix)
+            if (tokens.first().surface == "高い" && tokens.drop(1).all { it.partOfSpeechLevel1 == "助詞" }) {
+                found = index + 1 to tokens.drop(1)
+            }
+        }
+        return found
+    }
+
     /**
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん, also
      * written 2人. Kept to numbers of people, the ones lyrics are full of, and 一 before a counter,
@@ -1208,9 +1217,9 @@ internal object Readings {
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
-        var skip = -1
+        var skipUntil = 0
         for ((index, piece) in pieces.withIndex()) {
-            if (index == skip) continue
+            if (index < skipUntil) continue
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             // 分 after a number after 寸 or 割 is a tenth of it, ぶ: 四寸四分, 五割五分. Elsewhere, minutes.
@@ -1238,10 +1247,8 @@ internal object Readings {
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
-            // IPADIC takes いって for いう + て, even when って quotes an adjective.
-            val quote = piece.surface == "いっ" && next?.surface == "て"
             val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
-                adjectiveParticles(piece.surface.drop(1) + if (quote) "て" else "")
+                adjectiveParticles(pieces, index)
             } else null
             when {
                 // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
@@ -1251,10 +1258,10 @@ internal object Readings {
                     adjectiveEnd != null -> {
                     val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
                     out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, reader = Reader.RULES)
-                    out += adjectiveEnd.map { token ->
+                    out += adjectiveEnd.second.map { token ->
                         Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
                     }
-                    if (quote) skip = index + 1
+                    skipUntil = index + adjectiveEnd.first
                 }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {

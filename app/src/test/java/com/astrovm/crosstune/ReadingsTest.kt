@@ -123,7 +123,7 @@ class ReadingsTest {
     @Test
     fun dariiParticlesFollowTheSameBoundariesAsOtherAdjectives() {
         fun compare() {
-            for (ending in listOf("よ", "ね", "し", "けど", "から", "って")) {
+            for (ending in listOf("よ", "ね", "し", "けど", "から", "って", "ってば", "っていうか", "っていうか、本当")) {
                 val high = "高い$ending"
                 val tired = "だりい$ending"
                 val highReading = Readings.of(listOf(high), Script.JAPANESE).single().romanized
@@ -136,6 +136,7 @@ class ReadingsTest {
             val verb = Readings.words("飲んだりいって", Script.JAPANESE)
             assertEquals(listOf("飲んだり", "いって"), verb.map { it.text })
             assertEquals(listOf("飲む", "いう"), verb.map { it.lookup })
+            assertEquals(listOf("遊んだり", "いって", "来た"), Readings.words("遊んだりいって来た", Script.JAPANESE).map { it.text })
         }
         compare()
         TestUniDic.reading(::compare)
@@ -144,7 +145,7 @@ class ReadingsTest {
     @Test
     fun dariiParticlesKeepTheirPlaceBetweenReadings() {
         fun check() {
-            for (line in listOf("今日はだりいよね本当", "今日はだりいしね本当", "今日はだりいって本当")) {
+            for (line in listOf("今日はだりいよね本当", "今日はだりいしね本当", "今日はだりいって本当", "今日はだりいっていうか本当")) {
                 val original = Readings.of(listOf(line), Script.JAPANESE)
                 val corrected = Readings.corrected(original, listOf(ReadingFix(0, "本当", "ほんと", Reader.SUNG)))
                 for (reading in listOf(original.single(), corrected.single())) {
