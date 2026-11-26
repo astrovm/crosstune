@@ -97,17 +97,20 @@ internal object RecordingKey {
  */
 internal class SteadyLengths(private val preferences: SharedPreferences) {
     private val seen: JSONObject by lazy { runCatching { JSONObject(preferences.getString(KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
-    /** The lengths first said since Crosstune started, each with its song: only one of those can turn out an ad's, see [forget]. */
-    private val fresh = mutableSetOf<Pair<String, Long>>()
+    /** The apps that said each new length in this run; a length said by another app is not an ad's alone. */
+    private val fresh = mutableMapOf<Pair<String, Long>, MutableSet<String>>()
 
     @Synchronized
-    fun of(title: String, artist: String, lengthMs: Long): Long {
+    fun of(title: String, artist: String, lengthMs: Long, app: String = ""): Long {
         val key = keyOf(title, artist)
         val known = seen.optJSONArray(key) ?: JSONArray()
-        (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let { return it }
+        (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let {
+            fresh[key to it]?.add(app)
+            return it
+        }
         seen.remove(key)
         seen.put(key, known.put(lengthMs))
-        fresh += key to lengthMs
+        fresh[key to lengthMs] = mutableSetOf(app)
         // The songs heard longest ago go first once there are many.
         while (seen.length() > MAX_SONGS) seen.remove(seen.keys().next())
         preferences.edit { putString(KEY, seen.toString()) }
@@ -120,13 +123,14 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
 
     /**
      * [lengthMs] turned out not to be the song's, as an ad's that played under its name: it's no longer one said for
-     * it. Only when it was first said since Crosstune started: one kept from before is a take of the song that some
-     * app played, however near an ad's length.
+     * it. Only when this app alone said it since Crosstune started: a length kept from before or said by another app
+     * is a take of the song, however near an ad's length.
      */
     @Synchronized
-    fun forget(title: String, artist: String, lengthMs: Long) {
+    fun forget(title: String, artist: String, lengthMs: Long, app: String = "") {
         val key = keyOf(title, artist)
-        if (!fresh.remove(key to lengthMs)) return
+        if (fresh[key to lengthMs] != setOf(app)) return
+        fresh.remove(key to lengthMs)
         val kept = known(title, artist).filter { it != lengthMs }
         if (kept.isEmpty()) seen.remove(key) else seen.put(key, JSONArray(kept))
         preferences.edit { putString(KEY, seen.toString()) }

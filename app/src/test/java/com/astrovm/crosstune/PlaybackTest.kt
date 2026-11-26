@@ -1688,6 +1688,82 @@ class PlaybackTest {
     }
 
     @Test
+    fun aPauseAfterTheSongStartsIsNotAnAdWait() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 212_532, afterMs = 1_720)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 1_880, 26, afterMs = 160)
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 2_280, 26, position = 400, afterMs = 400)
+        assertFalse(seen.now().ad)
+        assertEquals(PlaybackClock(400, NOW + 2_280, playing = false), seen.now().clock)
+    }
+
+    @Test
+    fun anAdsLengthDoesNotEraseAnotherAppsLengthFromThisRun() {
+        allow()
+        val spotify = player("com.spotify.music", "Spotify", "Faded", "Alan Walker", album = "", duration = 212_532)
+        shadowOf(sessions).addController(spotify)
+        followed(MusicMetadata("Faded", "Alan Walker"))
+        shadowOf(sessions).clearControllers()
+        shadowOf(Looper.getMainLooper()).idle()
+        val music = youTubeMusic("Faded", "Alan Walker", 212_532, updated = NOW, item = 26)
+        followed(MusicMetadata("Faded", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 233_000)
+        assertEquals(listOf(212_532L, 233_000L), keptLengths("Faded", "Alan Walker"))
+    }
+
+    @Test
+    fun anOlderPlaybackReportCannotResetARealLengthFix() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 212_532, updated = NOW - 1_200, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.isAt(PlaybackState.STATE_PLAYING, NOW - 1_200, 26, position = 0)
+        music.says("Faded", "Alan Walker", 233_000)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW - 1_500, 26, position = 0, afterMs = 300)
+        assertEquals(PlaybackClock(0, NOW - 1_200), seen.now().clock)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS))
+        assertEquals(PlaybackClock(0, NOW - 1_200), seen.now().clock)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 1_800, 26, 0))
+        shadowOf(music).callbacks.toList().forEach { it.onQueueChanged(mutableListOf()) }
+        assertEquals(PlaybackClock(0, NOW + 1_800), seen.now().clock)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 2_000, 26, afterMs = 200)
+        assertEquals(PlaybackClock(0, NOW + 1_800), seen.now().clock)
+    }
+
+    @Test
+    fun anOldMetadataCallbackCannotRenewAnAdsEnd() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val song = MusicMetadata("Faded", "Alan Walker")
+        followed(song)
+        val oldMetadata = music.metadata
+        val callbacks = shadowOf(music).callbacks.toList()
+        shadowOf(music).setMetadata(MediaMetadata.Builder(oldMetadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 233_000).build())
+        val seen = followed(song)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
+        callbacks.forEach { it.onMetadataChanged(oldMetadata) }
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_100))
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 1_500, 26, position = 400)
+        assertFalse(seen.now().ad)
+    }
+
+    @Test
+    fun aNewSongsMetadataDropsTheOldWindowBeforeItsQueueIdChanges() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        followed(MusicMetadata("Faded", "Alan Walker"))
+        val next = followed(MusicMetadata("Alone", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 212_532)
+        val metadata = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Alone")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 160_000).build()
+        shadowOf(music).setMetadata(metadata)
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 300, 26, position = 42_000, afterMs = 300)
+        assertFalse(next.now().ad)
+        assertEquals(PlaybackClock(42_000, NOW + 300, playing = false), next.now().clock)
+    }
+
+    @Test
     fun aSongWhoseLengthIsPutRightAsItStartsPlaysOn() {
         allow()
         // Not from a recording: 1.2 s into a song, YouTube Music says another length for it, with no stop to load.
@@ -2258,8 +2334,8 @@ class PlaybackTest {
     @Test
     fun aClockSaidAMomentBehindWhileItPlaysOnIsStale() {
         allow()
-        // YouTube Music starts the song at PLAYED_AT, then says it's at the start again 700 ms later.
-        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        // The player starts the song at PLAYED_AT, then says it's at the start again 700 ms later.
+        val music = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", position = 0)
         shadowOf(sessions).addController(music)
         val seen = followed()
         fun says(position: Long, at: Long, speed: Float = 1f) {
