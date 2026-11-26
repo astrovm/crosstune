@@ -266,6 +266,17 @@ class ReadingsTest {
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
             Triple("だせえ", "だせえ", "ださい"), Triple("だせえ服", "だせえ", "ださい"), Triple("ちょれえ", "ちょれえ", "ちょろい"),
+            // A particle after a noun joins the word when what follows it is no word: お前 か っけ え.
+            Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("おい、はええよ", "はええ", "はやい"),
+            Triple("疲れてねみい", "ねみい", "ねむい"),
+            // A verb split from a word, after て, is no helper verb.
+            Triple("からくてかれえ", "かれえ", "からい"),
+            // The が that joins two clauses ends the first.
+            Triple("あいつはすげえが、弟は普通だ", "すげえが", "すごい"),
+            // After a number or its counter, a particle.
+            Triple("一時間ぐれえ待った", "ぐれえ", "ぐらい"), Triple("百ぐれえ", "ぐれえ", "ぐらい"), Triple("三日くれえ", "くれえ", "くらい"),
+            // A noun the dictionary read, drawn out, is still the adjective at the end.
+            Triple("このジュースあめー", "あめー", "あまい"),
             // Words that only look shifted.
             Triple("ねえ", "ねえ", "ねえ"), Triple("ねええ", "ねえ", "ねえ"), Triple("見てえ", "見て", "見る"),
             Triple("このカレーかれー", "かれー", "カレー")
@@ -300,6 +311,15 @@ class ReadingsTest {
             "君といてえ" to "君=君|と=と|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
             "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
+            // With an adverb or a comma between.
+            "ここにもっといてえ" to "ここ=ここ|に=に|もっと=もっと|いて=いる|え=え", "ここに、いてえ" to "ここ=ここ|に=に|いて=いる|え=え",
+            // A verb that helps the one before it: help me, want to keep watching.
+            "助けてくれえ" to "助けて=助ける|くれ=くれる|え=え", "見ていてえ" to "見て=見る|いて=いる|え=え",
+            // A particle after a noun, before a word: ええ, good.
+            "母はええ人だ" to "母=母|は=は|え=え|え=え|人=人|だ=だ", "俺よええ" to "俺=俺|よ=よ|え=え|え=え",
+            "犬やええ" to "犬=犬|や=や|え=え|え=え",
+            // A noun the dictionary read, drawn out: candy, not 甘え.
+            "部屋にあめーがある" to "部屋=部屋|に=に|あめー=あめ|が=が|ある=ある", "なめーを教えて" to "なめー=なめ|を=を|教えて=教える",
             // Words that only end in え: a noun, a verb, and a verb after its object.
             "声え" to "声=声|え=え", "こえを出して" to "こえ=こえる|を=を|出して=出す", "金をだせえ" to "金=金|を=を|だせ=だせる|え=え",
             // A word before a particle that no noun list has.

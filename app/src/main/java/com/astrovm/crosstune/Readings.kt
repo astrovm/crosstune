@@ -1327,22 +1327,26 @@ internal object Readings {
 
     private fun placeBefore(after: Piece?, next: Piece?): Place = when {
         after == null || after.surface.none(Char::isLetter) -> Place.PREDICATE
-        after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
         // の before a noun joins two nouns, あけえの壺. With no noun after it, あめえのか, a noun would need な first.
         after.surface == "の" -> if (next?.kind == "名詞") Place.ARGUMENT else Place.PREDICATE
+        // Before the particles that mark a noun: the が that joins two clauses ends one, すげえが、弟は.
         endsPhrase(after) -> Place.PREDICATE
+        after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
         after.kind == "名詞" && after.subkind != "非自立" -> Place.MODIFIES
         else -> Place.OTHER
     }
 
     /**
      * The verb the dictionary split [span] into stays, though it shifts to an adjective: after its place or
-     * partner, ここにいてえ is いたい from いる and ボタンをおせえ is 押せ; and a verb in the past with only
-     * particles after it, きた and ねえ. Split as きた, ね and え, as before a noun, it's the adjective.
+     * partner, ここにいてえ is いたい from いる and ボタンをおせえ is 押せ, with adverbs and commas between, ここにもっといてえ;
+     * a whole verb that helps the one before it, 助けてくれえ, though not one split from a word, からくてかれえ; and a verb in the past with only particles after it,
+     * きた and ねえ. Split as きた, ね and え, as before a noun, it's the adjective.
      */
-    private fun keepsVerb(span: List<Piece>, before: Piece?): Boolean {
+    private fun keepsVerb(span: List<Piece>, ahead: List<Piece>): Boolean {
         if (span.first().kind != "動詞") return false
-        if (before?.kind == "助詞" && before.surface in VERB_PARTNERS) return true
+        if (span.first().subkind == "非自立" && span.drop(1).all { it.kind in setOf("助詞", "フィラー") }) return true
+        val partner = ahead.lastOrNull { it.kind != "副詞" && it.kind != "記号" }
+        if (partner?.kind == "助詞" && partner.surface in VERB_PARTNERS) return true
         val past = span.getOrNull(1)?.let { it.kind == "助動詞" && it.base == "た" } == true
         return past && span.drop(2).all { it.kind == "助詞" }
     }
@@ -1352,25 +1356,52 @@ internal object Readings {
      * おめえ for お前; an adjective at the end of a phrase or before the noun it describes, このジュースあめえ;
      * a noun before a particle, あめえは. Null keeps the dictionary's pieces, where the place doesn't tell.
      */
-    private fun shiftedWord(text: String, span: List<Piece>, before: Piece?, after: List<Piece>): Piece? {
+    private fun shiftedWord(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>): Piece? {
+        if (particleStays(span.first(), ahead.lastOrNull(), text)) return null
+        shiftedParticle(text, ahead)?.let { return it }
         val noun = shiftedNoun(text)
         if (noun?.subkind == "代名詞") return noun
-        val place = placeBefore(after.firstOrNull(), after.getOrNull(1))
         val adjective = shiftedAdjective(text)?.takeIf {
             canShiftAdjective(text, span.first()) && tokenizer.knownWord(text)?.partOfSpeechLevel1 != "名詞" &&
-                !keepsVerb(span, before)
+                !keepsVerb(span, ahead)
         }
-        return when {
-            noun != null && adjective != null -> when (place) {
-                Place.PREDICATE, Place.MODIFIES -> adjective
-                Place.ARGUMENT -> noun
-                Place.OTHER -> null
-            }
-            // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
-            // なめえ alone is 名前.
-            noun != null -> noun.takeIf { place == Place.ARGUMENT || (span.first().kind != "動詞" && before?.kind != "名詞") }
-            else -> adjective?.takeIf { place != Place.ARGUMENT }
+        // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
+        // なめえ alone is 名前.
+        val alone = span.first().kind != "動詞" && ahead.lastOrNull()?.kind != "名詞"
+        return byPlace(noun, adjective, placeBefore(after.firstOrNull(), after.getOrNull(1)), drawnNoun(span), alone)
+    }
+
+    /**
+     * Which of [noun] and [adjective] a shifted word is in [place], or null for the dictionary's pieces. Where the
+     * noun stands, the dictionary's own one [drawn] out stays: あめーが is あめ, candy, as likely as 甘え.
+     */
+    private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, drawn: Boolean, alone: Boolean): Piece? = when {
+        noun != null && adjective != null -> when (place) {
+            Place.PREDICATE, Place.MODIFIES -> adjective
+            Place.ARGUMENT -> noun.takeUnless { drawn }
+            Place.OTHER -> null
         }
+        noun != null -> noun.takeIf { !drawn && (place == Place.ARGUMENT || alone) }
+        else -> adjective?.takeIf { place != Place.ARGUMENT }
+    }
+
+    /** A particle after a noun stays one where what follows it is a word too: 母はええ人 is 母は ええ人, not はええ. */
+    private fun particleStays(first: Piece, before: Piece?, text: String): Boolean =
+        first.kind == "助詞" && before?.kind == "名詞" && tokenizer.knownWord(text.drop(first.surface.length)) != null
+
+    /** A noun the dictionary read, drawn out: あめー, as あめ and ー. */
+    private fun drawnNoun(span: List<Piece>): Boolean =
+        span.first().kind == "名詞" && span.size > 1 && span.drop(1).all { piece -> piece.surface.all { it == 'ー' } }
+
+    /** A particle said shifted after a number or its counter: 一時間ぐれえ is ぐらい, about an hour. */
+    private fun shiftedParticle(text: String, ahead: List<Piece>): Piece? {
+        val counted = ahead.lastOrNull() ?: return null
+        val quantity = counted.subkind in NUMBERS || (counted.counts() && ahead.getOrNull(ahead.size - 2)?.subkind in NUMBERS)
+        if (!quantity) return null
+        val root = shiftedRoots(text).firstOrNull { root ->
+            tokenizer.tokenize(counted.surface + root).last().let { it.surface == root && it.partOfSpeechLevel1 == "助詞" }
+        } ?: return null
+        return Piece(text, hiragana(text), "助詞", "副助詞", root, reader = Reader.RULES)
     }
 
     private data class ShiftedMatch(val end: Int, val word: Piece, val particles: List<Piece> = emptyList())
@@ -1387,14 +1418,14 @@ internal object Readings {
             Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
         }
         val after = particles + pieces.drop(end + suffix.first).take(1)
-        val word = shiftedWord(prefix, pieces.subList(at, end + 1), pieces.getOrNull(at - 1), after) ?: return null
+        val word = shiftedWord(prefix, pieces.subList(at, end + 1), pieces.subList(0, at), after) ?: return null
         return ShiftedMatch(end + suffix.first, word, particles)
     }
 
     private fun shiftedWhole(pieces: List<Piece>, at: Int, end: Int, text: String): ShiftedMatch? {
         val first = pieces[at]
         if (end == at && first.kind == "名詞" && first.base != first.surface) return null
-        val word = shiftedWord(text, pieces.subList(at, end + 1), pieces.getOrNull(at - 1), pieces.drop(end + 1).take(2)) ?: return null
+        val word = shiftedWord(text, pieces.subList(at, end + 1), pieces.subList(0, at), pieces.drop(end + 1).take(2)) ?: return null
         return ShiftedMatch(end + 1, word)
     }
 
