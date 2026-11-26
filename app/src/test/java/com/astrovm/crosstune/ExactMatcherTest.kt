@@ -2768,8 +2768,9 @@ class ExactMatcherTest {
     @Test
     fun mixedCreditSeparatorsDoNotSkipUnprovedNames() {
         val second = "https://music.youtube.com/watch?v=video000001"
+        val video = "https://music.youtube.com/watch?v=video000000"
         val mixed = "Band - 愛, Band - Love, Band – Sunset"
-        assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), mixed, "Band - Love"))
+        assertEquals(video, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), mixed, "Band - Love"))
         val otherArtist = "Band - Love, Other – Sunset"
         assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), otherArtist, "Band - Love"))
         val tagAsTitle = "Band - Love, Band - Video"
@@ -2778,23 +2779,23 @@ class ExactMatcherTest {
         assertEquals(second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), unknownNote, "Band - Love"))
         val emptyCatalogName = "Band - Love, Band - Video"
         assertEquals(second, findsCreditedVideo("Love", listOf("(Love)"), emptyCatalogName, "Band - Love"))
-        val video = "https://music.youtube.com/watch?v=video000000"
         assertEquals(video, findsCreditedVideo("Love", emptyList(), "Official Video, Band - Love"))
         for (dash in listOf(" - ", " – ", " — ")) {
             for (suffix in listOf("", " (Official Video)")) {
                 val original = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset$suffix"
-                assertNull(original, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), original))
+                assertEquals(original, if (dash == " - ") null else video, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), original))
             }
             val repeated = "Band${dash}愛, Band${dash}Love, Band${dash}Love, Band${dash}Sunset"
-            assertNull(repeated, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), repeated))
+            assertEquals(repeated, if (dash == " - ") null else video, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), repeated))
             for (separator in listOf(", ", " / ", " | ", " ・ ")) {
                 val first = "Band${dash}愛${separator}Band${dash}Love${separator}Band${dash}Sunset"
-                assertEquals(first, second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), first, "Band - Love"))
+                val expected = if (dash == " - " && separator == ", ") second else video
+                assertEquals(first, expected, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), first, "Band - Love"))
             }
             val first = "Band${dash}愛平和 / Band${dash}Love"
-            assertEquals(first, second, findsCreditedVideo("Love", listOf("愛", "平和"), first, "Band - Love"))
+            assertEquals(first, video, findsCreditedVideo("Love", listOf("愛", "平和"), first, "Band - Love"))
             val trailing = "Band${dash}愛, Band${dash}Love, Band${dash}Sunset,"
-            assertEquals(trailing, second, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), trailing, "Band - Love"))
+            assertEquals(trailing, if (dash == " - ") second else video, findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), trailing, "Band - Love"))
         }
     }
 
@@ -2816,7 +2817,55 @@ class ExactMatcherTest {
     @Test
     fun bracketedSeparatorsDoNotHideAnUnprovedCredit() {
         val title = "Band - 愛 (Official Video / Other - Sunset), Band - Love, Band - Sunset"
-        assertEquals("https://music.youtube.com/watch?v=video000001", findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), title, "Band - Love"))
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), title, "Band - Love"))
+    }
+
+    @Test
+    fun slashInArtistAndAliasKeepsMainVideoSelection() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("AC/DC - 愛, AC/DC - Love", "AC/DC • 1K views • 4:00", videoId = "video000000"),
+                youTubeMusicRow("AC/DC - Love", "AC/DC • 1K views • 4:00", videoId = "video000001")),
+            apple = mapOf("US" to appleSong("Love", "AC/DC", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛", "AC/DC", 240_000))
+        )
+        assertEquals(url, runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "AC/DC", lengthMs = 240_000)) })
+        assertEquals(url, findsLoveVideo("愛 / Band - 平和 (Love)", "Band - 愛 / Band - 平和, Band - Love", "Band"))
+    }
+
+    @Test
+    fun punctuationAndQuotedNotesKeepMainVideoSelection() {
+        val url = "https://music.youtube.com/watch?v=video000000"
+        for (title in listOf("Band - 愛, Band - Love, Band - …", "Band - 愛, Band - Love, Band－Official Video", "Band - Love 《Official Video / Band - 2024》")) {
+            assertEquals(title, url, findsCreditedVideo("Love", listOf("愛"), title, "Band - Love"))
+        }
+    }
+
+    @Test
+    fun fullLabelWordsKeepMainVideoSelection() {
+        val title = "Band - 愛 Lyric Subtitles, Band - Love"
+        assertEquals("https://music.youtube.com/watch?v=video000000", findsCreditedVideo("Love", listOf("愛"), title, "Band - Love"))
+    }
+
+    @Test
+    fun commaInsideEachBracketKindDoesNotSplitACredit() {
+        for ((open, close) in listOf("(" to ")", "[" to "]", "{" to "}", "「" to "」", "『" to "』", "【" to "】", "《" to "》", "〈" to "〉")) {
+            val title = "Band - 愛 ${open}Official Video, 2024$close, Band - Love, Band - Sunset"
+            assertEquals(title, "https://music.youtube.com/watch?v=video000001", findsCreditedVideo("Love", listOf("愛 (Sunset)", "愛"), title, "Band - Love"))
+        }
+    }
+
+    @Test
+    fun bilingualFanDoesNotDisplaceMainOfficialVideo() {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Band – 愛, Band – Love", "Fan • 1K views • 4:00", videoId = "video000000"),
+                youTubeMusicRow("Band - Love", "Band • 1K views • 4:00", videoId = "video000001")),
+            apple = mapOf("US" to appleSong("Love", "Band", 240_000)),
+            elsewhere = mapOf("JP" to appleSong("愛 - Love", "Band", 240_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=video000001", runBlocking {
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Love", "Band", lengthMs = 240_000))
+        })
     }
 
     @Test
