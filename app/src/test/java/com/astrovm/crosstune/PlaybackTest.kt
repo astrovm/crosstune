@@ -763,12 +763,16 @@ class PlaybackTest {
         val player = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album",
             duration = 30_000, position = 12_000)
         shadowOf(sessions).addController(player)
-        val asked = song.copy(lengthMs = 253_000, album = "Album", url = "https://music.youtube.com/watch?v=abcdefghijk")
-        val reading = checkNotNull(followed(asked).last())
-        assertTrue(reading.ad)
-        assertEquals(0L, reading.clock.positionMs)
-        assertEquals(253_000L, reading.durationMs)
-        assertEquals(reading, playback.matching(asked).single().following)
+        val tune = song.copy(album = "Album", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        for (duration in listOf(253_000L, AD_DURATION_HINT_MS)) {
+            val asked = tune.copy(lengthMs = duration)
+            val reading = checkNotNull(followed(asked).last())
+            assertTrue(reading.ad)
+            assertEquals(0L, reading.clock.positionMs)
+            assertEquals(duration, reading.durationMs)
+            assertEquals(reading, playback.matching(asked).single().following)
+        }
+        assertNull(followed(tune.copy(lengthMs = AD_DURATION_HINT_MS - 1)).last())
     }
 
     @Test
