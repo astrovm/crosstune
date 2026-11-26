@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.Context
+import android.content.ComponentName
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -12,6 +13,8 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -4388,6 +4391,63 @@ class MainViewModelTest {
     private val ytMusic = MusicService.YOUTUBE_MUSIC.packageName
     private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
+
+    @Test
+    fun anAdHintKeepsLyricsStillAndNeverBecomesAPracticeLength() {
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
+        val receiver = MediaSession(app, ytMusic)
+        val controller = MediaController(app, receiver.sessionToken)
+        shadowOf(controller).setPackageName(ytMusic)
+        val ad = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Dakare Ni Kita Onna")
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Kingo Hamada").putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "sPmul8b17AU")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build()
+        shadowOf(controller).setMetadata(ad)
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 5_000, 1f).build())
+        val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
+        sessions.addController(controller)
+        val media = MediaSessionPlayback(app)
+        val fakePlayback = FakePlayback().apply { access = true }
+        val playback = object : PlaybackSource by fakePlayback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?) = media.follow(song, app, session, videoAdLength)
+            override fun recording(song: MusicMetadata) = media.recording(song)
+        }
+        fake.handler = { request -> when (request.url.host) {
+            "music.youtube.com" -> FakeSpotify.html(request, """{"playlistPanelVideoRenderer":{"videoId":"sPmul8b17AU","title":{"runs":[{"text":"Dakare Ni Kita Onna"}]},"longBylineText":{"runs":[{"text":"Kingo Hamada"}]},"lengthText":{"runs":[{"text":"4:23"}]}}}""")
+            "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","syncedLyrics":"[00:00.00] One\n[00:10.00] Two"}]""")
+            else -> FakeSpotify.html(request, "Forbidden", code = 403)
+        } }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = model(playback = playback, lyricsFinder = finder, lookAhead = false)
+        try {
+            model.refreshSystemState()
+            model.onUrlChange(ytLink)
+            model.resolveTypedInput()
+            until("the video is resolved") { model.uiState.result != null && !model.uiState.isLoading }
+            model.playResult()
+            until("the player holds the ad") { model.uiState.player?.following?.ad == true }
+            assertEquals(30_000L, model.uiState.player?.following?.durationMs)
+            model.playerLyrics()
+            until("the words hold the ad") { model.uiState.following?.ad == true && model.uiState.lyricLines.isNotEmpty() }
+            assertEquals(0L, model.uiState.following?.clock?.positionMs)
+            model.toggleSavedLine(0)
+            assertEquals(30_000L, model.uiState.savedLines.single().lengthMs)
+            val actual = MediaMetadata.Builder(ad).putLong(MediaMetadata.METADATA_KEY_DURATION, 240_000).build()
+            shadowOf(controller).setMetadata(actual)
+            shadowOf(controller).executeOnMetadataChanged(actual)
+            idle()
+            until("the words follow the song") { model.uiState.following?.ad == false && model.uiState.following?.durationMs == 240_000L }
+            model.toggleSavedLine(1)
+            assertEquals(240_000L, model.uiState.savedLines.single { it.text == "Two" }.lengthMs)
+        } finally {
+            model.closePlayer()
+            sessions.clearControllers()
+            receiver.release()
+            Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+            NotificationManagerCompat.getEnabledListenerPackages(app)
+        }
+    }
 
     @Test
     fun exactVideoAdLengthTravelsOnlyWithThisPlay() {

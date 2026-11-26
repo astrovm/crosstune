@@ -470,11 +470,60 @@ class PlaybackTest {
         val seen = followed(asked.metadata, asked.videoAdLength)
         assertTrue(checkNotNull(seen.last()).ad)
         assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(seen.last()).clock)
-        val actual = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 263_000).build()
+        val actual = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 240_000).build()
         shadowOf(music).setMetadata(actual)
         shadowOf(music).executeOnMetadataChanged(actual)
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(checkNotNull(seen.last()).ad)
+        assertEquals(240_000L, checkNotNull(seen.last()).durationMs)
+    }
+
+    @Test
+    fun catalogueDurationDoesNotHoldANearlyEqualSong() {
+        allow()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", position = 5_000, duration = 149_950)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "4NRXx6U8ABQ").build())
+        shadowOf(sessions).addController(music)
+        val seen = followed(song, VideoAdLength("4NRXx6U8ABQ", 150_000))
+        val near = checkNotNull(seen.last())
+        assertFalse(near.ad)
+        assertEquals(5_000L, near.clock.positionMs)
+        shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 20_000, 1f, PLAYED_AT + 15_000).build())
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(20_000L, checkNotNull(seen.last()).clock.positionMs)
+        assertTrue(checkNotNull(followed(song.copy(lengthMs = 150_000)).last()).ad)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 140_001).build())
+        assertFalse(checkNotNull(followed(song, VideoAdLength("4NRXx6U8ABQ", 150_000)).last()).ad)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 140_000).build())
+        assertTrue(checkNotNull(followed(song, VideoAdLength("4NRXx6U8ABQ", 150_000)).last()).ad)
+    }
+
+    @Test
+    fun catalogueDurationIsNotDisplayedAndLyricsStillDetectTheAd() {
+        allow()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", position = 5_000, duration = 149_950)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "4NRXx6U8ABQ").build())
+        shadowOf(sessions).addController(music)
+        val ad = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build()
+        shadowOf(music).setMetadata(ad)
+        val following = checkNotNull(followed(song, VideoAdLength("4NRXx6U8ABQ", 263_000)).last())
+        assertTrue(following.ad)
+        assertEquals(30_000L, following.durationMs)
+        val known = checkNotNull(followed(song.copy(lengthMs = 240_000), VideoAdLength("4NRXx6U8ABQ", 263_000)).last())
+        assertTrue(known.ad)
+        assertEquals(240_000L, known.durationMs)
+    }
+
+    @Test
+    fun lyricsThatReadTheAdDurationStillDetectTheAd() {
+        allow()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", position = 5_000, duration = 30_000)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "4NRXx6U8ABQ").build())
+        shadowOf(sessions).addController(music)
+        val lyrics = checkNotNull(followed(song.copy(lengthMs = 30_000), VideoAdLength("4NRXx6U8ABQ", 263_000)).last())
+        assertTrue(lyrics.ad)
+        assertEquals(30_000L, lyrics.durationMs)
     }
 
     @Test

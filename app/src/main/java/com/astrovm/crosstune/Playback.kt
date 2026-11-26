@@ -490,7 +490,7 @@ internal class MediaSessionPlayback(
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller, controller.adLengthFor(song, videoAdLength))?.let {
+        fun steadily(controller: MediaController) = following(controller, song.lengthMs, videoAdLength)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
@@ -968,15 +968,16 @@ internal class MediaSessionPlayback(
         return (listOfNotNull(asked) + known.asReversed()).firstOrNull { it >= LONGEST_AD_MS }
     }
 
-    /** A video duration is evidence only for that video in YouTube Music, never for another app or recording. */
-    private fun MediaController.adLengthFor(song: MusicMetadata, video: VideoAdLength?): Long? {
-        video ?: return song.lengthMs
-        if (song.lengthMs != null || MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return song.lengthMs
-        val current = metadata
-        val uri = current?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+    /** A video length can identify an ad, but is not the playing recording's length. */
+    private fun MediaController.videoUnderAd(current: MediaMetadata, video: VideoAdLength?): Boolean {
+        video ?: return false
+        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return false
+        val reported = current.getLong(MediaMetadata.METADATA_KEY_DURATION)
+        if (reported !in 1 until LONGEST_AD_MS || video.lengthMs < LONGEST_AD_MS || video.lengthMs - reported < VIDEO_AD_MARGIN_MS) return false
+        val uri = current.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
         val uriLink = (uri?.let(MusicLinks::parse) as? LinkInput.Link)?.link
-        if (uriLink != null && uriLink.id != video.id) return null
-        return video.lengthMs.takeIf { current?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video.id }
+        if (uriLink != null && uriLink.id != video.id) return false
+        return current.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video.id
     }
 
     /** What plays, as the app names it. */
@@ -1120,7 +1121,7 @@ internal class MediaSessionPlayback(
                 MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_MEDIA_URI).map(metadata::getString))
         }
 
-    private fun following(controller: MediaController, asked: Long?): Following? {
+    private fun following(controller: MediaController, asked: Long?, video: VideoAdLength? = null): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
@@ -1130,7 +1131,7 @@ internal class MediaSessionPlayback(
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
-        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
+        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) != null || controller.videoUnderAd(it, video) } == true
         val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
@@ -1350,6 +1351,8 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L
+// Catalogue clocks round to seconds; the observed 10–94 s ads are at least 56 s short of this limit.
+private const val VIDEO_AD_MARGIN_MS = 10_000L
 
 /** Two clocks this close go on from the same: what an app says on a clock is exact to the millisecond. */
 internal const val SAME_CLOCK_MS = 50L

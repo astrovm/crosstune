@@ -3,6 +3,15 @@ package com.astrovm.crosstune
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import okhttp3.Request
+import okhttp3.Call
+import okhttp3.EventListener
+import okhttp3.MediaType
+import okhttp3.ResponseBody
+import okio.Buffer
+import okio.BufferedSource
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -202,6 +211,88 @@ class LinkResolverTest {
         assertEquals(null, found().videoAdLength)
         status = 503
         assertEquals(null, found().videoAdLength)
+    }
+
+    @Test
+    fun aFailedEarlyVideoLookupIsRetriedAfterOEmbedRefuses() {
+        listOf(503 to "busy", 200 to "{}").forEach { (status, body) ->
+            var calls = 0
+            fake.handler = { request ->
+                if (request.url.host == "music.youtube.com") {
+                    calls++
+                    if (calls == 1) FakeSpotify.html(request, body, code = status)
+                    else FakeSpotify.html(request, nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "4:23", "OMV"))
+                } else FakeSpotify.html(request, "Forbidden", code = 403)
+            }
+            val immediate = LinkResolver(fake.inlineClient(), Dispatchers.Unconfined)
+            val result = runBlocking { immediate.resolve(checkNotNull(MusicLinks.parse("https://youtu.be/4NRXx6U8ABQ"))) }
+            assertTrue(result is Resolution.Resolved)
+            assertEquals(2, calls)
+        }
+    }
+
+    @Test
+    fun aPendingEarlyVideoLookupDoesNotDelayTheRefusedOEmbedFallback() {
+        val firstStarted = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                if (calls.incrementAndGet() == 1) {
+                    firstStarted.countDown()
+                    release.await(10, TimeUnit.SECONDS)
+                    FakeSpotify.html(request, "busy", code = 503)
+                } else FakeSpotify.html(request, nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "4:23", "OMV"))
+            } else {
+                check(firstStarted.await(5, TimeUnit.SECONDS))
+                FakeSpotify.html(request, "Forbidden", code = 403)
+            }
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val result = executor.submit<Resolution> { resolve("https://youtu.be/4NRXx6U8ABQ") }.get(5, TimeUnit.SECONDS)
+            assertTrue(result is Resolution.Resolved)
+            assertEquals(2, calls.get())
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun finishingTheLinkCancelsAnAlreadyStartedCatalogueBody() {
+        val reading = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val cancelled = CountDownLatch(1)
+        val source = object : Source {
+            override fun read(sink: Buffer, byteCount: Long): Long {
+                reading.countDown()
+                release.await(10, TimeUnit.SECONDS)
+                return -1
+            }
+            override fun timeout(): Timeout = Timeout.NONE
+            override fun close() = Unit
+        }.buffer()
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "").newBuilder().body(object : ResponseBody() {
+                override fun contentType(): MediaType? = null
+                override fun contentLength() = -1L
+                override fun source(): BufferedSource = source
+            }).build() else {
+                check(reading.await(5, TimeUnit.SECONDS))
+                FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+            }
+        }
+        val client = fake.client().newBuilder().eventListener(object : EventListener() {
+            override fun canceled(call: Call) { if (call.request().url.host == "music.youtube.com") cancelled.countDown() }
+        }).build()
+        try {
+            val result = runBlocking { LinkResolver(client).resolve(checkNotNull(MusicLinks.parse("https://youtu.be/4NRXx6U8ABQ"))) }
+            assertTrue(result is Resolution.Resolved)
+            assertTrue(cancelled.await(5, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+        }
     }
 
     @Test

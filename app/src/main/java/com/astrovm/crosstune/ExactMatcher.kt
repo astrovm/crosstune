@@ -154,10 +154,12 @@ internal class ExactMatcher(
      * them, or someone's own upload they put under Music, like a concert they filmed; not a tutorial
      * or a vlog. Null when it can't be told, e.g. offline.
      */
-    suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
+    suspend fun isMusicVideo(videoId: String, onAnswer: (JSONObject) -> Unit = {}): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
         answeredOr(null) {
             val body = YouTubeMusicApi.body(language = null).put("videoId", videoId)
-            musicVideoTypeIn(fetchJson(YouTubeMusicApi.NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
+            val answer = fetchJson(YouTubeMusicApi.NEXT_URL, body)
+            onAnswer(answer)
+            musicVideoTypeIn(answer)?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
         }
     }
 

@@ -8,7 +8,10 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,6 +21,7 @@ import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boolean = false) {
     INVALID_URL(R.string.error_invalid_url),
@@ -55,8 +59,8 @@ internal class LinkResolver(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val apis: ServiceApis = ServiceApis(client, java.util.Locale.getDefault().country, ioDispatcher)
 ) {
-    suspend fun resolve(input: LinkInput): Resolution = when (input) {
-        is LinkInput.Link -> resolveLink(input.link)
+    suspend fun resolve(input: LinkInput, videoAnswer: Deferred<JSONObject?>? = null): Resolution = when (input) {
+        is LinkInput.Link -> resolveLink(input.link, videoAnswer)
         is LinkInput.ShortLink -> guarded(null) { resolveShortLink(input.url) }
         is LinkInput.ShazamTrack -> guarded(null) { resolveShazamTrack(input.key) }
         is LinkInput.RecognizedSong -> Resolution.Resolved(
@@ -98,21 +102,21 @@ internal class LinkResolver(
         return Resolution.Resolved(MusicLink(null, ItemType.TRACK, recognized.url, recognized.url), metadata)
     }
 
-    private suspend fun resolveLink(link: MusicLink): Resolution {
+    private suspend fun resolveLink(link: MusicLink, shared: Deferred<JSONObject?>? = null): Resolution {
         // Never wait for this optional answer. It runs alongside the normal link lookup and is
         // cancelled when that lookup finishes, so a slow catalogue does not hold up the link.
-        val scope = if (link.isYouTubeVideo()) CoroutineScope(SupervisorJob() + ioDispatcher) else null
-        val video = scope?.async(start = CoroutineStart.UNDISPATCHED) {
+        val scope = if (link.isYouTubeVideo() && shared == null) CoroutineScope(SupervisorJob() + ioDispatcher) else null
+        val video = shared ?: scope?.async(start = CoroutineStart.UNDISPATCHED) {
             youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", link.id)
         }
         return try {
-            resolveLink(link, video)
+            resolveLinkAnswer(link, video)
         } finally {
             scope?.cancel()
         }
     }
 
-    private suspend fun resolveLink(link: MusicLink, video: Deferred<JSONObject?>?): Resolution = guarded(link) {
+    private suspend fun resolveLinkAnswer(link: MusicLink, video: Deferred<JSONObject?>?): Resolution = guarded(link) {
         if (link.service == MusicService.YOUTUBE_MUSIC && (link.type == ItemType.ALBUM || link.type == ItemType.ARTIST)) {
             return@guarded youTubeMusicPage(link)?.let { Resolution.Resolved(link, it) } ?: Resolution.Failed(AppError.METADATA_UNAVAILABLE, link)
         }
@@ -142,7 +146,9 @@ internal class LinkResolver(
 
     private suspend fun refusedTrack(link: MusicLink, video: Deferred<JSONObject?>?): Resolution.Resolved? {
         if (link.isYouTubeVideo()) {
-            val answer = video?.await() ?: return null
+            val early = video?.takeIf { it.isCompleted }?.await()
+            val answer = early?.takeIf { MetadataParsers.youtubeMusicVideo(it, link.id) != null }
+                ?: youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", link.id) ?: return null
             val metadata = MetadataParsers.youtubeMusicVideo(answer, link.id) ?: return null
             val length = MetadataParsers.youtubeMusicVideoLength(answer, link.id)
             return Resolution.Resolved(link, metadata, length?.let { VideoAdLength(link.id, it) })
@@ -243,7 +249,7 @@ internal class LinkResolver(
         Resolution.Failed(AppError.METADATA_UNAVAILABLE, link)
     }
 
-    /** Cancelling the calling coroutine cancels the HTTP call. */
+    /** Whether this link names an exact YouTube video. */
     private fun MusicLink.isYouTubeVideo() =
         (service == MusicService.YOUTUBE || service == MusicService.YOUTUBE_MUSIC) && type == ItemType.TRACK
 
@@ -262,9 +268,21 @@ internal class LinkResolver(
     private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = answeredOr(null) {
         val body = YouTubeMusicApi.body().put(key, id)
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        client.newCall(request).answer(ioDispatcher) { response ->
-            if (!response.isSuccessful) return@answer null
-            JSONObject(response.body.stringAtMost())
+        val call = client.newCall(request)
+        coroutineScope {
+            val finished = AtomicBoolean(false)
+            val cancellation = launch(start = CoroutineStart.UNDISPATCHED) {
+                try { awaitCancellation() } finally { if (!finished.get()) call.cancel() }
+            }
+            try {
+                call.answer(ioDispatcher) { response ->
+                    if (!response.isSuccessful) return@answer null
+                    JSONObject(response.body.stringAtMost())
+                }
+            } finally {
+                finished.set(true)
+                cancellation.cancel()
+            }
         }
     }
 

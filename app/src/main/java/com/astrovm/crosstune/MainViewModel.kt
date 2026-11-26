@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +45,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.json.JSONObject
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -1783,24 +1785,36 @@ internal class MainViewModel(
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
+            val videoAnswer = video?.let { CompletableDeferred<JSONObject?>() }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async {
                 val entry = saved?.let { refreshSavedAlbum(it) }
-                val resolution = entry?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input))
+                val resolution = entry?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input, videoAnswer))
                 resolution to entry
             }
-            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launchKept
+            if (!lookupGoesOn(video, copied, lookup, ::showLoading, videoAnswer)) return@launchKept
             val (resolution, entry) = lookup.await()
-            lookedUp(resolution, entry, checked)
+            lookedUp(withSharedVideoLength(resolution, video, videoAnswer), entry, checked)
         }
+    }
+
+    private suspend fun withSharedVideoLength(resolution: Resolution, video: MusicLink?, answer: Deferred<JSONObject?>?): Resolution {
+        val resolved = resolution as? Resolution.Resolved ?: return resolution
+        if (resolved.videoAdLength != null) return resolution
+        val id = video?.id ?: return resolution
+        val body = answer?.await() ?: return resolution
+        val length = MetadataParsers.youtubeMusicVideoLength(body, id) ?: return resolution
+        return resolved.copy(videoAdLength = VideoAdLength(id, length))
     }
 
     /**
      * Whether [lookup] goes on once YouTube Music says if [video] is music: one [copied] is only filled
      * in if it is, and one that isn't opens as it is. Otherwise [lookup] is cancelled.
      */
-    private suspend fun lookupGoesOn(video: MusicLink?, copied: Boolean, lookup: Job, showLoading: () -> Unit): Boolean {
-        val music = video?.let { matcher.isMusicVideo(it.id) }
+    private suspend fun lookupGoesOn(video: MusicLink?, copied: Boolean, lookup: Job, showLoading: () -> Unit, answer: CompletableDeferred<JSONObject?>?): Boolean {
+        val music = video?.let { link ->
+            try { matcher.isMusicVideo(link.id) { answer?.complete(it) } } finally { answer?.complete(null) }
+        }
         if (copied) {
             if (video == null || music != true || !readyForCopy) {
                 lookup.cancel()
@@ -4203,7 +4217,7 @@ internal class MainViewModel(
         val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
         val queue = if (followingRadioLyrics) snapshotFlow { uiState.playingUnnamed?.confirmedQueueSong } else flowOf(null)
         viewModelScope.launchKept({ nextJob = it }) {
-            combine(source.follow(song), source.nowPlayingUpdates(), queue, ::Triple).collect { (app, playing, queued) ->
+            combine(source.follow(song, videoAdLength = playerVideoAdLength(song)), source.nowPlayingUpdates(), queue, ::Triple).collect { (app, playing, queued) ->
                 if (app?.clock?.playing == true) shownPlayed = true
                 // Practice moves the music app from song to song, which the words stay out of.
                 if (uiState.practice != null) return@collect
