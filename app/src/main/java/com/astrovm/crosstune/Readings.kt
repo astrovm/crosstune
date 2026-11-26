@@ -300,16 +300,22 @@ internal object Readings {
         }
     })
 
-    private fun finalNanjaParticle(pieces: List<Piece>): List<Piece> = pieces.mapIndexed { at, piece ->
+    private val NANJA_FINAL_PARTICLES = setOf('な', 'よ', 'ね', 'さ', 'の')
+
+    private fun finalNanjaParticle(pieces: List<Piece>): List<Piece> = pieces.flatMapIndexed { at, piece ->
         val head = pieces.getOrNull(at - 2)
         val before = pieces.getOrNull(at - 1)
-        val after = pieces.getOrNull(at + 1)
         val explanation = head?.surface == "なん" && head.base == "なんだ" && before?.surface == "じゃ"
-        val finalI = piece.surface == "い" && piece.base == "いる" && (after == null || after.kind == "記号")
-        if (explanation && finalI) {
-            Piece("い", "い", "助詞", "終助詞", reader = Reader.RULES)
-        } else piece
+        val attached = piece.surface.drop(1)
+        val particle = piece.surface.startsWith("い") && (piece.base == "いる" || attached.isNotEmpty()) &&
+            attached.all { it in NANJA_FINAL_PARTICLES }
+        if (explanation && particle && pieces.finalNanjaSuffix(at + 1)) {
+            ("い" + attached).map { Piece(it.toString(), it.toString(), "助詞", "終助詞", reader = Reader.RULES) }
+        } else listOf(piece)
     }
+
+    private fun List<Piece>.finalNanjaSuffix(at: Int) = drop(at).takeWhile { it.kind != "記号" }
+        .all { it.kind == "助詞" && it.surface.all { c -> c in NANJA_FINAL_PARTICLES } }
 
     /** Read the copula after 何なん as it would be read after a noun, even if the dictionary joined its pieces. */
     private fun List<Piece>.interrogativePiece(at: Int): Pair<List<Piece>, Int>? {

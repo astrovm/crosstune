@@ -722,6 +722,37 @@ class ReadingsTest {
     }
 
     @Test
+    fun interrogativeNanjaIFollowedByFinalParticlesIsAParticle() {
+        fun lookups() = listOf("何なんじゃいな", "何なんじゃいよ", "何なんじゃいね", "何なんじゃいさ", "何なんじゃいの").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "な" to "な"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "よ" to "よ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "ね" to "ね"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "さ" to "さ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "の" to "の"),
+        )
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun nanjaIParticleStopsAtThePhraseEnd() {
+        fun read() = listOf("何なんじゃいなよ", "何なんじゃいよね！", "なんなんじゃいの？", "何なんじゃいな猫").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "な" to "な", "よ" to "よ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "よ" to "よ", "ね" to "ね"),
+            listOf("なん" to "なん", "なんじゃ" to "なんだ", "い" to "い", "の" to "の"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いな" to "いる", "猫" to "猫"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
+    }
+
+    @Test
     fun interrogativeCopulaKeepsTheRestOfTheLine() {
         val tail = "よこの気持ちは君の名前を呼びながら帰る"
         fun tailWords(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.let { words ->
