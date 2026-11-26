@@ -527,6 +527,38 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAdLengthReadByLyricsDoesNotBlockTheSameVideoWhenItsSongStarts() {
+        allow()
+        val packageName = MusicService.YOUTUBE_MUSIC.packageName
+        val video = VideoAdLength("4NRXx6U8ABQ", 263_000)
+        val music = player(packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours", position = 5_000, duration = 30_000)
+        val ad = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, video.id).build()
+        shadowOf(music).setMetadata(ad)
+        shadowOf(sessions).addController(music)
+        val lyrics = song.copy(lengthMs = 30_000, recordingId = "$packageName:${video.id}")
+        val seen = followed(lyrics, video)
+        val withoutRecording = followed(song.copy(lengthMs = 30_000), video)
+        assertTrue(checkNotNull(seen.last()).ad)
+        assertTrue(checkNotNull(withoutRecording.last()).ad)
+        val actual = MediaMetadata.Builder(ad).putLong(MediaMetadata.METADATA_KEY_DURATION, 240_000).build()
+        shadowOf(music).setMetadata(actual)
+        shadowOf(music).executeOnMetadataChanged(actual)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(checkNotNull(seen.last()).ad)
+        assertEquals(240_000L, checkNotNull(seen.last()).durationMs)
+        assertNull(withoutRecording.last())
+        val another = MediaMetadata.Builder(actual).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "dQw4w9WgXcQ").build()
+        shadowOf(music).setMetadata(another)
+        shadowOf(music).executeOnMetadataChanged(another)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        shadowOf(music).setMetadata(actual)
+        shadowOf(music).executeOnMetadataChanged(actual)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
     fun videoAdLengthDoesNotChangeOtherReports() {
         allow()
         fun seen(packageName: String, id: String?, duration: Long, asked: MusicMetadata, video: VideoAdLength? = null, uri: String? = null): Following {

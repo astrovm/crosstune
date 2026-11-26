@@ -4402,6 +4402,7 @@ class MainViewModelTest {
         shadowOf(controller).setPackageName(ytMusic)
         val ad = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Dakare Ni Kita Onna")
             .putString(MediaMetadata.METADATA_KEY_ARTIST, "Kingo Hamada").putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "sPmul8b17AU")
+            .putString(MediaMetadata.METADATA_KEY_ALBUM, "After Hours")
             .putLong(MediaMetadata.METADATA_KEY_DURATION, 30_000).build()
         shadowOf(controller).setMetadata(ad)
         shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 5_000, 1f).build())

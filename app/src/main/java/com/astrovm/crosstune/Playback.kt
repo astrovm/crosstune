@@ -487,10 +487,12 @@ internal class MediaSessionPlayback(
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
         var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
+        val videoAd = VideoAdSession(song, videoAdLength)
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs, videoAdLength)?.let {
+            videoAd.observe(controller)
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
@@ -509,7 +511,7 @@ internal class MediaSessionPlayback(
             }
         }
         fun pick(controllers: List<MediaController>) {
-            val playing = controllerToFollow(song, controllers, app, token, session)
+            val playing = videoAd.pick(controllers, app, token, session)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 modesWatched()
@@ -566,6 +568,29 @@ internal class MediaSessionPlayback(
             clockLog.note("follow_end", now) { put("observer", clockObserver) }
         }
     }.distinctUntilChanged()
+
+    /** A short ad length read by lyrics must not hide the same session when the song starts. */
+    private inner class VideoAdSession(private val song: MusicMetadata, private val video: VideoAdLength?) {
+        private var adSession: MediaSession.Token? = null
+
+        fun observe(controller: MediaController) {
+            if (controller.readLyricsLengthFromAd(song, video)) adSession = controller.sessionToken
+        }
+
+        fun pick(controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?): MediaController? {
+            if (adSession != null && controllers.none {
+                    it.sessionToken == adSession && it.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video?.id
+                }) adSession = null
+            val normal = controllerToFollow(song, controllers, app, token, session)
+            if (normal != null) {
+                if (normal.sessionToken != adSession) adSession = null
+                return normal
+            }
+            val adToken = adSession ?: return null
+            return controllerToFollow(song.copy(lengthMs = null), controllers, app, adToken, session)
+                ?.takeIf { it.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video?.id }
+        }
+    }
 
     private fun controllerToFollow(
         song: MusicMetadata, controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?
@@ -978,6 +1003,14 @@ internal class MediaSessionPlayback(
         val uriLink = (uri?.let(MusicLinks::parse) as? LinkInput.Link)?.link
         if (uriLink != null && uriLink.id != video.id) return false
         return current.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video.id
+    }
+
+    /** A lyrics lookup may have read this ad's short report as the requested recording length. */
+    private fun MediaController.readLyricsLengthFromAd(song: MusicMetadata, video: VideoAdLength?): Boolean {
+        val current = metadata ?: return false
+        val exact = video ?: return false
+        return videoUnderAd(current, exact) && song.lengthMs == current.getLong(MediaMetadata.METADATA_KEY_DURATION) &&
+            song.recordingId == "$packageName:${exact.id}"
     }
 
     /** What plays, as the app names it. */
