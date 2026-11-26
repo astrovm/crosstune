@@ -1276,6 +1276,9 @@ internal object Readings {
     /** Particles that mark a verb's place or partner: ここにいてえ, ひとりでいてえ, 君といてえ, ボタンをおせえ. The で of まじで is だ. */
     private val VERB_PARTNERS = setOf("に", "で", "を", "と")
 
+    /** Adverbs that urge a command on, 早くだせえ and もっとおせえ. */
+    private val COMMAND_ADVERBS = setOf("さっさと", "とっとと", "早く", "はやく", "もっと", "すぐ")
+
     private val shiftedI = mapOf('き' to 'く', 'ぎ' to 'ぐ', 'し' to 'す', 'じ' to 'ず', 'ち' to 'つ', 'に' to 'ぬ',
         'ひ' to 'ふ', 'び' to 'ぶ', 'ぴ' to 'ぷ', 'み' to 'む', 'り' to 'る')
 
@@ -1372,16 +1375,27 @@ internal object Readings {
     }
 
     /**
-     * A verb's command said long, 金くれえ and ボタンおせえ, stays the verb, as no adjective is more likely there,
-     * unless the line marks the adjective: its subject before it, 返事がおせえな; a word of degree before it,
-     * 超くれえ; the noun it describes after it, くれえ部屋; or an ending no command takes, おせえでした and おせえから.
+     * A verb's command said long stays the verb where the line gives it something to act on, and the adjective
+     * otherwise. くれえ is くれ, give, far more often than くらい, so 金くれえ and くれえ alone stay the verb. Any other
+     * command needs a noun before it, ボタンおせえ and 返事もおせえ, or an adverb that goes with commands, 早くだせえ: alone,
+     * after a pronoun or after a comma, おせえ, あいつおせえ and だせえな are the adjective. A marked adjective is the
+     * adjective even after a noun: its subject before it, 返事がおせえな; a word of degree before it, 超くれえ; the noun
+     * it describes after it, くれえ部屋; or an ending no command takes, おせえでした and おせえから.
      */
     private fun keepsCommand(text: String, verb: Piece, ahead: List<Piece>, place: Place, after: Piece?): Boolean {
-        if (!isCommand(text, verb)) return false
+        if (!isCommand(text, verb) || marksAdjective(ahead, place, after)) return false
+        // The noun can stand before an adverb or a particle such as こそ, 声を今こそだせえ, but not before a comma.
+        val noun = ahead.lastOrNull { it.kind == "記号" || !standsBetween(it) }
+        val acted = ahead.lastOrNull()?.surface in COMMAND_ADVERBS || (noun?.kind == "名詞" && noun.subkind != "代名詞")
+        return verb.surface == "くれ" || acted
+    }
+
+    /** Whether the line marks a word, where [ahead] ends and [after] starts, as an adjective. */
+    private fun marksAdjective(ahead: List<Piece>, place: Place, after: Piece?): Boolean {
         val before = ahead.lastOrNull()
         val subject = before?.kind == "助詞" && before.surface in SUBJECT_PARTICLES
         val degree = ahead.joinToString("") { it.surface }.let { line -> DEGREE_WORDS.any(line::endsWith) }
-        return !subject && !degree && after?.let(::endsAdjective) != true && place != Place.MODIFIES
+        return subject || degree || after?.let(::endsAdjective) == true || place == Place.MODIFIES
     }
 
     /** Whether [text] is the command the dictionary split as [verb], said long: くれえ from くれ, おせえ from 押せ. */

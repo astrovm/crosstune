@@ -279,6 +279,11 @@ class ReadingsTest {
             // the noun it describes, or an ending no command takes.
             Triple("この部屋はくれえ", "くれえ", "くらい"), Triple("超くれえ", "くれえ", "くらい"), Triple("くれえ部屋", "くれえ", "くらい"),
             Triple("おせえから帰る", "おせえ", "おそい"), Triple("おせえのか", "おせえ", "おそい"),
+            // Any command but くれ is the adjective with nothing before it to act on: alone, after a comma or a pronoun.
+            Triple("おせえ", "おせえ", "おそい"), Triple("おせえよ", "おせえ", "おそい"), Triple("おせえよな", "おせえ", "おそい"),
+            Triple("おせえ！早くしろ", "おせえ", "おそい"), Triple("あいつおせえ", "おせえ", "おそい"), Triple("だせえ", "だせえ", "ださい"),
+            Triple("だせえな", "だせえ", "ださい"), Triple("かてえ", "かてえ", "かたい"), Triple("なげえ", "なげえ", "ながい"),
+            Triple("ああ、なげえ", "なげえ", "ながい"), Triple("あいつもおせえ", "おせえ", "おそい"), Triple("今日、おせえ", "おせえ", "おそい"),
             // A noun the dictionary read, drawn out, is still the adjective at the end.
             Triple("このジュースあめー", "あめー", "あまい"),
             // Words that only look shifted.
@@ -315,11 +320,14 @@ class ReadingsTest {
             "君といてえ" to "君=君|と=と|いて=いる|え=え", "ひとりでいてえ" to "ひとり=ひとり|で=で|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
             "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
-            // A command said long, where nothing in the line marks an adjective: give me money, more, a dream; press it.
-            "金くれえ" to "金=金|くれ=くれる|え=え", "もっとくれえ" to "もっと=もっと|くれ=くれる|え=え",
-            "夢くれえよ" to "夢=夢|くれえ=くれる|よ=よ", "ボタンおせえ" to "ボタン=ボタン|おせ=おせる|え=え",
-            "おせえ" to "おせ=おせる|え=え", "おせえよな" to "おせえよ=おせる|な=な", "だせえ" to "だせ=だせる|え=え",
-            "おせえ！早くしろ" to "おせえ=おせる|早く=早い|しろ=する",
+            // くれ said long, where nothing in the line marks an adjective: give, give me money, more, a dream.
+            "くれえ" to "くれ=くれる|え=え", "金くれえ" to "金=金|くれ=くれる|え=え", "もっとくれえ" to "もっと=もっと|くれ=くれる|え=え",
+            "夢くれえよ" to "夢=夢|くれえ=くれる|よ=よ",
+            // Another command said long after a noun or an adverb it acts on: press the button, hand over the money, quick.
+            "ボタンおせえ" to "ボタン=ボタン|おせ=おせる|え=え", "金だせえ" to "金=金|だせ=だせる|え=え",
+            "早くだせえ" to "早く=早い|だせ=だす|え=え", "さっさとだせえ" to "さっさと=さっさと|だせ=だす|え=え",
+            "今日おせえ" to "今日=今日|おせ=おせる|え=え",
+            "大きな声を今こそだせえ" to "大きな=大きな|声=声|を=を|今=今|こそ=こそ|だせ=だせる|え=え",
             // A command after a counter or a pronoun, which could be ぐらい: give me five minutes, give me this.
             "五分くれえ" to "五分=五|くれ=くれる|え=え", "これくれえ" to "これ=これ|くれ=くれる|え=え",
             // With an adverb or a comma between.
