@@ -475,6 +475,13 @@ internal object Readings {
         return katakana.takeIf(tokenizer::isNoun)
     }
 
+    /** Let the dictionary distinguish particles after an adjective from a word such as いろいろ. */
+    private fun adjectiveParticles(suffix: String): List<com.atilika.kuromoji.ipadic.Token>? {
+        if (suffix.isEmpty()) return emptyList()
+        val tokens = tokenizer.tokenize("高い" + suffix)
+        return tokens.drop(1).takeIf { tokens.first().surface == "高い" && it.all { token -> token.partOfSpeechLevel1 == "助詞" } }
+    }
+
     private val DRAWN_AUXILIARY_HEADS = setOf("副詞", "感動詞")
     // IPADIC has no entry for these words, even in katakana.
     private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
@@ -1174,12 +1181,22 @@ internal object Readings {
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
+            val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
+                adjectiveParticles(piece.surface.drop(1))
+            } else null
             when {
                 // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
-                piece.surface == "い" && last?.surface == "だり" && out.getOrNull(out.lastIndex - 1)?.kind !in
-                    setOf("動詞", "形容詞", "助動詞") -> {
+                last?.surface == "だり" && piece.surface.startsWith("い") &&
+                    out.getOrNull(out.lastIndex - 1)?.let { it.kind !in setOf("動詞", "形容詞", "助動詞") ||
+                        (it.kind == "助動詞" && it.surface == "で" && it.base == "だ") } != false &&
+                    adjectiveEnd != null -> {
                     val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
-                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, end = piece.end, reader = Reader.RULES)
+                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base,
+                        end = piece.end - piece.surface.length + 1, reader = Reader.RULES)
+                    out += adjectiveEnd.map { token ->
+                        Piece(token.surface, hiragana(token.reading), "助詞", "終助詞",
+                            end = piece.end - piece.surface.length + token.position - 1 + token.surface.length, reader = Reader.RULES)
+                    }
                 }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {

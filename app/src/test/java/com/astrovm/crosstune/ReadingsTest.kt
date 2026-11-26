@@ -99,10 +99,20 @@ class ReadingsTest {
     fun dariiIsOneAdjectiveButTariAfterVerbsStaysSeparate() {
         assertJapaneseBoundaries(listOf(
             Triple("だりい", "darii", listOf("だりい")),
+            Triple("だりいよ", "darii yo", listOf("だりい", "よ")),
+            Triple("だりいし", "darii shi", listOf("だりい", "し")),
+            Triple("だりいね", "darii ne", listOf("だりい", "ね")),
+            Triple("だりいわ", "darii wa", listOf("だりい", "わ")),
+            Triple("だりいぞ", "darii zo", listOf("だりい", "ぞ")),
+            Triple("だりいぜ", "darii ze", listOf("だりい", "ぜ")),
+            Triple("静かにだりい", "shizuka ni darii", listOf("静か", "に", "だりい")),
+            Triple("まじでだりい", "majide darii", listOf("まじで", "だりい")),
             Triple("クソだりいな", "kuso darii na", listOf("クソ", "だりい", "な")),
             Triple("飲んだりいろいろ", "nondari iroiro", listOf("飲んだり", "いろいろ")),
             Triple("読んだりいたずら", "yondari itazura", listOf("読んだり", "いたずら")),
             Triple("読んだりい", "yondari i", listOf("読んだり", "い")),
+            Triple("遊んだりいろいろ", "asondari iroiro", listOf("遊んだり", "いろいろ")),
+            Triple("だりいろいろ", "dari iroiro", listOf("だり", "いろいろ")),
         ))
         fun lookup() = Readings.words("だりい", Script.JAPANESE).single().lookup
         assertEquals("だるい", lookup())
