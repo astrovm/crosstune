@@ -111,9 +111,10 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
-     * 25 to separate 何 or なん from explanatory なんだ.
+     * 25 to keep なでなで together before particles and copulas.
+     * 26 to separate 何 or なん from explanatory なんだ.
      */
-    const val VERSION = 25
+    const val VERSION = 26
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1265,10 +1266,43 @@ internal object Readings {
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
+            // The dictionaries can attach a particle to either half of なでなで.
+            val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
+                piece.surface.startsWith("で")) piece.surface.drop(1) else ""
+            val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
+            // The dictionaries can take と for a form of とる, but verb endings belong to the verb.
+            val mistakenParticle = piece.surface == "と" && piece.base == "とる"
+            val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || mistakenParticle
+            val repeatedParticles = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && canBeParticle) {
+                listOf(pieces(piece.surface), pieces("花" + piece.surface).drop(1)).firstOrNull { parts ->
+                    parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
+                }
+            } else null
+            // A sentence-final が can be labelled as a conjunction, though it follows the noun.
+            val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
+            val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
+                val afterNoun = pieces("花" + pieces.drop(index).joinToString("") { it.surface }).drop(1)
+                afterNoun.firstOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助動詞" }
+            } else null
+            val nounParticle = if (nounBefore && piece.kind == "助詞" && piece.subkind == "接続助詞") {
+                pieces("花" + piece.surface).drop(1).singleOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助詞" }
+            } else null
             val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
                 adjectiveParticles(pieces, index)
             } else null
             when {
+                tailParticles != null -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += tailParticles
+                }
+                repeatedParticles != null -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += repeatedParticles
+                }
+                nounParticle != null -> out += nounParticle
+                nounCopula != null -> out += nounCopula
                 // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
                 last?.surface == "だり" && piece.surface.startsWith("い") &&
                     out.getOrNull(out.lastIndex - 1)?.let { it.kind !in setOf("動詞", "形容詞", "助動詞") ||
@@ -1311,13 +1345,13 @@ internal object Readings {
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
                 // The passive される can instead leave な and で as particles.
-                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && next?.base == "する" -> {
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))) -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
                 }
                 // Before する or a particle, IPADIC can split these nouns into なでる pieces.
                 piece.surface == "なで" && last != null &&
-                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && next?.kind == "助詞")) -> {
+                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && (next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))))) -> {
                     val noun = last.surface + piece.surface
                     out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
                 }
