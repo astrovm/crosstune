@@ -2735,7 +2735,7 @@ class MainActivityTest {
         copied("https://www.youtube.com/watch?v=jNQXAC9IVRw")
         comeBack()
         waitForText("How to tie a tie")
-        assertTrue(fake.requestedUrls.none { it.startsWith("https://music.youtube.com/") })
+        assertFalse(askedIfVideoIsMusic())
     }
 
     @Test
@@ -6998,6 +6998,11 @@ class MainActivityTest {
         }
     }
 
+    /** The optional duration request uses English; the music-only filter asks without a language. */
+    private fun askedIfVideoIsMusic() = fake.requestBodies.filter { "\"videoId\"" in it }.any { body ->
+        JSONObject(body).getJSONObject("context").getJSONObject("client").optString("hl").isEmpty()
+    }
+
     @Test
     fun aYouTubeVideoThatIsntMusicOpensInYouTubeAsUsual() {
         respondNotMusic()
@@ -7044,10 +7049,11 @@ class MainActivityTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
 
         fake.requestedUrls.clear()
-        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
-        waitUntil(TIMEOUT_MS) { fake.requestedUrls.isNotEmpty() }
-        // Straight to looking the video up, without asking YouTube Music first.
-        assertTrue(fake.requestedUrls.none { "youtubei/v1/next" in it })
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "youtube.com/oembed" in it } }
+        waitUntil(TIMEOUT_MS) { !ViewModelProvider(activity)[MainViewModel::class.java].lookingUp }
+        // The optional duration request does not filter out non-music videos.
+        assertFalse(askedIfVideoIsMusic())
     }
 
     @Test
