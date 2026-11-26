@@ -436,6 +436,8 @@ internal class MediaSessionPlayback(
         queueWatchers[token] = (queueWatchers[token] ?: 0) + 1
     }
 
+    private fun watchQueues(controllers: List<MediaController>) = controllers.forEach { watchQueue(it.sessionToken) }
+
     private fun unwatchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
         val remaining = (queueWatchers[token] ?: 1) - 1
         if (remaining == 0) {
@@ -572,7 +574,7 @@ internal class MediaSessionPlayback(
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
         fun watch(controllers: List<MediaController>) {
-            controllers.forEach { watchQueue(it.sessionToken) }
+            watchQueues(controllers)
             renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
             watched = controllers
             renamed = controllers.map { controller ->
@@ -1050,7 +1052,7 @@ internal class MediaSessionPlayback(
             }
         }
         fun watch(controllers: List<MediaController>) {
-            controllers.forEach { watchQueue(it.sessionToken) }
+            watchQueues(controllers)
             watched.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
             watched = controllers.map { controller ->
                 // Metadata can change while no screen was watching this session.
