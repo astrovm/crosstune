@@ -229,6 +229,75 @@ class ReadingsTest {
     ))
 
     @Test
+    fun shiftedWordsLookUpWhatWhereTheyStandSays() {
+        // A line, a word in it, and what that word looks up.
+        val cases = listOf(
+            // At the end of a phrase or before the noun it describes, the adjective, though a noun is spelled so too.
+            Triple("このジュースあめえ", "あめえ", "あまい"), Triple("コーヒーがあめえ", "あめえ", "あまい"),
+            Triple("あめえよ", "あめえ", "あまい"), Triple("あめえって", "あめえ", "あまい"),
+            Triple("返事がおせえな", "おせえ", "おそい"), Triple("おせえ！早くしろ", "おせえ", "おそい"),
+            Triple("おせえ返事", "おせえ", "おそい"), Triple("おせえ", "おせえ", "おそい"),
+            // Before a particle, the noun.
+            Triple("あめえは", "あめえ", "甘え"), Triple("おせえを外す", "おせえ", "抑え"),
+            Triple("なめえを教えて", "なめえ", "名前"), Triple("このなめえ", "なめえ", "名前"),
+            Triple("犬のなめえ", "なめえ", "名前"), Triple("なめえ", "なめえ", "名前"),
+            // A pronoun before an adjective, wherever it stands.
+            Triple("おめえ", "おめえ", "お前"), Triple("おめえさ、何してる", "おめえ", "お前"),
+            Triple("おめえさ、お前のせいだ", "おめえ", "お前"), Triple("てめえ", "てめえ", "手前"),
+            // After を, an adjective that describes a noun or is quoted.
+            Triple("お前をやべえ奴だと思った", "やべえ", "やばい"), Triple("それをやべえって言った", "やべえ", "やばい"),
+            // The dictionary's verb before え, or before a noun, is the adjective.
+            Triple("きたねえ水", "きたねえ", "きたない"), Triple("きたねえな", "きたねえ", "きたない"),
+            Triple("体がいてえ", "いてえ", "いたい"), Triple("まじでいてえ", "いてえ", "いたい"),
+            // の after an adjective ends its phrase.
+            Triple("やべえのが来た", "やべえ", "やばい"), Triple("すげえの", "すげえ", "すごい"),
+            // Words that only look shifted.
+            Triple("ねえ", "ねえ", "ねえ"), Triple("このカレーかれー", "かれー", "カレー")
+        )
+        fun check() {
+            for ((line, text, lookup) in cases) {
+                val word = Readings.words(line, Script.JAPANESE).firstOrNull { it.text == text }
+                assertEquals(line, lookup, word?.lookup)
+            }
+            for ((line, romanized) in listOf(
+                "このジュースあめえ" to "kono juusu amee", "おめえさ、何してる" to "omee sa、 nani shiteru",
+                "お前をやべえと思った" to "omae o yabee to omotta"
+            )) {
+                assertEquals(line, romanized, Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun shiftedWordsStayAsTheDictionarySplitsThemWhereTheirPlaceDoesNotTell() {
+        // Each word of a line and what it looks up, as before shifted words were read.
+        val cases = listOf(
+            // A verb in the past and a particle: you came.
+            "ここまでよくきたねえ" to "ここ=ここ|まで=まで|よく=よく|きた=くる|ねえ=ねえ",
+            "きたねえ、やっと会えた" to "きた=くる|ねえ=ねえ|やっと=やっと|会えた=会える",
+            // A verb after its place, partner or object: いたい, to want to stay.
+            "ずっとここにいてえ" to "ずっと=ずっと|ここ=ここ|に=に|いて=いる|え=え",
+            "ここにいてえ奴" to "ここ=ここ|に=に|いて=いる|え=え|奴=奴",
+            "君といてえ" to "君=君|と=と|いて=いる|え=え",
+            "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
+            // A noun after a noun with nothing between, which can't be.
+            "あいつきめえ" to "あいつ=あいつ|きめ=きめる|え=え",
+            // A word before a particle that no noun list has.
+            "あけえの壺" to "あけえ=あける|の=の|壺=壺",
+            "かれえを掛け軸にした" to "かれえ=かれる|を=を|掛け軸=掛け軸|に=に|した=する"
+        )
+        fun check() {
+            for ((line, words) in cases) {
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" })
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun dariiParticlesFollowTheSameBoundariesAsOtherAdjectives() {
         fun compare() {
             for (ending in listOf("よ", "ね", "し", "けど", "から", "って", "ってば", "っていうか", "っていうか、本当")) {
