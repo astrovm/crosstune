@@ -1178,8 +1178,9 @@ internal object Readings {
             val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
                 piece.surface.startsWith("で")) piece.surface.drop(1) else ""
             val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
-            // A negative ending belongs to the verb, even if it is a particle in another context.
-            val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || (piece.surface.length == 1 && piece.base != "ない")
+            // The dictionaries mistake と and や alone for とる and the copula, but verb endings belong to the verb.
+            val mistakenParticle = (piece.surface == "と" && piece.base == "とる") || (piece.surface == "や" && piece.base == "や")
+            val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || mistakenParticle
             val repeatedParticles = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && canBeParticle) {
                 listOf(pieces(piece.surface), pieces("花" + piece.surface).drop(1)).firstOrNull { parts ->
                     parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
