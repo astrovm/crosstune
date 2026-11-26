@@ -307,8 +307,7 @@ internal object Readings {
         val before = pieces.getOrNull(at - 1)
         val explanation = head?.surface == "なん" && head.base == "なんだ" && before?.surface == "じゃ"
         val attached = piece.surface.drop(1)
-        val particle = piece.surface.startsWith("い") && (piece.base == "いる" || attached.isNotEmpty()) &&
-            attached.all { it in NANJA_FINAL_PARTICLES }
+        val particle = piece.surface.startsWith("い") && attached.all { it in NANJA_FINAL_PARTICLES }
         if (explanation && particle && pieces.finalNanjaSuffix(at + 1)) {
             ("い" + attached).map { Piece(it.toString(), it.toString(), "助詞", "終助詞", reader = Reader.RULES) }
         } else listOf(piece)
