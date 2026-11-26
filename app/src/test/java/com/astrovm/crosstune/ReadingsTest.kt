@@ -526,7 +526,26 @@ class ReadingsTest {
         Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
         Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
         Triple("猫が好きなんだ", "neko ga suki nanda", listOf("猫", "が", "好き", "なんだ")),
-        Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
+        Triple("この音は何なんだ", "kono oto wa nan nanda", listOf("この", "音", "は", "何", "なんだ")),
+    ))
+
+    @Test
+    fun interrogativeNanBeforeExplanation() = assertJapaneseBoundaries(listOf(
+        Triple("何なんだ", "nan nanda", listOf("何", "なんだ")),
+        Triple("なんなんだ", "nan nanda", listOf("なん", "なんだ")),
+        Triple("これは何なんだ", "kore wa nan nanda", listOf("これ", "は", "何", "なんだ")),
+        Triple("これはなんなんだ", "kore wa nan nanda", listOf("これ", "は", "なん", "なんだ")),
+        Triple("お前は一体何なんだ", "omae wa ittai nan nanda", listOf("お前", "は", "一体", "何", "なんだ")),
+        Triple("何なんだ何なんだ", "nan nanda nan nanda", listOf("何", "なんだ", "何", "なんだ")),
+        Triple("何なんだよ", "nan nanda yo", listOf("何", "なんだ", "よ")),
+        Triple("なんなんだよ", "nan nanda yo", listOf("なん", "なんだ", "よ")),
+        Triple("何なんだろう", "nan nandarou", listOf("何", "なんだろう")),
+        Triple("なんなんだろう", "nan nandarou", listOf("なん", "なんだろう")),
+        Triple("なんなんだなんなんだ", "nan nanda nan nanda", listOf("なん", "なんだ", "なん", "なんだ")),
+        Triple("ナンナンダの歌", "nannanda no uta", listOf("ナンナンダ", "の", "歌")),
+        Triple("ナンナンダ", "nan nanda", listOf("ナン", "ナンダ")),
+        Triple("静かなんだ", "shizuka nanda", listOf("静か", "なんだ")),
+        Triple("好きなんだ", "suki nanda", listOf("好き", "なんだ")),
     ))
 
     @Test

@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 23
+    const val VERSION = 24
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -200,7 +200,10 @@ internal object Readings {
             val piece = pieces[at]
             val after = pieces.getOrNull(at + 1)
             val calls = katakanaCalls(piece.surface)
-            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
+            if (piece.surface == "ナンナンダ" && !nameParticle(after)) {
+                add(Piece("ナン", "なん", "名詞", "代名詞", reader = Reader.RULES))
+                add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES))
+            } else if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
         }
     }
 
@@ -304,7 +307,7 @@ internal object Readings {
 
     private fun List<Piece>.repeatedNanDaPieces(at: Int, length: Int): List<Piece> {
         val surface = subList(at, at + length).joinToString("") { it.surface }
-        if (!nanDaHasSubject(at)) return listOf(Piece(surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
+        if (!nanDaHasSubject(at)) return listOf(Piece(surface, if (surface == "なんだろ") surface else "なんだ", "感動詞", "*", reader = Reader.RULES))
         val head = surface.dropLast(1)
         return listOf(
             Piece(head, "なん", "名詞", "代名詞", reader = Reader.RULES),
@@ -361,11 +364,14 @@ internal object Readings {
         val length = when {
             head.surface in setOf("何だ", "何ダ", "なんだ", "なんダ", "ナンだ", "ナンダ") -> 1
             head.surface in setOf("何", "なん", "ナン") && next?.surface in setOf("だ", "ダ") && next?.startsCopula == true -> 2
-            head.surface == "な" && next?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula -> 3
+            head.surface == "な" && next?.surface == "ん" && nanDaCopula(at, copula) -> 3
             else -> 0
         }
-        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES } ?: 0
+        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES && getOrNull(at - 1)?.surface !in setOf("何", "なん", "ナン") } ?: 0
     }
+
+    private fun List<Piece>.nanDaCopula(at: Int, copula: Piece?) = copula?.startsCopula == true &&
+        (copula.surface == "だ" || copula.surface == "だろ" && getOrNull(at - 1)?.surface in setOf("何", "なん", "ナン"))
 
     private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、～・" } == true && surface.all { it in " \t　,，、～・" }
 
@@ -373,7 +379,7 @@ internal object Readings {
         val repeated = repeatedNanDaLength(at)
         if (repeated > 0) return repeated
         val before = beforeAdverbs(at)
-        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞" && before.surface != "何") } ?: 0
+        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞") } ?: 0
     }
 
     private fun List<Piece>.repeatedNanDaLength(at: Int): Int {
