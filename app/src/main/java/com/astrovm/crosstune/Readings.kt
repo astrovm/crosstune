@@ -1255,6 +1255,24 @@ internal object Readings {
     /** What ends a phrase after an adjective, as a sentence-final particle does: やべえって, それやべえだろ. */
     private val PREDICATE_ENDINGS = setOf("と", "って", "っす", "だろ", "だろう", "でしょ", "でしょう", "じゃん")
 
+    /** What can stand between a verb and its partner: an adverb, a comma, or a particle such as だけ or は. */
+    private fun standsBetween(piece: Piece): Boolean =
+        piece.kind in setOf("副詞", "記号") || (piece.kind == "助詞" && piece.subkind in setOf("副助詞", "係助詞"))
+
+    /** Particles that mark the subject an adjective describes: 返事がおせえな, この部屋はくれえ. */
+    private val SUBJECT_PARTICLES = setOf("が", "は")
+
+    /** Words of degree, which describe an adjective, not a command: 超くれえ, マジおせえ. */
+    private val DEGREE_WORDS = listOf("超", "ちょー", "マジ", "まじ", "めっちゃ", "めちゃ", "すごく", "とても", "かなり")
+
+    /** What follows an adjective and never a command, besides a copula and a particle that joins clauses: くれえのか, おせえだろ. */
+    private val ADJECTIVE_ENDINGS = setOf("の", "だろ", "だろう", "でしょ", "でしょう", "じゃん", "っす")
+
+    /** An ending no command takes: a copula, おせえでした, a particle that joins clauses, おせえから, or [ADJECTIVE_ENDINGS]. */
+    private fun endsAdjective(after: Piece): Boolean =
+        after.surface in ADJECTIVE_ENDINGS || (after.kind == "助動詞" && after.base in setOf("だ", "です")) ||
+            (after.kind == "助詞" && after.subkind == "接続助詞")
+
     /** Particles that mark a verb's place or partner: ここにいてえ, 君といてえ, ボタンをおせえ. */
     private val VERB_PARTNERS = setOf("に", "を", "と")
 
@@ -1338,17 +1356,38 @@ internal object Readings {
 
     /**
      * The verb the dictionary split [span] into stays, though it shifts to an adjective: after its place or
-     * partner, ここにいてえ is いたい from いる and ボタンをおせえ is 押せ, with adverbs and commas between, ここにもっといてえ;
+     * partner, ここにいてえ is いたい from いる and ボタンをおせえ is 押せ, with adverbs, commas and particles such as だけ and
+     * は between, ここにもっといてえ and そばにもう少しだけいてえ;
      * a whole verb that helps the one before it, 助けてくれえ, though not one split from a word, からくてかれえ; and a verb in the past with only particles after it,
      * きた and ねえ. Split as きた, ね and え, as before a noun, it's the adjective.
      */
     private fun keepsVerb(span: List<Piece>, ahead: List<Piece>): Boolean {
         if (span.first().kind != "動詞") return false
         if (span.first().subkind == "非自立" && span.drop(1).all { it.kind in setOf("助詞", "フィラー") }) return true
-        val partner = ahead.lastOrNull { it.kind != "副詞" && it.kind != "記号" }
+        val partner = ahead.lastOrNull { !standsBetween(it) }
         if (partner?.kind == "助詞" && partner.surface in VERB_PARTNERS) return true
         val past = span.getOrNull(1)?.let { it.kind == "助動詞" && it.base == "た" } == true
         return past && span.drop(2).all { it.kind == "助詞" }
+    }
+
+    /**
+     * A verb's command said long, 金くれえ and ボタンおせえ, stays the verb, as no adjective is more likely there,
+     * unless the line marks the adjective: its subject before it, 返事がおせえな; a word of degree before it,
+     * 超くれえ; the noun it describes after it, くれえ部屋; or an ending no command takes, おせえでした and おせえから.
+     */
+    private fun keepsCommand(text: String, verb: Piece, ahead: List<Piece>, place: Place, after: Piece?): Boolean {
+        if (!isCommand(text, verb)) return false
+        val before = ahead.lastOrNull()
+        val subject = before?.kind == "助詞" && before.surface in SUBJECT_PARTICLES
+        val degree = ahead.joinToString("") { it.surface }.let { line -> DEGREE_WORDS.any(line::endsWith) }
+        return !subject && !degree && after?.let(::endsAdjective) != true && place != Place.MODIFIES
+    }
+
+    /** Whether [text] is the command the dictionary split as [verb], said long: くれえ from くれ, おせえ from 押せ. */
+    private fun isCommand(text: String, verb: Piece): Boolean {
+        if (verb.kind != "動詞" || text.drop(verb.surface.length).any { it !in "えー" }) return false
+        val command = tokenizer.tokenize(verb.surface + "よ").first()
+        return command.surface == verb.surface && command.conjugationForm.startsWith("命令")
     }
 
     /**
@@ -1358,17 +1397,18 @@ internal object Readings {
      */
     private fun shiftedWord(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>): Piece? {
         if (particleStays(span.first(), ahead.lastOrNull(), text)) return null
-        shiftedParticle(text, ahead)?.let { return it }
+        shiftedParticle(text, span.first(), ahead)?.let { return it }
         val noun = shiftedNoun(text)
         if (noun?.subkind == "代名詞") return noun
+        val place = placeBefore(after.firstOrNull(), after.getOrNull(1))
         val adjective = shiftedAdjective(text)?.takeIf {
             canShiftAdjective(text, span.first()) && tokenizer.knownWord(text)?.partOfSpeechLevel1 != "名詞" &&
-                !keepsVerb(span, ahead)
+                !keepsVerb(span, ahead) && !keepsCommand(text, span.first(), ahead, place, after.firstOrNull())
         }
         // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
         // なめえ alone is 名前.
         val alone = span.first().kind != "動詞" && ahead.lastOrNull()?.kind != "名詞"
-        return byPlace(noun, adjective, placeBefore(after.firstOrNull(), after.getOrNull(1)), drawnNoun(span), alone)
+        return byPlace(noun, adjective, place, drawnNoun(span), alone)
     }
 
     /**
@@ -1393,10 +1433,14 @@ internal object Readings {
     private fun drawnNoun(span: List<Piece>): Boolean =
         span.first().kind == "名詞" && span.size > 1 && span.drop(1).all { piece -> piece.surface.all { it == 'ー' } }
 
-    /** A particle said shifted after a number or its counter: 一時間ぐれえ is ぐらい, about an hour. */
-    private fun shiftedParticle(text: String, ahead: List<Piece>): Piece? {
-        val counted = ahead.lastOrNull() ?: return null
-        val quantity = counted.subkind in NUMBERS || (counted.counts() && ahead.getOrNull(ahead.size - 2)?.subkind in NUMBERS)
+    /**
+     * A particle said shifted after a number, its counter or a pronoun: 一時間ぐれえ is ぐらい, about an hour, and それぐれえ,
+     * about that. A command stays, as main reads it: 五分くれえ can be give me five minutes.
+     */
+    private fun shiftedParticle(text: String, first: Piece, ahead: List<Piece>): Piece? {
+        val counted = ahead.lastOrNull()?.takeUnless { isCommand(text, first) } ?: return null
+        val quantity = counted.subkind in NUMBERS || counted.subkind == "代名詞" ||
+            (counted.counts() && ahead.getOrNull(ahead.size - 2)?.subkind in NUMBERS)
         if (!quantity) return null
         val root = shiftedRoots(text).firstOrNull { root ->
             tokenizer.tokenize(counted.surface + root).last().let { it.surface == root && it.partOfSpeechLevel1 == "助詞" }

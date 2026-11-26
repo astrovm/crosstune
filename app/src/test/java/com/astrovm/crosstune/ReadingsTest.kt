@@ -128,8 +128,8 @@ class ReadingsTest {
                 assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
             }
             assertFalse(Readings.words("ボタンをおせえ", Script.JAPANESE).any { it.lookup == "おそい" })
-            assertEquals("ださい", Readings.words("だせえ", Script.JAPANESE).first().lookup)
-            assertEquals("dasee", Readings.of(listOf("だせえ"), Script.JAPANESE).single().romanized)
+            assertEquals("ださい", Readings.words("だせえ服", Script.JAPANESE).first().lookup)
+            assertEquals("dasee fuku", Readings.of(listOf("だせえ服"), Script.JAPANESE).single().romanized)
             assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
             assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
             val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
@@ -236,10 +236,9 @@ class ReadingsTest {
             // At the end of a phrase or before the noun it describes, the adjective, though a noun is spelled so too.
             Triple("このジュースあめえ", "あめえ", "あまい"), Triple("コーヒーがあめえ", "あめえ", "あまい"),
             Triple("あめえよ", "あめえ", "あまい"), Triple("あめえって", "あめえ", "あまい"),
-            Triple("返事がおせえな", "おせえ", "おそい"), Triple("おせえ！早くしろ", "おせえ", "おそい"),
-            Triple("おせえ返事", "おせえ", "おそい"), Triple("おせえ", "おせえ", "おそい"),
+            Triple("返事がおせえな", "おせえ", "おそい"), Triple("おせえ返事", "おせえ", "おそい"),
             Triple("あめえです", "あめえ", "あまい"), Triple("おせえでした", "おせえ", "おそい"),
-            Triple("あめえのか", "あめえ", "あまい"), Triple("おせえよな", "おせえ", "おそい"),
+            Triple("あめえのか", "あめえ", "あまい"),
             // Before a particle, the noun.
             Triple("あめえは", "あめえ", "甘え"), Triple("おせえを外す", "おせえ", "抑え"),
             Triple("なめえを教えて", "なめえ", "名前"), Triple("このなめえ", "なめえ", "名前"),
@@ -265,7 +264,7 @@ class ReadingsTest {
             Triple("かっけえ", "かっけえ", "かっこいい"), Triple("かっけー", "かっけー", "かっこいい"), Triple("かっけえ車", "かっけえ", "かっこいい"),
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
-            Triple("だせえ", "だせえ", "ださい"), Triple("だせえ服", "だせえ", "ださい"), Triple("ちょれえ", "ちょれえ", "ちょろい"),
+            Triple("だせえ服", "だせえ", "ださい"), Triple("ちょれえ", "ちょれえ", "ちょろい"),
             // A particle after a noun joins the word when what follows it is no word: お前 か っけ え.
             Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("おい、はええよ", "はええ", "はやい"),
             Triple("疲れてねみい", "ねみい", "ねむい"),
@@ -274,7 +273,11 @@ class ReadingsTest {
             // The が that joins two clauses ends the first.
             Triple("あいつはすげえが、弟は普通だ", "すげえが", "すごい"),
             // After a number or its counter, a particle.
-            Triple("一時間ぐれえ待った", "ぐれえ", "ぐらい"), Triple("百ぐれえ", "ぐれえ", "ぐらい"), Triple("三日くれえ", "くれえ", "くらい"),
+            Triple("一時間ぐれえ待った", "ぐれえ", "ぐらい"), Triple("百ぐれえ", "ぐれえ", "ぐらい"), Triple("それぐれえなら大丈夫", "ぐれえ", "ぐらい"),
+            // A command said long is the adjective where the line marks one: its subject, a word of degree,
+            // the noun it describes, or an ending no command takes.
+            Triple("この部屋はくれえ", "くれえ", "くらい"), Triple("超くれえ", "くれえ", "くらい"), Triple("くれえ部屋", "くれえ", "くらい"),
+            Triple("おせえから帰る", "おせえ", "おそい"), Triple("おせえのか", "おせえ", "おそい"),
             // A noun the dictionary read, drawn out, is still the adjective at the end.
             Triple("このジュースあめー", "あめー", "あまい"),
             // Words that only look shifted.
@@ -311,8 +314,16 @@ class ReadingsTest {
             "君といてえ" to "君=君|と=と|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
             "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
+            // A command said long, where nothing in the line marks an adjective: give me money, more, a dream; press it.
+            "金くれえ" to "金=金|くれ=くれる|え=え", "もっとくれえ" to "もっと=もっと|くれ=くれる|え=え",
+            "夢くれえよ" to "夢=夢|くれえ=くれる|よ=よ", "ボタンおせえ" to "ボタン=ボタン|おせ=おせる|え=え",
+            "おせえ" to "おせ=おせる|え=え", "おせえよな" to "おせえよ=おせる|な=な", "だせえ" to "だせ=だせる|え=え",
+            "おせえ！早くしろ" to "おせえ=おせる|早く=早い|しろ=する",
+            // A command after a counter or a pronoun, which could be ぐらい: give me five minutes, give me this.
+            "五分くれえ" to "五分=五|くれ=くれる|え=え", "これくれえ" to "これ=これ|くれ=くれる|え=え",
             // With an adverb or a comma between.
             "ここにもっといてえ" to "ここ=ここ|に=に|もっと=もっと|いて=いる|え=え", "ここに、いてえ" to "ここ=ここ|に=に|いて=いる|え=え",
+            "そばにもう少しだけいてえ" to "そば=そば|に=に|もう少し=もう少し|だけ=だけ|いて=いる|え=え", "君にはいてえ" to "君=君|に=に|は=は|いて=いる|え=え",
             // A verb that helps the one before it: help me, want to keep watching.
             "助けてくれえ" to "助けて=助ける|くれ=くれる|え=え", "見ていてえ" to "見て=見る|いて=いる|え=え",
             // A particle after a noun, before a word: ええ, good.
