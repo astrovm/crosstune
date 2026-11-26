@@ -5019,6 +5019,38 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aQueueChangeDoesNotMakeWatchLeftResumeAPlayingSong() {
+        val requested = MusicMetadata("Track", "Band")
+        val receiver = MediaSession(app, "queue-test")
+        val controller = MediaController(app, receiver.sessionToken)
+        shadowOf(controller).setPackageName(MusicService.SPOTIFY.packageName)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, requested.title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, requested.artist).build())
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1f)
+            .setActiveQueueItemId(id).build()
+        shadowOf(controller).setPlaybackState(state(5))
+        val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
+        sessions.addController(controller)
+        val media = MediaSessionPlayback(app)
+        val fakePlayback = FakePlayback().apply { access = true }
+        val playback = object : PlaybackSource by fakePlayback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+        }
+        val model = model(playback)
+        try {
+            MainViewModel::class.java.getDeclaredMethod("watchLeft", MusicMetadata::class.java).apply { isAccessible = true }.invoke(model, requested)
+            idle()
+            assertTrue(shadowOf(controller).getCallbacks().isNotEmpty())
+            shadowOf(controller).executeOnPlaybackStateChanged(state(4))
+            idle()
+            assertTrue(fakePlayback.plays.isEmpty())
+        } finally {
+            sessions.clearControllers()
+            receiver.release()
+        }
+    }
+
+    @Test
     fun thePlayerFollowsTheRequestedSongAcrossAppsAfterItsSessionIsReleased() {
         val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
         val media = MediaSessionPlayback(app)

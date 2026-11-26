@@ -4739,6 +4739,48 @@ class MainActivityTest {
     }
 
     @Test
+    fun thePlayerKeepsItsPauseButtonWhileTheQueueIdChanges() {
+        val youTubeMusic = morpheMusic
+        val receiver = android.media.session.MediaSession(app, "queue-test")
+        val controller = android.media.session.MediaController(app, receiver.sessionToken)
+        shadowOf(controller).setPackageName(youTubeMusic)
+        shadowOf(controller).setMetadata(android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "Dakare Ni Kita Onna")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Kingo Hamada")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "Album").build())
+        fun state(id: Long) = android.media.session.PlaybackState.Builder()
+            .setState(android.media.session.PlaybackState.STATE_PLAYING, 30_000, 1f, SystemClock.elapsedRealtime())
+            .setActiveQueueItemId(id).build()
+        shadowOf(controller).setPlaybackState(state(5))
+        val sessions = shadowOf(app.getSystemService(android.media.session.MediaSessionManager::class.java))
+        sessions.addController(controller)
+        val media = MediaSessionPlayback(app)
+        val phone = FakePlayback().apply { access = true }
+        val source = object : PlaybackSource by phone {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+        }
+        MainActivity.playbackFactory = { source }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        try {
+            launch()
+            resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+            val play = string(R.string.play_in_background, "YouTube Music")
+            waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            click(play)
+            waitForDescription(string(R.string.lyrics_pause))
+            shadowOf(controller).executeOnPlaybackStateChanged(state(4))
+            composeRule.waitForIdle()
+            composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause))).assertExists()
+            assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_play))).fetchSemanticsNodes().isEmpty())
+        } finally {
+            sessions.clearControllers()
+            receiver.release()
+        }
+    }
+
+    @Test
     fun thePlayersTimesAreNotCutOffAtTheLargestFont() {
         RuntimeEnvironment.setFontScale(2f)
         val youTubeMusic = morpheMusic
