@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 21
+    const val VERSION = 22
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1196,16 +1196,25 @@ internal object Readings {
                     }
                     out += piece
                 }
-                // Both dictionaries can take 一撫で + する for ひと + な + です.
-                piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
+                // The dictionaries can take 一撫で or 撫で撫で + する for な + です.
+                piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface in setOf("ひと", "なで") &&
                     (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
                     out.removeAt(out.lastIndex)
-                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
+                    val noun = out.last().surface + "なで"
+                    out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
-                // Before しよう or しない, IPADIC instead splits 一撫で into ひと + なでる.
-                piece.surface == "なで" && last?.surface == "ひと" && next?.base == "する" ->
-                    out[out.lastIndex] = Piece("ひとなで", "ひとなで", "名詞", "一般", reader = Reader.RULES)
+                // The passive される can instead leave な and で as particles.
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && next?.base == "する" -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                }
+                // Before する or a particle, IPADIC can split these nouns into なでる pieces.
+                piece.surface == "なで" && last != null &&
+                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && next?.kind == "助詞")) -> {
+                    val noun = last.surface + piece.surface
+                    out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
+                }
                 inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
