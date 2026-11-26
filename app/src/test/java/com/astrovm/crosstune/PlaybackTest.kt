@@ -1485,7 +1485,8 @@ class PlaybackTest {
         assertFalse(seen.now().ad)
         music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_326, 1, afterMs = 1)
         music.says("Take On Me", "a-ha", 244_018, afterMs = 44)
-        assertEquals(1_640_907_326, seen.now().clock.startedAt())
+        // Once PLAYING closes the window, the ordinary steady clock keeps the start 2 ms earlier.
+        assertEquals(1_640_907_324, seen.now().clock.startedAt())
         assertFalse(seen.now().ad)
         assertEquals(244_018L, seen.now().durationMs)
         // It never stopped other than to load after an ad, and neither ad's length is kept as one of the song's.
@@ -1688,6 +1689,68 @@ class PlaybackTest {
     }
 
     @Test
+    fun uptownFunkStarts224MsAfterItsAdsLastWord() {
+        allow()
+        val music = youTubeMusic("Uptown Funk", "Mark Ronson", 27_093, updated = 1_649_583_843, item = 201)
+        val seen = followed(MusicMetadata("Uptown Funk", "Mark Ronson"))
+        music.says("Uptown Funk", "Mark Ronson", 270_442, afterMs = 84)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_649_584_067, 201, afterMs = 140)
+        assertEquals(1_649_584_067, seen.now().clock.startedAt())
+    }
+
+    @Test
+    fun helloStarts202MsAfterItsAdsLastWord() {
+        allow()
+        val music = youTubeMusic("Hello", "Adele", 111_316, updated = 1_650_034_899, item = 226)
+        val seen = followed(MusicMetadata("Hello", "Adele"))
+        music.says("Hello", "Adele", 366_898, afterMs = 66)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_650_035_101, 226, afterMs = 136)
+        assertEquals(1_650_035_101, seen.now().clock.startedAt())
+    }
+
+    @Test
+    fun aLateCallbackStillReadsTheCurrentPause() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 212_532, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 1_000, 26, position = 42_000)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PAUSED, NOW + 1_400, 26, 42_400))
+        val old = recorded(PlaybackState.STATE_PLAYING, NOW + 700, 26, 41_700)
+        shadowOf(music).callbacks.toList().forEach { it.onPlaybackStateChanged(old) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(PlaybackClock(42_400, NOW + 1_400, playing = false), seen.now().clock)
+    }
+
+    @Test
+    fun switchingSessionsDropsTheOldAdClock() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val spotify = player("com.spotify.music", "Spotify", "Faded", "Alan Walker", state = PlaybackState.STATE_PAUSED,
+            position = 42_000, at = NOW)
+        shadowOf(sessions).addController(spotify)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 212_532)
+        music.isAt(PlaybackState.STATE_BUFFERING, NOW + 160, 26, afterMs = 160)
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1f, NOW + 200).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("com.spotify.music", seen.now().appPackage)
+        assertEquals(PlaybackClock(42_000, NOW + 200), seen.now().clock)
+    }
+
+    @Test
+    fun playingClosesTheWindowEvenWithTheBufferingTimestamp() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 212_532)
+        music.isAt(PlaybackState.STATE_BUFFERING, NOW + 160, 26, afterMs = 160)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 160, 26)
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 560, 26, position = 400, afterMs = 400)
+        assertFalse(seen.now().ad)
+        assertEquals(PlaybackClock(400, NOW + 560, playing = false), seen.now().clock)
+    }
+
+    @Test
     fun aPauseAfterTheSongStartsIsNotAnAdWait() {
         allow()
         val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
@@ -1720,10 +1783,13 @@ class PlaybackTest {
         val seen = followed(MusicMetadata("Faded", "Alan Walker"))
         music.isAt(PlaybackState.STATE_PLAYING, NOW - 1_200, 26, position = 0)
         music.says("Faded", "Alan Walker", 233_000)
-        music.isAt(PlaybackState.STATE_PLAYING, NOW - 1_500, 26, position = 0, afterMs = 300)
-        assertEquals(PlaybackClock(0, NOW - 1_200), seen.now().clock)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300))
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 300, 26, 1_500))
+        val old = recorded(PlaybackState.STATE_PLAYING, NOW - 1_500, 26, 0)
+        shadowOf(music).callbacks.toList().forEach { it.onPlaybackStateChanged(old) }
+        assertEquals(1_500, seen.now().clock.positionAt(NOW + 300))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS))
-        assertEquals(PlaybackClock(0, NOW - 1_200), seen.now().clock)
+        assertEquals(1_500, seen.now().clock.positionAt(NOW + 300))
         shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 1_800, 26, 0))
         shadowOf(music).callbacks.toList().forEach { it.onQueueChanged(mutableListOf()) }
         assertEquals(PlaybackClock(0, NOW + 1_800), seen.now().clock)
