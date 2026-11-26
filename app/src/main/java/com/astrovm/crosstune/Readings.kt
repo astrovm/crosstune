@@ -1272,7 +1272,9 @@ internal object Readings {
         if (noun != null) return ShiftedMatch(end + 1, noun)
         if (end == at && first.kind == "名詞") return null
         if (!canShiftAdjective(text, first)) return null
-        return shiftedAdjective(text)?.let { ShiftedMatch(end + 1, it) }
+        val adjective = shiftedAdjective(text) ?: return null
+        if (tokenizer.knownWord(text)?.partOfSpeechLevel1 == "名詞") return null
+        return ShiftedMatch(end + 1, adjective)
     }
 
     private fun shiftedMatch(pieces: List<Piece>, at: Int): ShiftedMatch? {
