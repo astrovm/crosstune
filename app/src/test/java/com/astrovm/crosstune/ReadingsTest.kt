@@ -121,6 +121,25 @@ class ReadingsTest {
     }
 
     @Test
+    fun colloquialAdjectiveBoundariesKeepKnownWordsAndPronouns() {
+        fun check() {
+            assertEquals("カレー", Readings.words("かれーを食べた", Script.JAPANESE).first().lookup)
+            for ((text, base) in listOf("おめえは誰だ" to "お前", "てめえ" to "手前")) {
+                assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
+            }
+            assertFalse(Readings.words("ボタンをおせえ", Script.JAPANESE).any { it.lookup == "おそい" })
+            for ((line, adjective, romanized) in listOf(
+                Triple("今日さみいね", "さみい", "kyoo samii ne"), Triple("すげえさ", "すげえ", "sugee sa")
+            )) {
+                assertTrue(line, Readings.words(line, Script.JAPANESE).any { it.text == adjective })
+                assertEquals(line, romanized, Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun colloquialAdjectivesKeepTheirWordsAndLookups() {
         val cases = listOf(
             Triple("すげえ", "sugee", "すごい"),
@@ -160,20 +179,17 @@ class ReadingsTest {
             assertEquals("かったりい", words.first().text)
             assertEquals("かったるい", words.first().lookup)
             assertTrue(words.drop(1).first().text.startsWith("油"))
+            assertEquals("かったりい油汚れ", words.joinToString("") { it.text })
         }
         check()
         TestUniDic.reading(::check)
     }
 
     @Test
-    fun colloquialUzaIsKnownWithUniDic() {
-        assertEquals("u ze e", Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized)
-        TestUniDic.reading {
-            for (text in listOf("うぜえ", "うぜー")) {
-                assertEquals(text, "uzee", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
-                assertEquals(text, "うざい", Readings.words(text, Script.JAPANESE).single().lookup)
-            }
-        }
+    fun colloquialUzaDoesNotDependOnUniDicBeingDownloaded() {
+        fun reading() = Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized
+        assertEquals("u ze e", reading())
+        assertEquals("u ze e", TestUniDic.reading(::reading))
     }
 
     @Test

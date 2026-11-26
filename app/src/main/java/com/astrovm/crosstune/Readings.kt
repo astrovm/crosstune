@@ -1203,26 +1203,40 @@ internal object Readings {
         'ひ' to 'ふ', 'び' to 'ぶ', 'ぴ' to 'ぷ', 'み' to 'む', 'り' to 'る')
 
     private fun shiftedRoots(surface: String): List<String> {
-        if (surface.length < 2) return emptyList()
         val stem = surface.dropLast(1)
-        val before = stem.last()
+        val before = stem.lastOrNull() ?: return emptyList()
         return when (surface.last()) {
             'え', 'ー' -> shiftedE[before]?.map { stem.dropLast(1) + it + "い" }.orEmpty() +
                 if (isHan(before)) listOf(stem + "い") else emptyList()
             'い' -> listOfNotNull(shiftedI[before]?.let { stem.dropLast(1) + it + "い" }) +
-                if (before in shiftedI && stem.length > 1 && isHan(stem[stem.lastIndex - 1])) listOf(stem.dropLast(1) + "い") else emptyList()
+                if (before in shiftedI && stem.getOrNull(stem.lastIndex - 1)?.let(::isHan) == true) listOf(stem.dropLast(1) + "い") else emptyList()
             else -> emptyList()
         }
+    }
+
+    private val shiftedNouns: Map<String, String> by lazy {
+        checkNotNull(Readings::class.java.getResourceAsStream("/com/astrovm/crosstune/shifted-nouns.txt"))
+            .bufferedReader().useLines { lines ->
+                lines.filterNot { it.startsWith('#') }.associate { it.substringBefore('\t') to it.substringAfter('\t') }
+            }
+    }
+
+    private fun shiftedNoun(surface: String): Piece? {
+        if (surface.length < 3 || surface.last() !in "えー") return null
+        val stem = surface.dropLast(1)
+        val a = shiftedE[stem.last()]?.firstOrNull() ?: return null
+        val root = stem.dropLast(1) + a + "え"
+        val written = shiftedNouns[root] ?: root
+        val token = tokenizer.knownWord(written)?.takeIf { it.partOfSpeechLevel1 == "名詞" } ?: return null
+        return Piece(surface, hiragana(surface), "名詞", token.partOfSpeechLevel2, token.baseForm, reader = Reader.RULES)
     }
 
     private fun shiftedAdjective(surface: String): Piece? {
         for (root in shiftedRoots(surface)) {
             val ipadic = tokenizer.knownWord(root)?.takeIf { it.partOfSpeechLevel1 == "形容詞" }
-            val unidic = uniDic?.tokenize(root)?.singleOrNull()?.takeIf { it.partOfSpeechLevel1 == "形容詞" }
-            val reading = ipadic?.reading ?: unidic?.lemmaReadingForm ?: continue
+            val reading = ipadic?.reading ?: continue
             val kana = hiragana(reading)
-            if (kana.length < 2) continue
-            val vowel = kana[kana.lastIndex - 1]
+            val vowel = kana.getOrNull(kana.lastIndex - 1) ?: continue
             val shifted = if (surface.last() == 'い') shiftedI.entries.firstOrNull { it.value == vowel }?.key else
                 shiftedE.entries.firstOrNull { vowel in it.value }?.key
             if (shifted == null) continue
@@ -1238,20 +1252,52 @@ internal object Readings {
         return !text.endsWith("え") || tokenizer.knownWord(text + "る")?.partOfSpeechLevel1 != "動詞"
     }
 
+    private data class ShiftedMatch(val end: Int, val word: Piece, val particles: List<Piece> = emptyList())
+
+    private fun shiftedWithParticles(pieces: List<Piece>, at: Int, end: Int, text: String): ShiftedMatch? {
+        val piece = pieces[end]
+        if (piece.surface.length <= 1) return null
+        val prefix = text + piece.surface.first()
+        if (!canShiftAdjective(prefix, pieces[at])) return null
+        val adjective = shiftedAdjective(prefix) ?: return null
+        val suffix = adjectiveParticles(pieces, end) ?: return null
+        val particles = suffix.second.map { token ->
+            Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
+        }
+        return ShiftedMatch(end + suffix.first, adjective, particles)
+    }
+
+    private fun shiftedWhole(text: String, first: Piece, end: Int, at: Int): ShiftedMatch? {
+        val noun = shiftedNoun(text)
+        if (noun != null) return ShiftedMatch(end + 1, noun)
+        if (end == at && first.kind == "名詞") return null
+        if (!canShiftAdjective(text, first)) return null
+        return shiftedAdjective(text)?.let { ShiftedMatch(end + 1, it) }
+    }
+
+    private fun shiftedMatch(pieces: List<Piece>, at: Int): ShiftedMatch? {
+        if (pieces.getOrNull(at - 1)?.surface == "を") return null
+        var text = ""
+        var found: ShiftedMatch? = null
+        for (end in at until minOf(at + 4, pieces.size)) {
+            val piece = pieces[end]
+            if (piece.surface.isEmpty()) break
+            shiftedWithParticles(pieces, at, end, text)?.let { found = it }
+            text += piece.surface
+            if (text.any { !it.isLetter() }) break
+            shiftedWhole(text, pieces[at], end, at)?.let { found = it }
+        }
+        return found
+    }
+
     private fun shiftedAdjectives(pieces: List<Piece>): List<Piece> = buildList {
         var at = 0
         while (at < pieces.size) {
-            var found: Pair<Int, Piece>? = null
-            var text = ""
-            for (end in at until minOf(at + 4, pieces.size)) {
-                text += pieces[end].surface
-                if (text.length > 12 || text.any { !it.isLetter() && it != 'ー' }) break
-                if (canShiftAdjective(text, pieces[at])) shiftedAdjective(text)?.let { found = end + 1 to it }
-            }
-            val match = found
+            val match = shiftedMatch(pieces, at)
             if (match == null) add(pieces[at++]) else {
-                add(match.second)
-                at = match.first
+                add(match.word)
+                addAll(match.particles)
+                at = match.end
                 val next = pieces.getOrNull(at)?.takeIf { it.subkind == "接尾" }
                 val reading = next?.let { alone(it.surface) }
                 if (next != null && reading != null) {

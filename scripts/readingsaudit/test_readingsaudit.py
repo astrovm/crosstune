@@ -100,6 +100,18 @@ def word(kanji, kana, senses):
 
 class OldKana(unittest.TestCase):
 
+    def test_shifted_nouns_use_unambiguous_common_spellings(self):
+        words = [
+            word([("お前", [], True)], [("おまえ", [], True, ["*"])], [(["pn"], [])]),
+            word([("手前", [], True)], [("てまえ", [], True, ["*"])], [(["n"], [])]),
+            word([("別", [], True)], [("べつ", [], True, ["*"])], [(["n"], [])]),
+            word([("名前", [], True)], [("なまえ", [], False, ["*"])], [(["n"], [])]),
+        ]
+        restricted = word([("名前", [], True)], [("なまえ", [], True, ["*"])], [(["n"], [])])
+        restricted["sense"][0]["appliesToKana"] = ["なまい"]
+        words.append(restricted)
+        self.assertEqual({"おまえ": "お前", "てまえ": "手前"}, readingsaudit.shifted_nouns(words))
+
     def test_kana_adjectives_keep_each_applicable_spelling_for_the_tokenizer(self):
         words = [
             word([("在り来たり", [], False), ("在り来り", ["sK"], False)],
@@ -612,7 +624,8 @@ class Main(unittest.TestCase):
             with mock.patch.object(readingsaudit, "age", return_value=1) as age, self.assertRaises(SystemExit) as stop:
                 readingsaudit.main(["age"])
             self.assertEqual(1, stop.exception.code)
-            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA], age.call_args.args[0])
+            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA, readingsaudit.OLD_KANA.with_name("shifted-nouns.txt")],
+                                 age.call_args.args[0])
 
 
 
