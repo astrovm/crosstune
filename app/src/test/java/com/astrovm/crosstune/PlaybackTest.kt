@@ -1560,6 +1560,24 @@ class PlaybackTest {
     }
 
     @Test
+    fun aFollowerOpenedDuringAnAdEndLearnsALaterLateClock() {
+        allow()
+        val music = youTubeMusic("Charmless Man", "Blur", 30_069, updated = NOW, item = 27)
+        val song = MusicMetadata("Charmless Man", "Blur")
+        followed(song)
+        music.says("Charmless Man", "Blur", 214_064)
+        val second = followed(song)
+        collecting.first().cancel()
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 593, 27, 0))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS))
+        assertEquals(NOW + 593, second.now().clock.startedAt())
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 1_093, 27)
+        assertEquals(NOW + 593, second.now().clock.startedAt())
+        val third = followed(song)
+        assertEquals(NOW + 593, third.now().clock.startedAt())
+    }
+
+    @Test
     fun anAdThatEndsWithNoStopToLoadIsFollowedFromWhereYouTubeMusicSaysNext() {
         allow()
         // On the Samsung, 2026-11-26: a 10 s ad into a 13 s one, with no stop to load between them.

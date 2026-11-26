@@ -851,7 +851,8 @@ internal class MediaSessionPlayback(
             val starts = startsAgain(said, latest, inWindow, origin)
             if (startedAt == null) beganInWindow = inWindow
             if (!inWindow || startedAt == null) startedAt = origin
-            learningAllowed = !beganInWindow && !inWindow && !ending && latest == restart
+            learningAllowed = !inWindow && !ending && latest == restart
+            if (!inWindow) beganInWindow = false
             ending = inWindow
             restart = latest
             adEnded = said.ad
@@ -860,7 +861,7 @@ internal class MediaSessionPlayback(
         }
 
         private fun startsAgain(said: Following, latest: Long, inWindow: Boolean, origin: Long): Boolean =
-            said.ad || adEnded || latest != restart || (ending && !inWindow && startedAt?.let { origin > it } == true)
+            said.ad || adEnded || latest != restart || (ending && !inWindow && (beganInWindow || startedAt?.let { origin > it } == true))
     }
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
