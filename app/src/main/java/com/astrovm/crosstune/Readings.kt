@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 22
+    const val VERSION = 23
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1174,7 +1174,25 @@ internal object Readings {
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
+            // The dictionaries can attach a particle to either half of なでなで.
+            val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
+                piece.surface.startsWith("で")) piece.surface.drop(1) else ""
+            val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
+            val repeatedParticle = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで") {
+                (pieces(piece.surface) + pieces("花" + piece.surface).drop(1))
+                    .firstOrNull { it.surface == piece.surface && it.kind == "助詞" }
+            } else null
             when {
+                tailParticles != null -> {
+                    if (last?.surface == "な") out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += tailParticles
+                }
+                repeatedParticle != null -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += repeatedParticle
+                }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {
                     val (surface, base) = splitTari
@@ -1205,7 +1223,7 @@ internal object Readings {
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
                 // The passive される can instead leave な and で as particles.
-                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && next?.base == "する" -> {
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞") -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
                 }

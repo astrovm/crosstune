@@ -212,6 +212,15 @@ class ReadingsTest {
     fun nadenadeBeforeParticlesIsOneNoun() {
         val cases = listOf(
             Triple("なでなでで", "nadenade de", listOf("なでなで" to "なでなで", "で" to "で")),
+            Triple("なでなでは", "nadenade wa", listOf("なでなで" to "なでなで", "は" to "は")),
+            Triple("なでなでと", "nadenade to", listOf("なでなで" to "なでなで", "と" to "と")),
+            Triple("なでなでも", "nadenade mo", listOf("なでなで" to "なでなで", "も" to "も")),
+            Triple("なでなでに", "nadenade ni", listOf("なでなで" to "なでなで", "に" to "に")),
+            Triple("なでなでの", "nadenade no", listOf("なでなで" to "なでなで", "の" to "の")),
+            Triple("なでなでへ", "nadenade e", listOf("なでなで" to "なでなで", "へ" to "へ")),
+            Triple("なでなでや", "nadenade ya", listOf("なでなで" to "なでなで", "や" to "や")),
+            Triple("なでなでって", "nadenade tte", listOf("なでなで" to "なでなで", "って" to "って")),
+            Triple("なでなでを", "nadenade o", listOf("なでなで" to "なでなで", "を" to "を")),
             Triple("なでなでが好き", "nadenade ga suki", listOf("なでなで" to "なでなで", "が" to "が", "好き" to "好き"))
         )
         fun read() = cases.map { (line, _, _) ->
@@ -220,6 +229,14 @@ class ReadingsTest {
         val expected = cases.map { (_, romaji, words) -> romaji to words }
         assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
     }
+
+    @Test
+    fun ordinaryParticlesKeepTheirReadings() = assertJapaneseBoundaries(listOf(
+        Triple("花では", "hana de wa", listOf("花", "で", "は")),
+        Triple("静かでは", "shizukade wa", listOf("静かで", "は")),
+        Triple("君と", "kimi to", listOf("君", "と")),
+        Triple("撫でると", "naderuto", listOf("撫でると"))
+    ))
 
     @Test
     fun bothDictionariesGiveTheTwoUsesOfDeshiteTheSameTags() {
