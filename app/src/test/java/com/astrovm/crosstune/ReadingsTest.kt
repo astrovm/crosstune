@@ -237,10 +237,14 @@ class ReadingsTest {
             Triple("あめえよ", "あめえ", "あまい"), Triple("あめえって", "あめえ", "あまい"),
             Triple("返事がおせえな", "おせえ", "おそい"), Triple("おせえ！早くしろ", "おせえ", "おそい"),
             Triple("おせえ返事", "おせえ", "おそい"), Triple("おせえ", "おせえ", "おそい"),
+            Triple("あめえです", "あめえ", "あまい"), Triple("おせえでした", "おせえ", "おそい"),
+            Triple("あめえのか", "あめえ", "あまい"), Triple("おせえよな", "おせえ", "おそい"),
             // Before a particle, the noun.
             Triple("あめえは", "あめえ", "甘え"), Triple("おせえを外す", "おせえ", "抑え"),
             Triple("なめえを教えて", "なめえ", "名前"), Triple("このなめえ", "なめえ", "名前"),
             Triple("犬のなめえ", "なめえ", "名前"), Triple("なめえ", "なめえ", "名前"),
+            // No noun is spelled だりい, so it stays the adjective before a particle too.
+            Triple("だりいに決まってる", "だりい", "だるい"),
             // A pronoun before an adjective, wherever it stands.
             Triple("おめえ", "おめえ", "お前"), Triple("おめえさ、何してる", "おめえ", "お前"),
             Triple("おめえさ、お前のせいだ", "おめえ", "お前"), Triple("てめえ", "てめえ", "手前"),
@@ -286,7 +290,9 @@ class ReadingsTest {
             "あいつきめえ" to "あいつ=あいつ|きめ=きめる|え=え",
             // A word before a particle that no noun list has.
             "あけえの壺" to "あけえ=あける|の=の|壺=壺",
-            "かれえを掛け軸にした" to "かれえ=かれる|を=を|掛け軸=掛け軸|に=に|した=する"
+            "かれえを掛け軸にした" to "かれえ=かれる|を=を|掛け軸=掛け軸|に=に|した=する",
+            // A noun and an adjective spelled alike, before a particle either takes: 甘えだけ, 甘いだけ.
+            "あめえだけ" to "あめ=あめ|え=え|だけ=だけ"
         )
         fun check() {
             for ((line, words) in cases) {

@@ -1311,12 +1311,17 @@ internal object Readings {
     private enum class Place { PREDICATE, MODIFIES, ARGUMENT, OTHER }
 
     /** Where a word stands before [after] and the piece [next] after that. */
+    /** A particle that ends or joins a phrase, or です in any form, as in あめえです and おせえでした. */
+    private fun endsPhrase(after: Piece): Boolean =
+        after.surface in PREDICATE_ENDINGS || after.base == "です" ||
+            (after.kind == "助詞" && after.subkind in setOf("終助詞", "接続助詞"))
+
     private fun placeBefore(after: Piece?, next: Piece?): Place = when {
         after == null || after.surface.none(Char::isLetter) -> Place.PREDICATE
         after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
-        // の before a noun joins two nouns, あけえの壺; at the end, すげえの, it makes the adjective one.
-        after.surface == "の" -> if (next?.kind == "名詞") Place.ARGUMENT else Place.OTHER
-        (after.kind == "助詞" && after.subkind in setOf("終助詞", "接続助詞")) || after.surface in PREDICATE_ENDINGS -> Place.PREDICATE
+        // の before a noun joins two nouns, あけえの壺. With no noun after it, あめえのか, a noun would need な first.
+        after.surface == "の" -> if (next?.kind == "名詞") Place.ARGUMENT else Place.PREDICATE
+        endsPhrase(after) -> Place.PREDICATE
         after.kind == "名詞" && after.subkind != "非自立" -> Place.MODIFIES
         else -> Place.OTHER
     }
@@ -1366,8 +1371,9 @@ internal object Readings {
         val piece = pieces[end]
         if (piece.surface.length <= 1) return null
         val prefix = text + piece.surface.first()
-        val probe = shiftedNoun(prefix)?.base ?: shiftedAdjective(prefix)?.base ?: return null
-        val suffix = adjectiveParticles(pieces, end, probe, inLine = true) ?: return null
+        // The particles split after the adjective first: after 抑え, the よ of おせえよな reads as the verb 抑えよ.
+        val suffix = listOfNotNull(shiftedAdjective(prefix)?.base, shiftedNoun(prefix)?.base)
+            .firstNotNullOfOrNull { adjectiveParticles(pieces, end, it, inLine = true) } ?: return null
         val particles = suffix.second.map { token ->
             Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
         }
