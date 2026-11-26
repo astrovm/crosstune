@@ -201,10 +201,7 @@ internal object Readings {
             val piece = pieces[at]
             val after = pieces.getOrNull(at + 1)
             val calls = katakanaCalls(piece.surface)
-            if (piece.surface == "ナンナンダ" && !nameParticle(after)) {
-                add(Piece("ナン", "なん", "名詞", "代名詞", reader = Reader.RULES))
-                add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES))
-            } else if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
+            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
         }
     }
 
@@ -271,6 +268,13 @@ internal object Readings {
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
+            if (pieces.interrogativeExplanation(at)) {
+                val copula = pieces[at + 2]
+                val lookup = if (copula.surface == "だ") "なんだ" else pieces[at + 1].base
+                add(Piece("なん", "なん", "名詞", "代名詞", lookup, reader = Reader.RULES))
+                skipUntil = at + 2
+                continue
+            }
             val length = pieces.nanDaRewriteLength(at)
             if (length > 0) {
                 addAll(pieces.repeatedNanDaPieces(at, length))
@@ -296,6 +300,10 @@ internal object Readings {
         }
     }
 
+    private fun List<Piece>.interrogativeExplanation(at: Int) =
+        getOrNull(at - 1)?.surface in setOf("何", "なん") && get(at).surface == "な" &&
+            getOrNull(at + 1)?.surface == "ん" && getOrNull(at + 2)?.startsCopula == true
+
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
         val nameBeforeParticle = piece.surface == "ナンダ" && nameParticle(after)
         return !nameBeforeParticle && (subject || after?.surface in NAN_DA_PARTICLES || after?.surface in setOf("?", "？") ||
@@ -308,7 +316,7 @@ internal object Readings {
 
     private fun List<Piece>.repeatedNanDaPieces(at: Int, length: Int): List<Piece> {
         val surface = subList(at, at + length).joinToString("") { it.surface }
-        if (!nanDaHasSubject(at)) return listOf(Piece(surface, if (surface == "なんだろ") surface else "なんだ", "感動詞", "*", reader = Reader.RULES))
+        if (!nanDaHasSubject(at)) return listOf(Piece(surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
         val head = surface.dropLast(1)
         return listOf(
             Piece(head, "なん", "名詞", "代名詞", reader = Reader.RULES),
@@ -365,14 +373,11 @@ internal object Readings {
         val length = when {
             head.surface in setOf("何だ", "何ダ", "なんだ", "なんダ", "ナンだ", "ナンダ") -> 1
             head.surface in setOf("何", "なん", "ナン") && next?.surface in setOf("だ", "ダ") && next?.startsCopula == true -> 2
-            head.surface == "な" && next?.surface == "ん" && nanDaCopula(at, copula) -> 3
+            head.surface == "な" && next?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula -> 3
             else -> 0
         }
-        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES && getOrNull(at - 1)?.surface !in setOf("何", "なん", "ナン") } ?: 0
+        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES } ?: 0
     }
-
-    private fun List<Piece>.nanDaCopula(at: Int, copula: Piece?) = copula?.startsCopula == true &&
-        (copula.surface == "だ" || copula.surface == "だろ" && getOrNull(at - 1)?.surface in setOf("何", "なん", "ナン"))
 
     private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、～・" } == true && surface.all { it in " \t　,，、～・" }
 
@@ -380,7 +385,7 @@ internal object Readings {
         val repeated = repeatedNanDaLength(at)
         if (repeated > 0) return repeated
         val before = beforeAdverbs(at)
-        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞") } ?: 0
+        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞" && before.surface != "何") } ?: 0
     }
 
     private fun List<Piece>.repeatedNanDaLength(at: Int): Int {

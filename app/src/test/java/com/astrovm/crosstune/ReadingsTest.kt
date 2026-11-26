@@ -600,10 +600,33 @@ class ReadingsTest {
         Triple("なんなんだろう", "nan nandarou", listOf("なん", "なんだろう")),
         Triple("なんなんだなんなんだ", "nan nanda nan nanda", listOf("なん", "なんだ", "なん", "なんだ")),
         Triple("ナンナンダの歌", "nannanda no uta", listOf("ナンナンダ", "の", "歌")),
-        Triple("ナンナンダ", "nan nanda", listOf("ナン", "ナンダ")),
+        Triple("ナンナンダ", "nannanda", listOf("ナンナンダ")),
+        Triple("ナンナンダロウ", "nannandarou", listOf("ナンナンダロウ")),
+        Triple("ナンナンダよ", "nannanda yo", listOf("ナンナンダ", "よ")),
+        Triple("曲名はナンナンダです", "kyokumee wa nannanda desu", listOf("曲名", "は", "ナンナンダ", "です")),
+        Triple("「ナンナンダ」を聴いた", "「nannanda」 o kiita", listOf("ナンナンダ", "を", "聴いた")),
+        Triple("何なんだっけ", "nan nandakke", listOf("何", "なんだっ", "け")),
+        Triple("何なんだった", "nan nandatta", listOf("何", "なんだった")),
+        Triple("なんなんだっけ", "nan nandakke", listOf("なん", "なんだっ", "け")),
+        Triple("なんなんだった", "nan nandatta", listOf("なん", "なんだった")),
         Triple("静かなんだ", "shizuka nanda", listOf("静か", "なんだ")),
         Triple("好きなんだ", "suki nanda", listOf("好き", "なんだ")),
     ))
+
+    @Test
+    fun interrogativeExplanationUsesTheSameLookupAsAfterANoun() {
+        fun lookups() = listOf("なんだ", "なんだろう", "なんだっけ", "なんだった").map { ending ->
+            listOf("本" + ending, "何" + ending, "なん" + ending).map { line ->
+                Readings.words(line, Script.JAPANESE).drop(1).map { it.lookup }
+            }
+        }
+        fun check() = lookups().forEach { assertEquals(listOf(it.first(), it.first(), it.first()), it) }
+        check()
+        TestUniDic.reading(::check)
+        fun name() = Readings.words("ナンナンダよ", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("ナンナンダ", "よ"), name())
+        assertEquals(listOf("ナンナンダ", "よ"), TestUniDic.reading(::name))
+    }
 
     @Test
     fun katakanaCopulasAndConnectivesGetTheSameBoundaries() = assertJapaneseBoundaries(listOf(
