@@ -183,6 +183,20 @@ class ReadingsTest {
         Triple("ナンダカンダ", "nandakanda", listOf("ナンダカンダ")),
         Triple("なんだ～なんだ", "nanda～ nanda", listOf("なんだ", "なんだ")),
         Triple("なんだ・なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ・なんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+    ))
+
+    @Test
+    fun repeatedCallsDoNotSplitExplanationsOrNames() = assertJapaneseBoundaries(listOf(
+        Triple("好き～なんだ", "suki～ nanda", listOf("好き", "なんだ")),
+        Triple("夢・なんだ", "yume nanda", listOf("夢", "なんだ")),
+        Triple("本当～なんだ", "hontoo～ nanda", listOf("本当", "なんだ")),
+        Triple("ナンダナンダの歌", "nandananda no uta", listOf("ナンダナンダ", "の", "歌")),
+        Triple("ナンダナンダが好き", "nandananda ga suki", listOf("ナンダナンダ", "が", "好き")),
+        Triple("ナンダナンダ！", "nanda nanda！", listOf("ナンダ", "ナンダ")),
+        Triple("ナンダナンダ、", "nanda nanda、", listOf("ナンダ", "ナンダ")),
+        Triple("なんだ・なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("ナンダ～ナンダ", "nanda～ nanda", listOf("ナンダ", "ナンダ")),
     ))
 
     @Test

@@ -195,9 +195,10 @@ internal object Readings {
     }
 
     /** The tokenizer can make a single name out of repeated katakana calls. */
-    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = pieces.flatMap { piece ->
+    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = pieces.flatMapIndexed { at, piece ->
         val surface = piece.surface
-        if (surface.length >= 6 && surface.length % 3 == 0 && surface.chunked(3).all { it == "ナンダ" }) {
+        val repeated = surface.length >= 6 && surface.length % 3 == 0 && surface.chunked(3).all { it == "ナンダ" }
+        if (repeated && !nameParticle(pieces.getOrNull(at + 1))) {
             surface.chunked(3).map { Piece(it, "なんだ", "感動詞", "*", reader = Reader.RULES) }
         } else listOf(piece)
     }
@@ -240,7 +241,9 @@ internal object Readings {
     private fun clauseNanAt(pieces: List<Piece>, at: Int): Boolean {
         val before = pieces.getOrNull(at - 1)?.surface ?: return false
         val copula = pieces.getOrNull(at + 2)
-        return before.firstOrNull()?.let { it in ",!?～・" } == true && before.all { it in ",!?～・" } && pieces[at].surface == "な" &&
+        val clauseMark = before.firstOrNull()?.let { it in ",!?" } == true && before.all { it in ",!?" }
+        val repeatedMark = before in setOf("～", "・") && pieces.repeatedNanDaLength(at) > 0
+        return (clauseMark || repeatedMark) && pieces[at].surface == "な" &&
             pieces.getOrNull(at + 1)?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula
     }
 
@@ -276,12 +279,14 @@ internal object Readings {
     }
 
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
-        val nameBeforeParticle = piece.surface == "ナンダ" && after?.kind == "助詞" && after.surface !in NAN_DA_PARTICLES
+        val nameBeforeParticle = piece.surface == "ナンダ" && nameParticle(after)
         return !nameBeforeParticle && (subject || after?.surface in NAN_DA_PARTICLES || after?.surface in setOf("?", "？") ||
             openingNanDaContinues(before, after))
     }
 
     private fun Piece.canSplitNanDa() = surface == "ナンダ" || surface in setOf("何だ", "何ダ") && kind == "感動詞"
+
+    private fun nameParticle(piece: Piece?) = piece?.kind == "助詞" && piece.surface !in NAN_DA_PARTICLES
 
     private fun List<Piece>.repeatedNanDaPieces(at: Int, length: Int): List<Piece> {
         val surface = subList(at, at + length).joinToString("") { it.surface }
@@ -1865,7 +1870,7 @@ internal object Readings {
             val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
             val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
             val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
-            val beforeCopula = if (previous?.surface in setOf("なん", "ナン")) pieces.beforeAdverbs(at - 1) else null
+            val beforeCopula = if (previous?.surface in setOf("なん", "ナン")) pieces.beforeNanCopula(at - 1) else null
             val separateCopula = copula && !orphanEnding && previous?.keepsCopula(beforeCopula) != true
             val continuesEnding = ending && !afterOrphan && !separateCopula
             val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true
@@ -1883,6 +1888,12 @@ internal object Readings {
             previous = piece
         }
         return words
+    }
+
+    private fun List<Piece>.beforeNanCopula(at: Int): Piece? {
+        val before = beforeAdverbs(at)
+        if (before?.surface !in setOf("～", "・")) return before
+        return beforeAdverbs(at - 1)?.takeIf { it.kind == "名詞" } ?: before
     }
 
     /** Latin letters, digits and apostrophes, as English is written in Japanese lyrics. */
