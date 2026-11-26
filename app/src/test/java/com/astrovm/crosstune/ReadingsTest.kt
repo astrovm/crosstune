@@ -638,8 +638,181 @@ class ReadingsTest {
         Triple("なんで帰る", "nande kaeru", listOf("なんで", "帰る")),
         Triple("そうなんだね", "soona nda ne", listOf("そうな", "んだ", "ね")),
         Triple("猫が好きなんだ", "neko ga suki nanda", listOf("猫", "が", "好き", "なんだ")),
-        Triple("この音は何なんだ", "kono oto wa nanna nda", listOf("この", "音", "は", "何な", "んだ")),
+        Triple("この音は何なんだ", "kono oto wa nan nanda", listOf("この", "音", "は", "何", "なんだ")),
     ))
+
+    @Test
+    fun interrogativeNanBeforeExplanation() = assertJapaneseBoundaries(listOf(
+        Triple("何なんだ", "nan nanda", listOf("何", "なんだ")),
+        Triple("なんなんだ", "nan nanda", listOf("なん", "なんだ")),
+        Triple("これは何なんだ", "kore wa nan nanda", listOf("これ", "は", "何", "なんだ")),
+        Triple("これはなんなんだ", "kore wa nan nanda", listOf("これ", "は", "なん", "なんだ")),
+        Triple("お前は一体何なんだ", "omae wa ittai nan nanda", listOf("お前", "は", "一体", "何", "なんだ")),
+        Triple("何なんだ何なんだ", "nan nanda nan nanda", listOf("何", "なんだ", "何", "なんだ")),
+        Triple("何なんだよ", "nan nanda yo", listOf("何", "なんだ", "よ")),
+        Triple("なんなんだよ", "nan nanda yo", listOf("なん", "なんだ", "よ")),
+        Triple("何なんだろう", "nan nandarou", listOf("何", "なんだろう")),
+        Triple("なんなんだろう", "nan nandarou", listOf("なん", "なんだろう")),
+        Triple("なんなんだなんなんだ", "nan nanda nan nanda", listOf("なん", "なんだ", "なん", "なんだ")),
+        Triple("ナンナンダの歌", "nannanda no uta", listOf("ナンナンダ", "の", "歌")),
+        Triple("ナンナンダ", "nannanda", listOf("ナンナンダ")),
+        Triple("ナンナンダロウ", "nannandarou", listOf("ナンナンダロウ")),
+        Triple("ナンナンダよ", "nannanda yo", listOf("ナンナンダ", "よ")),
+        Triple("曲名はナンナンダです", "kyokumee wa nannanda desu", listOf("曲名", "は", "ナンナンダ", "です")),
+        Triple("「ナンナンダ」を聴いた", "「nannanda」 o kiita", listOf("ナンナンダ", "を", "聴いた")),
+        Triple("何なんだっけ", "nan nandakke", listOf("何", "なんだっ", "け")),
+        Triple("何なんだった", "nan nandatta", listOf("何", "なんだった")),
+        Triple("何なんで", "nan nan de", listOf("何", "なん", "で")),
+        Triple("何なんじゃ", "nan nanja", listOf("何", "なんじゃ")),
+        Triple("何なんじゃろう", "nan nanjarou", listOf("何", "なんじゃろう")),
+        Triple("何なんじゃい", "nan nanja i", listOf("何", "なんじゃ", "い")),
+        Triple("何なんじゃなくて", "nan nanja nakute", listOf("何", "なんじゃ", "なくて")),
+        Triple("なんなんじゃ", "nan nanja", listOf("なん", "なんじゃ")),
+        Triple("何なんじゃない", "nan nanja nai", listOf("何", "なんじゃ", "ない")),
+        Triple("なんなんじゃない", "nan nanja nai", listOf("なん", "なんじゃ", "ない")),
+        Triple("なんなんだっけ", "nan nandakke", listOf("なん", "なんだっ", "け")),
+        Triple("なんなんだった", "nan nandatta", listOf("なん", "なんだった")),
+        Triple("静かなんじゃ", "shizukana nja", listOf("静かな", "んじゃ")),
+        Triple("好きなんじゃない", "sukina n ja nai", listOf("好きな", "ん", "じゃ", "ない")),
+        Triple("なんじゃこりゃ", "nan ja korya", listOf("なん", "じゃ", "こりゃ")),
+        Triple("何なの", "nanna no", listOf("何な", "の")),
+        Triple("何なら", "nan nara", listOf("何", "なら")),
+        Triple("静かなんだ", "shizuka nanda", listOf("静か", "なんだ")),
+        Triple("好きなんだ", "suki nanda", listOf("好き", "なんだ")),
+    ))
+
+    @Test
+    fun interrogativeExplanationLooksUpTheExplanatoryForm() {
+        fun lookups() = listOf("何なんだ", "何なんだろう", "何なんだった", "何なんじゃ", "なんなんじゃ", "何なんじゃない", "なんなんじゃない", "何なんですか").map { line ->
+            Readings.words(line, Script.JAPANESE)[1].lookup
+        }
+        val expected = List(8) { "なんだ" }
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+        fun dakke() = Readings.words("何なんだっけ", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("何", "なんだ", "け"), dakke())
+        assertEquals(listOf("何", "なんだ", "け"), TestUniDic.reading(::dakke))
+        fun name() = Readings.words("ナンナンダよ", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("ナンナンダ", "よ"), name())
+        assertEquals(listOf("ナンナンダ", "よ"), TestUniDic.reading(::name))
+    }
+
+    @Test
+    fun nanjaDoesNotRewriteOtherPhrases() {
+        fun words() = listOf("何なのじゃ", "花なんじゃない").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何な" to "何", "の" to "の", "じゃ" to "じゃ"),
+            listOf("花な" to "花", "ん" to "ん", "じゃ" to "じゃ", "ない" to "ない"),
+        )
+        assertEquals(expected, words())
+        assertEquals(expected, TestUniDic.reading(::words))
+    }
+
+    @Test
+    fun interrogativeNanjaEndingsKeepTheirOwnLookups() {
+        fun lookups() = listOf("何なんじゃろう", "何なんじゃい", "何なんじゃなくて", "何なんじゃない").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.lookup }
+        }
+        val expected = listOf(listOf("何", "なんだ"), listOf("何", "なんだ", "い"),
+            listOf("何", "なんだ", "ない"), listOf("何", "なんだ", "ない"))
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun interrogativeNanjaIFollowedByFinalParticlesIsAParticle() {
+        fun lookups() = listOf("何なんじゃいな", "何なんじゃいよ", "何なんじゃいね", "何なんじゃいさ", "何なんじゃいの").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "な" to "な"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "よ" to "よ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "ね" to "ね"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "さ" to "さ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "の" to "の"),
+        )
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun nanjaIParticleStopsAtThePhraseEnd() {
+        fun read() = listOf("何なんじゃいなよ", "何なんじゃいよね！", "なんなんじゃいの？", "何なんじゃいな猫").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "な" to "な", "よ" to "よ"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い", "よ" to "よ", "ね" to "ね"),
+            listOf("なん" to "なん", "なんじゃ" to "なんだ", "い" to "い", "の" to "の"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いな" to "いる", "猫" to "猫"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
+    }
+
+    @Test
+    fun interrogativeCopulaKeepsTheRestOfTheLine() {
+        val tail = "よこの気持ちは君の名前を呼びながら帰る"
+        fun tailWords(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.let { words ->
+            words.dropWhile { it.first != "よ" }
+        }
+        fun check() {
+            val expected = tailWords("本だ" + tail)
+            assertTrue(expected.isNotEmpty())
+            assertEquals(expected, tailWords("何なんだ" + tail))
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun interrogativeCandidatesKeepNonCopulasAndVerbs() {
+        fun read() = listOf("何なんの", "何なんだれ", "何なんでんしゃ", "何なんじゃいた", "何なんじゃい！").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何な" to "何", "ん" to "ん", "の" to "の"),
+            listOf("何" to "何", "なん" to "なん", "だれ" to "だれ"),
+            listOf("何" to "何", "なん" to "なん", "でんしゃ" to "電車"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いた" to "いる"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
+    }
+
+    @Test
+    fun iAfterOtherWordsKeepsItsVerbLookup() {
+        fun read() = listOf("猫がここにい", "花じゃい", "何なんじゃい猫", "何なんじゃいと叫ぶ").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("猫" to "猫", "が" to "が", "ここ" to "ここ", "に" to "に", "い" to "いる"),
+            listOf("花" to "花", "じゃ" to "じゃ", "い" to "いる"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "いる", "猫" to "猫"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いと" to "いと", "叫ぶ" to "叫ぶ"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
+    }
+
+    @Test
+    fun correctedInterrogativeNanjaKeepsTheWordBoundaries() {
+        fun corrected(): LineReading {
+            val read = Readings.of(listOf("これは何なんじゃろう本当"), Script.JAPANESE)
+            return Readings.corrected(read, listOf(ReadingFix(0, "本当", "ほんと", Reader.USER))).single()
+        }
+        fun check() {
+            val reading = corrected()
+            assertEquals("kore wa nan nanjarou honto", reading.romanized)
+            assertEquals("なん", reading.parts.first { it.text == "何" }.reading)
+            assertEquals("ほんと", reading.parts.first { it.text == "本当" }.reading)
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
 
     @Test
     fun katakanaCopulasAndConnectivesGetTheSameBoundaries() = assertJapaneseBoundaries(listOf(

@@ -112,8 +112,9 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      * 25 to keep なでなで together before particles and copulas.
+     * 26 to separate 何 or なん from explanatory なんだ.
      */
-    const val VERSION = 25
+    const val VERSION = 26
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -263,11 +264,17 @@ internal object Readings {
     }
 
     /** IPADIC can call 何だ an interjection after a topic; both dictionaries split an opening なんだ. */
-    private fun nanDa(pieces: List<Piece>): List<Piece> = buildList {
+    private fun nanDa(pieces: List<Piece>): List<Piece> = finalNanjaParticle(buildList {
         var skipUntil = 0
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
+            val explanation = pieces.interrogativePiece(at)
+            if (explanation != null) {
+                addAll(explanation.first)
+                skipUntil = at + explanation.second
+                continue
+            }
             val length = pieces.nanDaRewriteLength(at)
             if (length > 0) {
                 addAll(pieces.repeatedNanDaPieces(at, length))
@@ -291,6 +298,47 @@ internal object Readings {
                 else -> add(piece)
             }
         }
+    })
+
+    private val NANJA_FINAL_PARTICLES = setOf('な', 'よ', 'ね', 'さ', 'の')
+
+    private fun finalNanjaParticle(pieces: List<Piece>): List<Piece> = pieces.flatMapIndexed { at, piece ->
+        val head = pieces.getOrNull(at - 2)
+        val before = pieces.getOrNull(at - 1)
+        val explanation = head?.surface == "なん" && head.base == "なんだ" && before?.surface == "じゃ"
+        val attached = piece.surface.drop(1)
+        val particle = piece.surface.startsWith("い") && attached.all { it in NANJA_FINAL_PARTICLES }
+        if (explanation && particle && pieces.finalNanjaSuffix(at + 1)) {
+            ("い" + attached).map { Piece(it.toString(), it.toString(), "助詞", "終助詞", reader = Reader.RULES) }
+        } else listOf(piece)
+    }
+
+    private fun List<Piece>.finalNanjaSuffix(at: Int) = drop(at).takeWhile { it.kind != "記号" }
+        .all { it.kind == "助詞" && it.surface.all { c -> c in NANJA_FINAL_PARTICLES } }
+
+    /** Read the copula after 何なん as it would be read after a noun, even if the dictionary joined its pieces. */
+    private fun List<Piece>.interrogativePiece(at: Int): Pair<List<Piece>, Int>? {
+        if (getOrNull(at - 1)?.surface !in setOf("何", "なん")) return null
+        val suffix = drop(at).joinToString("") { it.surface }
+        if (!suffix.startsWith("なん")) return null
+        val copula = suffix.drop(2)
+        if (!copula.startsWith("だ") && !copula.startsWith("で") && !copula.startsWith("じゃ")) return null
+        val afterNoun = pieces("花" + copula)
+        if (afterNoun.firstOrNull()?.surface != "花") return null
+        val tail = afterNoun.drop(1)
+        val first = tail.firstOrNull() ?: return null
+        val de = first.surface == "で" && first.kind == "助詞"
+        if (!first.startsCopula && !first.surface.startsWith("じゃ") && !de) return null
+        if (tail.joinToString("") { it.surface } != copula) return null
+        val boundaries = drop(at).runningFold(0) { length, piece -> length + piece.surface.length }.drop(1)
+        var end = 2
+        val last = tail.indexOfFirst { piece ->
+            end += piece.surface.length
+            end in boundaries
+        }
+        if (last < 0) return null
+        val consumed = boundaries.indexOf(end) + 1
+        return (listOf(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES)) + tail.take(last + 1)) to consumed
     }
 
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
@@ -2022,7 +2070,8 @@ internal object Readings {
             val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
                 (previous.surface == "\"" && straightQuotes % 2 == 1) ||
                 (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
-            val join = previous != null && (withPrevious || continuesWord)
+            val explanatoryJa = previous?.surface == "なん" && previous.base == "なんだ" && piece.surface == "じゃ"
+            val join = previous != null && (withPrevious || continuesWord || explanatoryJa)
             if (join) words.last() += piece else words += mutableListOf(piece)
             orphan = if (orphanEnding && join) true else piece.kana == "から" && piece.kind == "助詞" &&
                 (previous == null || previous.kind == "助詞" || phraseMark ||
