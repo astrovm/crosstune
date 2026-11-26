@@ -264,6 +264,24 @@ class PlaybackTest {
     }
 
     @Test
+    fun thePlayerShowsTheLatestQueueItemAtTheFirstDeadline() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 10_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_400))
+        shadowOf(music).executeOnPlaybackStateChanged(state(3, 20_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(99))
+        assertEquals(142_000L, seen.last()?.clock?.positionAt(NOW))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(20_000L, seen.last()?.clock?.positionMs)
+    }
+
+    @Test
     fun aRefreshExpiresAnUnselectedSessionsPendingQueueId() {
         allow()
         val first = player("com.spotify.music", "Spotify", song.title, song.artist)
