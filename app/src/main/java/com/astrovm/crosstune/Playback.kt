@@ -563,19 +563,25 @@ internal class MediaSessionPlayback(
     }
 
     /** A single refresh covers all pending sessions, without extending a wait when more states arrive. */
-    private fun scheduleQueueRefresh(controllers: List<MediaController>, refresh: Runnable) {
+    private fun scheduleQueueRefresh(controllers: List<MediaController>, refresh: Runnable) = scheduleQueueRefresh(controllers, refresh, Long.MIN_VALUE)
+
+    /**
+     * The same, only for the waits that are over later than [after]. A refresh that just ended the waits over by then
+     * asks so: one still left from before would have it run again at once, and again, with no end.
+     */
+    private fun scheduleQueueRefresh(controllers: List<MediaController>, refresh: Runnable, after: Long) {
         val deadline = synchronized(queueWatchers) {
             controllers.flatMap {
                 listOfNotNull(queueMetadata[it.sessionToken]?.takeIf { entry -> entry.waitingId != null }?.waitingAt?.plus(queueGraceMs),
                     adEnds[it.sessionToken]?.at?.plus(AD_END_MS))
-            }.minOrNull()
+            }.filter { it > after }.minOrNull()
         }
         handler.removeCallbacks(refresh)
         if (deadline != null) handler.postDelayed(refresh, (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
     }
 
-    private fun expireQueueWaits(controllers: List<MediaController>) = synchronized(queueWatchers) {
-        val time = SystemClock.uptimeMillis()
+    /** Ends the waits of [controllers] that are over by [time]. */
+    private fun expireQueueWaits(controllers: List<MediaController>, time: Long) = synchronized(queueWatchers) {
         controllers.forEach { controller ->
             queueMetadata.computeIfPresent(controller.sessionToken) { _, previous ->
                 val id = previous.waitingId
@@ -604,9 +610,10 @@ internal class MediaSessionPlayback(
         lateinit var refresh: Runnable
         refresh = Runnable {
             guard.act {
-                expireQueueWaits(controllers())
+                val time = SystemClock.uptimeMillis()
+                expireQueueWaits(controllers(), time)
                 update()
-                guard.act { scheduleQueueRefresh(controllers(), refresh) }
+                guard.act { scheduleQueueRefresh(controllers(), refresh, after = time) }
             }
         }
         return refresh

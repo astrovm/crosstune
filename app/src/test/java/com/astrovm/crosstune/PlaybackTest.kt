@@ -1806,6 +1806,32 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongsWaitAfterItsAdEndsOnTimeForWhatOnlyWatchesWhatPlays() {
+        allow()
+        val music = youTubeMusic("Waka Waka", "Shakira", 10_077, updated = 1_613_553_340, item = 26)
+        val waka = MusicMetadata("Waka Waka", "Shakira")
+        val seen = mutableListOf<Following?>()
+        val following = CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(waka).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        music.isAt(PlaybackState.STATE_PLAYING, 1_613_563_599, 26, afterMs = 10_222)
+        music.says("Waka Waka", "Shakira", 210_721, afterMs = 87)
+        music.isAt(PlaybackState.STATE_BUFFERING, 1_613_563_857, 26, afterMs = 169)
+        assertTrue(seen.now().ad)
+        // As the song loads, the bar starts to watch what plays, and the screen that followed the song closes.
+        offered()
+        following.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        fun waits() = playback.matching(waka).single().following?.ad
+        assertEquals(true, waits())
+        // YouTube Music says no more, so nothing but the time YouTube Music had ends the wait: just short of it, the
+        // song still waits, and then it's taken at its word.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS - 170))
+        assertEquals(true, waits())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(false, waits())
+    }
+
+    @Test
     fun aSongIsntKeptWaitingOnceNoScreenWatchesItsAdEnd() {
         allow()
         val music = youTubeMusic("Waka Waka", "Shakira", 10_077, updated = 1_613_553_340, item = 26)
