@@ -4811,7 +4811,12 @@ class MainActivityTest {
         val link = "https://music.youtube.com/watch?v=$video"
         val phone = FakePlayback().apply { access = true; rememberYouTubeLength(video, 263_000) }
         MainActivity.playbackFactory = { phone }
-        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd"}""") }
+        fake.handler = { request ->
+            val body = if (request.url.toString() == YouTubeMusicApi.NEXT_URL) {
+                """{"x":{"playlistPanelVideoRenderer":{"videoId":"$video","lengthText":{"runs":[{"text":"4:23"}]}}}}"""
+            } else """{"title":"Blinding Lights","author_name":"The Weeknd"}"""
+            FakeSpotify.html(request, body)
+        }
         shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         val model = ViewModelProvider(launch())[MainViewModel::class.java]
@@ -4820,6 +4825,7 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(start) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         click(start)
         waitUntil(TIMEOUT_MS) { phone.linksAsked == listOf(link) }
+        waitUntil(TIMEOUT_MS) { YouTubeMusicApi.NEXT_URL in fake.requestedUrls }
 
         val ad = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music",
             canSeek = true, appPackage = youtube, durationMs = 263_000, ad = true, adPlaying = true, session = 31)
@@ -4840,7 +4846,7 @@ class MainActivityTest {
         assertEquals(listOf(31, 31), phone.playedSessions)
         assertEquals(listOf(link), phone.linksAsked)
         assertTrue(phone.opened.isEmpty())
-        assertFalse(YouTubeMusicApi.NEXT_URL in fake.requestedUrls)
+        assertEquals(1, fake.requestedUrls.count { it == YouTubeMusicApi.NEXT_URL })
         assertEquals(ad.clock, model.uiState.player?.following?.clock)
         composeRule.onNode(hasText("0:00")).assertIsDisplayed()
     }

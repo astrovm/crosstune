@@ -55,7 +55,7 @@ class PlayGoldenTest {
         val found = PlayScenes.replays.flatMap { replay ->
             PlayScenes.replay(app, replay) { source ->
                 val evidence = source.youTubePlayEvidence
-                val request = evidence.start(MusicService.YOUTUBE_MUSIC.packageName, "abcdefghijk", 253_000)
+                val request = evidence.start(MusicService.YOUTUBE_MUSIC.packageName, replay.videoId, replay.catalogueDuration)
                 val clear: () -> Unit = { evidence.clear(request) }
                 clear
             }

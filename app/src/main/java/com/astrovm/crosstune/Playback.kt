@@ -192,7 +192,7 @@ internal data class Following(
     val upNext: List<Queued> = emptyList(),
     /** The list it plays from, when Crosstune is playing one through: see [PlayQueue]. */
     val from: String? = null,
-    /** The song clock waits at its start for a possible or confirmed ad. [item] carries the actual decision. */
+    /** The song clock is held at its start while the app plays an ad. */
     val ad: Boolean = false,
     /** The app plays the ad, rather than waiting for Play. The song's clock is still paused. */
     val adPlaying: Boolean = false,
@@ -201,7 +201,7 @@ internal data class Following(
      * new one for what it plays next, and say nothing else of it, as a player of files with no title may.
      */
     val session: Int = 0,
-    /** The current item and its decision from the session ledger. */
+    /** The current video's ID, if a YouTube session identifies it. */
     val videoId: String? = null
 ) {
     val playingInApp: Boolean get() = clock.playing || adPlaying
@@ -476,7 +476,8 @@ internal class MediaSessionPlayback(
             val state = snapshot.state ?: return@mapNotNull null
             if (!controller.has(song, null, snapshot.latest)) return@mapNotNull null
             val number = sessionNumbers.of(controller.sessionToken)
-            PlaybackMatch(following(controller, snapshot)?.copy(session = number), forSession(controller.sessionToken), controller.packageName, number,
+            PlaybackMatch(following(controller, snapshot, controller.followAdDuration(snapshot, song.lengthMs))?.copy(session = number),
+                forSession(controller.sessionToken), controller.packageName, number,
                 state.state == PlaybackState.STATE_PLAYING, counts.getValue(controller.packageName))
         }
     }.getOrDefault(emptyList())
@@ -597,7 +598,7 @@ internal class MediaSessionPlayback(
     /** Selection and this read can straddle a skip. Check the same metadata the clock will use. */
     private fun followRead(controller: MediaController, song: MusicMetadata, app: String?, snapshot: SessionSnapshot): Following? {
         if (!controller.has(song, app, snapshot.latest)) return null
-        return following(controller, snapshot)
+        return following(controller, snapshot, controller.followAdDuration(snapshot, song.lengthMs))
     }
 
     private fun logFollowed(observer: Int, controller: MediaController, snapshot: MediaMetadata?, steady: Following?) {
@@ -1018,31 +1019,34 @@ internal class MediaSessionPlayback(
         val before = metadata
         val state = playbackState
         val after = metadata
-        val ad = before?.let { raw ->
-            val duration = raw.reportedDurationMs() ?: return@let null
-            youTubePlayEvidence.adDuration(packageName, raw.youTubeVideoId(), duration)
-                ?.takeIf { raw.sessionFields() == after?.sessionFields() }
-        }
+        val ad = before?.let { raw -> exactAdDuration(raw)?.takeIf { raw.sessionFields() == after?.sessionFields() } }
         return SessionSnapshot(before, after, state, ad)
     }
 
-    /** Keep main's title-history rule when there is no new proof. Readers never supply a duration here. */
-    private fun MediaController.historyAdDuration(metadata: MediaMetadata): Long? {
+    private fun MediaController.exactAdDuration(metadata: MediaMetadata): Long? =
+        metadata.reportedDurationMs()?.let { youTubePlayEvidence.adDuration(packageName, videoId(metadata), it) }
+
+    private fun MediaController.followAdDuration(snapshot: SessionSnapshot, asked: Long?): Long? =
+        snapshot.exactAdMs ?: snapshot.latest?.let { legacyAdDuration(it, asked) }
+
+    /** Main's asked-length and title-history rule, including sessions that supply no media ID. */
+    private fun MediaController.legacyAdDuration(metadata: MediaMetadata, asked: Long? = null): Long? {
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
         val raw = metadata.reportedDurationMs() ?: return null
         if (raw >= AD_DURATION_HINT_MS) return null
+        if (asked != null && asked >= AD_DURATION_HINT_MS) return asked
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         return lengths.known(title, artist).lastOrNull { it >= AD_DURATION_HINT_MS }
     }
 
-    /** Adjust the display duration only after classifying the item's raw report. */
+    /** Remember ordinary short tracks as before. Never save the raw length of an exact ad. */
     private fun MediaController.lengthOf(metadata: MediaMetadata, ad: Long?): Long? =
         metadata.reportedDurationMs()?.let { raw ->
             ad ?: lengths.of(
                 metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(),
                 metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), raw,
-                keep = MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC || raw >= AD_DURATION_HINT_MS
+                keep = exactAdDuration(metadata) == null
             )
         }
 
@@ -1053,6 +1057,11 @@ internal class MediaSessionPlayback(
     private fun MediaMetadata.youTubeVideoId(): String? =
         RecordingKey.confirmedYouTubeSessionId(getString(MediaMetadata.METADATA_KEY_MEDIA_URI), getString(MediaMetadata.METADATA_KEY_MEDIA_ID))
 
+    private fun MediaController.videoId(metadata: MediaMetadata): String? =
+        if (isYouTube()) metadata.youTubeVideoId() else null
+
+    private fun MediaController.isYouTube(): Boolean = MusicService.ofPackage(packageName) in YOUTUBE_PLAYERS
+
     /** What plays, as the app names it. */
     private fun MediaController.named(): MusicMetadata? =
         metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
@@ -1061,7 +1070,7 @@ internal class MediaSessionPlayback(
     /** Stopped or paused at its song's end, where it said it is. */
     private fun MediaController.ended(): Boolean {
         val state = playbackState ?: return false
-        val duration = metadata?.let { lengthOf(it, historyAdDuration(it)) } ?: return false
+        val duration = metadata?.let { lengthOf(it, legacyAdDuration(it)) } ?: return false
         return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
     }
 
@@ -1144,7 +1153,7 @@ internal class MediaSessionPlayback(
         if (forRecognition && MetadataParsers.noArtist(artist)) return null
         if (Songless.namesNoSong(title, artist, controller.songName(title, artist))) return null
         if (asked != null && !controller.plays(asked, metadata)) return null
-        val ad = snapshot.exactAdMs ?: controller.historyAdDuration(metadata)
+        val ad = snapshot.exactAdMs ?: controller.legacyAdDuration(metadata, asked?.lengthMs)
         val named = said(controller, ad, metadata) ?: return null
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
@@ -1159,7 +1168,7 @@ internal class MediaSessionPlayback(
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
         ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f,
-            ad = ad != null)
+            ad = follows?.ad == true, sessionReportedAtMs = snapshot.state?.lastPositionUpdateTime.takeIf { controller.isYouTube() })
     }
 
     /**
@@ -1180,7 +1189,7 @@ internal class MediaSessionPlayback(
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         return when {
             !controller.isVideo(metadata) -> MusicMetadata(
-                title, artist, lengthMs = controller.lengthOf(metadata, ad),
+                title, artist, lengthMs = controller.lengthOf(metadata, ad ?: controller.legacyAdDuration(metadata)),
                 album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.ifBlank { null }
             )
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
@@ -1206,13 +1215,12 @@ internal class MediaSessionPlayback(
         }
 
     private fun following(
-        controller: MediaController, snapshot: SessionSnapshot,
-        adDuration: Long? = snapshot.exactAdMs ?: snapshot.latest?.let { controller.historyAdDuration(it) }
+        controller: MediaController, snapshot: SessionSnapshot, adDuration: Long?
     ): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = snapshot.state?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // With no position, only a confirmed ad has a clock. The transport still controls that session.
-        if (state.position < 0 && adDuration == null) return null
+        if (state.position < 0 && snapshot.exactAdMs == null) return null
         val app = labelOf(controller.packageName)
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
@@ -1232,7 +1240,7 @@ internal class MediaSessionPlayback(
             like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) },
             ad = held,
             adPlaying = held && playing,
-            videoId = metadata?.youTubeVideoId()
+            videoId = metadata?.let { controller.videoId(it) }
         )
     }
 
@@ -1309,23 +1317,23 @@ internal class MediaSessionPlayback(
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
-        val ad = historyAdDuration(playing)
+        val ad = legacyAdDuration(playing, song.lengthMs)
         val length = lengthOf(playing, ad)
         val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
         val ownId = song.recordingId?.takeIf { it.startsWith("$packageName:") }
         if (ownId != null && recording != null && ownId != recording) return true
-        val video = playing.youTubeVideoId()
-        val requested = RecordingKey.confirmedYouTubeSessionId(song.url, ownId?.removePrefix("$packageName:"))
-        if (video != null && video == requested) return false
+        val video = videoId(playing)
+        if (video != null && video == RecordingKey.confirmedYouTubeSessionId(song.url, ownId?.removePrefix("$packageName:"))) return false
         return !isVideo(playing) && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
     }
 
     private fun MediaController.plays(song: MusicMetadata, snapshot: MediaMetadata? = metadata): Boolean {
         if (packageName == RadioGarden.PACKAGE) return false
         val playing = snapshot ?: return false
+        if (anotherRecording(playing, song)) return false
         val (title, artist) = names(playing)
-        val named = if (MetadataParsers.noArtist(artist)) playsWithNoArtist(title, artist, song) else SongNames.names(title, artist, song)
-        return named && !anotherRecording(playing, song)
+        if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
+        return SongNames.names(title, artist, song)
     }
 
     /** A station or untagged file has no artist to support a partial title match. */
@@ -1355,8 +1363,6 @@ internal val YOUTUBE_PLAYERS = setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
-
-/** A requested length can be a different cut. Give the app the usual startup time to resolve that. */
 
 /** How long an app asked to play on from behind has to keep playing: YouTube without Premium stops 8 ms after it says it plays. */
 internal const val PLAYS_ON_MS = 1_000L

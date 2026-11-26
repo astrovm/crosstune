@@ -54,7 +54,9 @@ internal sealed interface Heard {
         val app: String? = null,
         val speed: Float = 1f,
         val inRoom: Boolean = false,
-        val ad: Boolean = false
+        val ad: Boolean = false,
+        /** Android's own time for the session report, even if it has no usable song clock. */
+        val sessionReportedAtMs: Long? = null
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null

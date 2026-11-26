@@ -116,7 +116,7 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
         return lengthMs
     }
 
-    /** Only a duration from the exact video or one too long to be an ad is kept here. */
+    /** Only a catalogue duration is kept for each YouTube video ID. */
     @Synchronized
     fun rememberVideo(id: String, lengthMs: Long) {
         val key = "youtube:$id"

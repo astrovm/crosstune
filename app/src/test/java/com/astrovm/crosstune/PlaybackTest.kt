@@ -699,6 +699,34 @@ class PlaybackTest {
     }
 
     @Test
+    fun replacingTheStaleCatalogueEvidenceReleasesAnExistingShortVideosClock() {
+        allow()
+        sounding()
+        val appPackage = MusicService.YOUTUBE_MUSIC.packageName
+        val id = "abcdefghijk"
+        val controller = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album",
+            duration = 45_000, position = 12_000, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(controller)
+        playback.rememberYouTubeLength(id, 240_000)
+        val request = playback.youTubePlayEvidence.start(appPackage, id, 240_000)
+        val watched = followed(song.copy(url = "https://music.youtube.com/watch?v=$id"))
+        assertTrue(checkNotNull(watched.last()).ad)
+        val report = checkNotNull(playback.nowPlaying())
+        assertTrue(report.ad)
+        assertEquals(PLAYED_AT, report.sessionReportedAtMs)
+        val stored = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        assertTrue("A classified ad must not be saved as an ordinary short track", stored.known(song.title, song.artist).isEmpty())
+        assertEquals(240_000L, playback.knownYouTubeLength(id))
+        playback.youTubePlayEvidence.remember(request, 45_000)
+        shadowOf(Looper.getMainLooper()).idle()
+        val shortened = checkNotNull(watched.last())
+        assertFalse(shortened.ad)
+        assertEquals(12_000L, shortened.clock.positionMs)
+        assertEquals(45_000L, shortened.durationMs)
+        playback.youTubePlayEvidence.clear(request)
+    }
+
+    @Test
     fun exactVideoLengthsAreKeptForTheSameRecordingOnly() {
         val id = "abcdefghijk"
         val otherEdit = "lmnopqrstuv"
@@ -725,6 +753,49 @@ class PlaybackTest {
         assertTrue(home.ad)
         assertEquals(true, followed(home.metadata).last()?.ad)
         assertEquals(true, playback.nowPlaying()?.ad)
+    }
+
+    @Test
+    fun theAskedLengthStillKeepsAMatchingAdWithoutAMediaIdAtZero() {
+        allow()
+        sounding()
+        val appPackage = MusicService.YOUTUBE_MUSIC.packageName
+        val player = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album",
+            duration = 30_000, position = 12_000)
+        shadowOf(sessions).addController(player)
+        val asked = song.copy(lengthMs = 253_000, album = "Album", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val reading = checkNotNull(followed(asked).last())
+        assertTrue(reading.ad)
+        assertEquals(0L, reading.clock.positionMs)
+        assertEquals(253_000L, reading.durationMs)
+        assertEquals(reading, playback.matching(asked).single().following)
+    }
+
+    @Test
+    fun aDeezerTrackIdIsNotAYouTubeVideoIdEvenWhenTheTextMatches() {
+        allow()
+        sounding()
+        val id = "12345678901"
+        val player = player(MusicService.DEEZER.packageName, "Deezer", song.title, song.artist, album = "Album",
+            duration = 90_000, position = 12_000, art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to id))
+        shadowOf(sessions).addController(player)
+        val asked = song.copy(lengthMs = 253_000, url = "https://music.youtube.com/watch?v=$id")
+        assertNull(followed(asked).last())
+    }
+
+    @Test
+    fun aShortTrackSetsTheRoundedLengthForTheSameRecordingOnAnotherApp() {
+        allow()
+        sounding()
+        val first = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist, album = "Album", duration = 89_000)
+        val next = player(MusicService.DEEZER.packageName, "Deezer", song.title, song.artist, album = "Album", duration = 90_000)
+        val manager = shadowOf(sessions)
+        manager.addController(first)
+        assertEquals(89_000L, playback.nowPlaying()?.metadata?.lengthMs)
+        manager.clearControllers()
+        manager.addController(next)
+        assertEquals(89_000L, playback.nowPlaying()?.metadata?.lengthMs)
+        assertEquals(89_000L, followed().last()?.durationMs)
     }
 
     @Test
@@ -814,15 +885,17 @@ class PlaybackTest {
     }
 
     @Test
-    fun anUnidentifiedShortYouTubeReportDoesNotEnterPlaybackHistory() {
+    fun aShortYouTubeReportThatIsNotAnAdStillEntersPlaybackHistory() {
         allow()
         sounding()
         val appPackage = MusicService.YOUTUBE_MUSIC.packageName
         val short = player(appPackage, "YouTube Music", song.title, song.artist, album = "Album", duration = 33_204)
         shadowOf(sessions).addController(short)
-        assertEquals(33_204L, playback.nowPlaying()?.metadata?.lengthMs)
+        val report = checkNotNull(playback.nowPlaying())
+        assertFalse(report.ad)
+        assertEquals(33_204L, report.metadata.lengthMs)
         val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        assertTrue(SteadyLengths(preferences).known(song.title, song.artist).isEmpty())
+        assertEquals(listOf(33_204L), SteadyLengths(preferences).known(song.title, song.artist))
     }
 
     @Test

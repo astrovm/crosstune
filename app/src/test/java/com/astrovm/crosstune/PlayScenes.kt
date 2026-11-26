@@ -168,12 +168,13 @@ internal object PlayScenes {
     /** Only sequences with no ads belong in the main golden. */
     data class Report(
         val title: String = "Requested song", val id: String? = null, val duration: Long? = 253_000,
-        val position: Long = 0, val album: String = "Album", val metadata: Boolean = true
+        val position: Long = 0, val album: String = "Album", val metadata: Boolean = true, val app: String = "ytmusic"
     )
 
     data class Replay(
         val name: String, val reports: List<Report>, val twoReaders: Boolean = false,
-        val storedDurations: Pair<Long, Long>? = null
+        val storedDurations: Pair<Long, Long>? = null, val requestedDuration: Long? = null,
+        val videoId: String = "abcdefghijk", val catalogueDuration: Long = 253_000
     )
 
     val replays = listOf(
@@ -196,16 +197,33 @@ internal object PlayScenes {
         Replay("two readers with separate rounding histories", listOf(Report(duration = 239_000), Report(duration = 239_000, position = 3_000)),
             twoReaders = true, storedDurations = 240_000L to 238_000L),
         Replay("two readers see a skip", listOf(Report(id = "opaque-one"), Report("Next song", "opaque-two", 90_000)),
-            twoReaders = true)
+            twoReaders = true),
+        Replay("a Deezer ID looks like a YouTube ID",
+            listOf(Report(id = "12345678901", duration = 90_000, position = 12_000, app = "deezer")),
+            requestedDuration = 253_000, videoId = "12345678901"),
+        Replay("short no-ID recording changes app and rounds its duration",
+            listOf(Report(duration = 89_000, position = 3_000), Report(duration = 90_000, position = 12_000, app = "deezer"))),
+        Replay("Spotify track reports no ID then no duration",
+            listOf(Report(duration = 90_000, app = "song"), Report(duration = null, position = 12_000, app = "song"))),
+        Replay("unknown app reports a track without ID or duration",
+            listOf(Report(duration = null, position = -1, app = "file"), Report(duration = null, position = 12_000, app = "file"))),
+        Replay("the catalogue confirms a short trim", listOf(Report(id = "abcdefghijk", duration = 45_000, position = 12_000)),
+            catalogueDuration = 45_000),
+        Replay("the metadata is repeated when sound resumes",
+            listOf(Report(id = "spotify:track:identifier", position = -1, app = "song"),
+                Report(id = "spotify:track:identifier", position = 12_000, app = "song")))
     )
 
     fun replay(app: Application, replay: Replay, before: (MediaSessionPlayback) -> (() -> Unit) = { {} }): List<Pair<String, String>> {
-        val kind = kinds.single { it.name == "ytmusic" }.copy(title = "Requested song", artist = "Band", album = "Album")
+        val replayKinds = (kinds + Kind("deezer", "deezer.android.app", "Deezer", "", null)).associateBy(Kind::name)
+        fun kindOf(report: Report) = replayKinds.getValue(report.app).copy(title = "Requested song", artist = "Band", album = "Album")
+        val kind = kindOf(replay.reports.first())
+        val followApp = kind.app.takeIf { replay.reports.all { it.app == kind.name } }
         val manager = app.getSystemService(MediaSessionManager::class.java)
         ShadowMediaSessionManager.reset()
         shadowOf(app.getSystemService(AudioManager::class.java)).setIsMusicActive(true)
-        val controller = controller(app, Played(kind, remote = false, playing = true), PLAYED_AT)
-        shadowOf(manager).addController(controller)
+        var current = controller(app, Played(kind, remote = false, playing = true), PLAYED_AT)
+        shadowOf(manager).addController(current)
         val sources = List(if (replay.twoReaders) 2 else 1) { i ->
             val prefs = app.getSharedPreferences("play_golden_reader_$i", Context.MODE_PRIVATE)
             prefs.edit().clear().commit()
@@ -219,18 +237,26 @@ internal object PlayScenes {
         val after = before(sources.first())
         try {
             return replay.reports.flatMapIndexed { index, report ->
-                val metadata = if (report.metadata) setReport(controller, report) else null
+                val kindHere = kindOf(report)
+                val changedApp = current.packageName != kindHere.app
+                if (changedApp) current = controller(app, Played(kindHere, remote = false, playing = true), PLAYED_AT + index * 10_000L)
+                val metadata = if (report.metadata) setReport(current, report) else null
                 val state = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, report.position, 1f, PLAYED_AT + index * 10_000L)
                     .setActions(PlaybackState.ACTION_SEEK_TO).build()
-                shadowOf(controller).setPlaybackState(state)
+                shadowOf(current).setPlaybackState(state)
+                if (changedApp) shadowOf(manager).apply {
+                    clearControllers()
+                    addController(current)
+                }
                 if (index == 0) sources.forEachIndexed { i, source ->
                     watchers += CoroutineScope(Dispatchers.Unconfined).launch {
-                        source.follow(MusicMetadata("Requested song", "Band", url = "https://music.youtube.com/watch?v=abcdefghijk"), kind.app)
+                        source.follow(MusicMetadata("Requested song", "Band", url = "https://music.youtube.com/watch?v=${replay.videoId}",
+                            lengthMs = replay.requestedDuration), followApp)
                             .collect { following[i] = it }
                     }
                 }
-                if (metadata != null) shadowOf(controller).executeOnMetadataChanged(metadata)
-                shadowOf(controller).executeOnPlaybackStateChanged(state)
+                if (metadata != null) shadowOf(current).executeOnMetadataChanged(metadata)
+                shadowOf(current).executeOnPlaybackStateChanged(state)
                 main.idle()
                 sources.mapIndexed { reader, source ->
                     val home = source.nowPlaying()

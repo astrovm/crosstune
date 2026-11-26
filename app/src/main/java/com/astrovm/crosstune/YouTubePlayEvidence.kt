@@ -15,7 +15,8 @@ internal class YouTubePlayEvidence {
     fun start(app: String, videoId: String, durationMs: Long?): Request =
         Request(app, videoId).also { active.value = Exact(it, durationMs) }
 
-    fun remember(request: Request, durationMs: Long) {
+    /** Replace even an old cached duration with no evidence if the fresh request could not verify it. */
+    fun remember(request: Request, durationMs: Long?) {
         active.update { current -> if (current != null && current.request === request) current.copy(durationMs = durationMs) else current }
     }
 
