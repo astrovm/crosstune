@@ -187,6 +187,18 @@ class ReadingsTest {
     ))
 
     @Test
+    fun katakanaRepeatedCallsWithParticlesAndMiddleDots() = assertJapaneseBoundaries(listOf(
+        Triple("なんだなんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+        Triple("ナンダナンダよ", "nan da nan da yo", listOf("ナン", "ダ", "ナン", "ダ", "よ")),
+        Triple("ナンダナンダね", "nan da nan da ne", listOf("ナン", "ダ", "ナン", "ダ", "ね")),
+        Triple("ナンダナンダか", "nan da nan da ka", listOf("ナン", "ダ", "ナン", "ダ", "か")),
+        Triple("ナンダ・ナンダ", "nanda nanda", listOf("ナンダ", "ナンダ")),
+        Triple("ナンダ・ナンダよ", "nan da nan da yo", listOf("ナン", "ダ", "ナン", "ダ", "よ")),
+        Triple("ナンダ・ナンダの歌", "nanda nanda no uta", listOf("ナンダ・ナンダ", "の", "歌")),
+        Triple("ナンダナンダの歌", "nandananda no uta", listOf("ナンダナンダ", "の", "歌")),
+    ))
+
+    @Test
     fun repeatedCallsDoNotSplitExplanationsOrNames() = assertJapaneseBoundaries(listOf(
         Triple("好き～なんだ", "suki～ nanda", listOf("好き", "なんだ")),
         Triple("夢・なんだ", "yume nanda", listOf("夢", "なんだ")),

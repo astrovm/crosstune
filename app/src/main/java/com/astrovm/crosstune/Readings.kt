@@ -195,12 +195,32 @@ internal object Readings {
     }
 
     /** The tokenizer can make a single name out of repeated katakana calls. */
-    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = pieces.flatMapIndexed { at, piece ->
-        val surface = piece.surface
-        val repeated = surface.length >= 6 && surface.length % 3 == 0 && surface.chunked(3).all { it == "ナンダ" }
-        if (repeated && !nameParticle(pieces.getOrNull(at + 1))) {
-            surface.chunked(3).map { Piece(it, "なんだ", "感動詞", "*", reader = Reader.RULES) }
-        } else listOf(piece)
+    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = buildList {
+        for (at in pieces.indices) {
+            val piece = pieces[at]
+            val after = pieces.getOrNull(at + 1)
+            val calls = katakanaCalls(piece.surface)
+            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls, after?.surface in NAN_DA_PARTICLES))
+        }
+    }
+
+    private fun katakanaCalls(surface: String): List<String>? {
+        if (!surface.startsWith("ナンダ")) return null
+        val parts = surface.split('・')
+        val calls = parts.all { it.isNotEmpty() && it.length % 3 == 0 && it.chunked(3).all { word -> word == "ナンダ" } }
+        return parts.takeIf { calls && parts.sumOf { it.length / 3 } >= 2 }
+    }
+
+    private fun katakanaCallPieces(parts: List<String>, splitCopulas: Boolean): List<Piece> = buildList {
+        for (part in parts) {
+            if (isNotEmpty()) add(Piece("・", "・", "記号", "一般", reader = Reader.RULES))
+            repeat(part.length / 3) {
+                if (splitCopulas) {
+                    add(Piece("ナン", "なん", "名詞", "代名詞", reader = Reader.RULES))
+                    add(Piece("ダ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
+                } else add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES))
+            }
+        }
     }
 
     /** After the call 何だ, IPADIC can take the particle よ and adverb もう for the verb よむ. */
@@ -242,8 +262,7 @@ internal object Readings {
         val before = pieces.getOrNull(at - 1)?.surface ?: return false
         val copula = pieces.getOrNull(at + 2)
         val clauseMark = before.firstOrNull()?.let { it in ",!?" } == true && before.all { it in ",!?" }
-        val repeatedMark = before in setOf("～", "・") && pieces.repeatedNanDaLength(at) > 0
-        return (clauseMark || repeatedMark) && pieces[at].surface == "な" &&
+        return clauseMark && pieces[at].surface == "な" &&
             pieces.getOrNull(at + 1)?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula
     }
 
@@ -1892,6 +1911,7 @@ internal object Readings {
 
     private fun List<Piece>.beforeNanCopula(at: Int): Piece? {
         val before = beforeAdverbs(at)
+        if (before?.startsCopula == true && getOrNull(at - 2)?.surface in setOf("なん", "ナン")) return null
         if (before?.surface !in setOf("～", "・")) return before
         return beforeAdverbs(at - 1)?.takeIf { it.kind == "名詞" } ?: before
     }
