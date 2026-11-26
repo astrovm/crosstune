@@ -111,8 +111,9 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
+     * 25 to separate 何 or なん from explanatory なんだ.
      */
-    const val VERSION = 24
+    const val VERSION = 25
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
