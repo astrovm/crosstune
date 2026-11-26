@@ -1543,7 +1543,7 @@ class ListeningTest {
     }
 
     @Test
-    fun whenAnAdEndsTheBarAndThePlayerShowTheSongWaitingAtItsStartUntilItPlays() {
+    fun whenAnAdEndsTheBarAndThePlayerShowTheSongAtItsStartAsLongAsItIs() {
         // Free YouTube Music as a phone had it (the Samsung, 2026-11-26): a song's first play there, behind two ads under
         // its name, 15 and 20 s long, with nothing to tell them from the song by until each ends.
         val title = "Bohemian Rhapsody (Digital Remaster)"
@@ -1568,31 +1568,29 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { barShown() }
         assertTrue(shown(title))
         assertTrue(described(string(R.string.lyrics_pause)))
-        // The first ad ends into the second: the bar no longer shows it playing, until YouTube Music says it plays again.
+        // The first ad ends into the second. Said to play still, it's shown playing; while the second loads, it isn't.
         isAt(PlaybackState.STATE_PLAYING, afterMs = 15_000)
         says(long(20_131))
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.lyrics_pause)))
+        isAt(PlaybackState.STATE_BUFFERING, afterMs = 202)
         waitForDescription(string(R.string.lyrics_play))
         assertFalse(described(string(R.string.lyrics_pause)))
-        isAt(PlaybackState.STATE_BUFFERING, afterMs = 202)
-        composeRule.waitForIdle()
-        assertTrue(described(string(R.string.lyrics_play)))
         isAt(PlaybackState.STATE_PLAYING, afterMs = 3)
         waitForDescription(string(R.string.lyrics_pause))
         // Opened now, the player has the second ad for the song, as long as the ad is.
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.player != null }
         waitForText("0:20")
-        // The ad over, the player is on the song, as long as it is, waiting at its start.
+        // The ad over, the player is on the song, as long as it is, and it waits at its start while it loads.
         isAt(PlaybackState.STATE_PLAYING, afterMs = 20_000)
         says(long(359_491))
         waitForText("5:59")
+        assertTrue(shown(title))
+        isAt(PlaybackState.STATE_BUFFERING, afterMs = 215)
         waitForDescription(string(R.string.lyrics_play))
         assertFalse(described(string(R.string.lyrics_pause)))
         assertTrue(shown("0:00"))
-        assertTrue(shown(title))
-        isAt(PlaybackState.STATE_BUFFERING, afterMs = 215)
-        composeRule.waitForIdle()
-        assertTrue(described(string(R.string.lyrics_play)))
         // Said to play, it does, from its start.
         isAt(PlaybackState.STATE_PLAYING, afterMs = 4)
         waitForDescription(string(R.string.lyrics_pause))

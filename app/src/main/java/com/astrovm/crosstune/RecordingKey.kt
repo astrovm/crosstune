@@ -97,6 +97,8 @@ internal object RecordingKey {
  */
 internal class SteadyLengths(private val preferences: SharedPreferences) {
     private val seen: JSONObject by lazy { runCatching { JSONObject(preferences.getString(KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
+    /** The lengths first said since Crosstune started, each with its song: only one of those can turn out an ad's, see [forget]. */
+    private val fresh = mutableSetOf<Pair<String, Long>>()
 
     @Synchronized
     fun of(title: String, artist: String, lengthMs: Long): Long {
@@ -105,6 +107,7 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
         (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let { return it }
         seen.remove(key)
         seen.put(key, known.put(lengthMs))
+        fresh += key to lengthMs
         // The songs heard longest ago go first once there are many.
         while (seen.length() > MAX_SONGS) seen.remove(seen.keys().next())
         preferences.edit { putString(KEY, seen.toString()) }
@@ -115,13 +118,16 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
     @Synchronized
     fun known(title: String, artist: String): List<Long> = seen.optJSONArray(keyOf(title, artist))?.let { known -> (0 until known.length()).map(known::getLong) }.orEmpty()
 
-    /** [lengthMs] turned out not to be the song's, as an ad's that played under its name: it's no longer one said for it. */
+    /**
+     * [lengthMs] turned out not to be the song's, as an ad's that played under its name: it's no longer one said for
+     * it. Only when it was first said since Crosstune started: one kept from before is a take of the song that some
+     * app played, however near an ad's length.
+     */
     @Synchronized
     fun forget(title: String, artist: String, lengthMs: Long) {
         val key = keyOf(title, artist)
-        val known = known(title, artist)
-        val kept = known.filter { abs(it - lengthMs) > SAME_MS }
-        if (kept.size == known.size) return
+        if (!fresh.remove(key to lengthMs)) return
+        val kept = known(title, artist).filter { it != lengthMs }
         if (kept.isEmpty()) seen.remove(key) else seen.put(key, JSONArray(kept))
         preferences.edit { putString(KEY, seen.toString()) }
     }
