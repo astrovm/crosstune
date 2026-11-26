@@ -443,8 +443,10 @@ internal class MediaSessionPlayback(
     private fun watchQueue(controller: MediaController) = synchronized(queueWatchers) {
         val token = controller.sessionToken
         queueWatchers[token] = (queueWatchers[token] ?: 0) + 1
-        // Already on an ad as it's first watched, its end is seen against that.
-        if (controller.namesAdsAsSongs()) saidLengths.computeIfAbsent(token) { controller.saidLength(controller.metadata) }
+        // Already on an ad as it's first watched, its end is seen against that. Watched again, what it says now is
+        // taken as said: as its sessions change, the app's word of who sings a song can be lost on its way here,
+        // and the song's start after its ad would look like another song's.
+        if (controller.namesAdsAsSongs()) controller.lengthSaid(controller.saidLength(controller.metadata))
     }
 
     private fun unwatchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
@@ -693,18 +695,10 @@ internal class MediaSessionPlayback(
         var watched: List<MediaController> = emptyList()
         var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
         val guard = ObserverGuard { isActive }
-        lateinit var clocks: SteadyClock
-        var movesSeen = moves
-        var adEnded = false
+        val clocks = FollowedClock()
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
-            // Moved by Crosstune, where the app says next is believed, even a moment back. So is where a song starts
-            // as its ad ends, and once more when that's over: nothing the app said under the ad is the song's, and
-            // not every word of the song's start is heard.
-            val ending = adEnds.containsKey(controller.sessionToken)
-            if (moves !== movesSeen || it.ad || ending || adEnded) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
-            adEnded = ending
-            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
+            it.copy(clock = clocks.of(controller, it), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
                 clockLog.note("followed_clock", now) { at ->
                     put("observer", clockObserver)
                     put("app", controller.packageName)
@@ -726,7 +720,7 @@ internal class MediaSessionPlayback(
                     followed?.unregisterCallback(callback)
                     modesWatched()
                     followed = playing
-                    clocks = steadyClock(playing?.packageName)
+                    clocks.begin(playing?.packageName)
                     playing?.registerCallback(callback, handler)
                     // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
                     modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
@@ -805,6 +799,32 @@ internal class MediaSessionPlayback(
     }
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
+    /** The clock of the app a screen follows, steadied; see [of] for when it's begun again. */
+    private inner class FollowedClock {
+        private lateinit var clocks: SteadyClock
+        private var movesSeen = moves
+        private var adEnded = false
+
+        /** From here on [app]'s clock, with nothing kept of the one before. */
+        fun begin(app: String?) {
+            clocks = steadyClock(app)
+            movesSeen = moves
+        }
+
+        /**
+         * [said]'s clock, steadied. Moved by Crosstune, where the app says next is believed, even a moment back. So
+         * is where a song starts under its ad and as its ad ends, and once more when that's over: nothing the app
+         * said under the ad is the song's, and not every word of the song's start is heard.
+         */
+        fun of(controller: MediaController, said: Following): PlaybackClock {
+            val ending = adEnds.containsKey(controller.sessionToken)
+            val starts = said.ad || ending || adEnded
+            adEnded = ending
+            if (starts || moves !== movesSeen) begin(controller.packageName)
+            return clocks.of(said.clock)
+        }
+    }
+
     private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
 
     /**
@@ -1587,7 +1607,7 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 internal const val LONGEST_AD_MS = 150_000L
 
 /**
- * How long YouTube Music has, once its ad ended, to start the song: it took 0.2 to 0.6 s on a phone. An ad's end is
+ * How long YouTube Music has, once its ad ended, to start the song: it took 0.2 to 0.8 s on a phone. An ad's end is
  * also said no later than this into what plays: under 0.1 s there, and heard up to 0.7 s in when the phone was busy.
  */
 internal const val AD_END_MS = 1_500L

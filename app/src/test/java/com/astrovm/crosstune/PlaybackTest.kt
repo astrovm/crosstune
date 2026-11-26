@@ -1541,6 +1541,41 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAdsEndIsSeenThoughNoScreenHeardWhoSingsTheSong() {
+        allow()
+        // On the Samsung, 2026-11-26: a song's first play, with a 23 s ad and a 13 s one before it. YouTube Music
+        // names the song with nobody singing it, then says where in its queue it is.
+        val title = "Mr. Brightside (Official Music Video)"
+        val music = youTubeMusic(title, "", 23_219, updated = 1_643_550_344, item = -1)
+        followed(MusicMetadata(title, "The Killers"))
+        music.isAt(PlaybackState.STATE_PLAYING, 1_643_550_716, 26, position = 193, afterMs = 372)
+        // A tenth of a second on it says who sings it. No screen heard that: each started to watch again as the
+        // app's sessions changed, and what's said meanwhile is lost. One that watches again asks.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(105))
+        shadowOf(music).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "The Killers").putString(MediaMetadata.METADATA_KEY_ALBUM, "")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, 23_219).build())
+        val seen = followed(MusicMetadata(title, "The Killers"))
+        // The first ad ends into the second, with no stop to load it, which starts half a second behind.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_643_573_716, 26, afterMs = 22_895)
+        music.says(title, "The Killers", 13_049, afterMs = 67)
+        repeat(3) { music.isAt(PlaybackState.STATE_PLAYING, 1_643_574_237, 26, afterMs = if (it == 0) 460 else 1) }
+        music.says(title, "The Killers", 13_049, afterMs = 35)
+        assertEquals(PlaybackClock(0, 1_643_574_237), seen.now().clock)
+        assertEquals(listOf(13_049L), keptLengths(title, "The Killers"))
+        // The second ends into the song the same way, most of a second behind.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_643_587_435, 26, afterMs = 13_198)
+        music.says(title, "The Killers", 227_601, afterMs = 60)
+        repeat(3) { music.isAt(PlaybackState.STATE_PLAYING, 1_643_588_234, 26, afterMs = if (it == 0) 739 else 1) }
+        assertEquals(PlaybackClock(0, 1_643_588_234), seen.now().clock)
+        assertEquals(227_601L, seen.now().durationMs)
+        assertEquals(listOf(227_601L), keptLengths(title, "The Killers"))
+        // No clock of YouTube Music's fell behind at either end: a screen that follows later is where it says.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS))
+        assertEquals(PlaybackClock(0, 1_643_588_234), followed(MusicMetadata(title, "The Killers")).now().clock)
+    }
+
+    @Test
     fun aSeekAReplayAndTheNextSongAreNoAdsEnd() {
         allow()
         val music = youTubeMusic("Faded", "Alan Walker", 212_532, updated = 1_613_451_644, item = 26)
