@@ -238,11 +238,19 @@ class ReadingsTest {
     @Test
     fun ordinaryParticlesKeepTheirReadings() = assertJapaneseBoundaries(listOf(
         Triple("彼は勝手", "kare wa katte", listOf("彼", "は", "勝手")),
+        Triple("なでかって聞いた", "nade katte kiita", listOf("なで", "かって", "聞いた")),
         Triple("花では", "hana de wa", listOf("花", "で", "は")),
         Triple("静かでは", "shizukade wa", listOf("静かで", "は")),
         Triple("君と", "kimi to", listOf("君", "と")),
         Triple("撫でると", "naderuto", listOf("撫でると"))
     ))
+
+    @Test
+    fun katteAfterAnotherWordKeepsItsNounLookup() {
+        fun read() = Readings.words("なでかって聞いた", Script.JAPANESE).map { it.text to it.lookup }
+        val expected = listOf("なで" to "なでる", "かって" to "勝手", "聞いた" to "聞く")
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
 
     @Test
     fun bothDictionariesGiveTheTwoUsesOfDeshiteTheSameTags() {
