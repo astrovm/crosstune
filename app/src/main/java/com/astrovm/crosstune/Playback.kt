@@ -437,7 +437,7 @@ internal class MediaSessionPlayback(
     private data class SaidLength(val title: String?, val artist: String?, val lengthMs: Long, val item: Long)
     private val saidLengths = ConcurrentHashMap<MediaSession.Token, SaidLength>()
     /** When a session's ad ended, and when its app had last said where it was by then; see [adEnding]. */
-    private data class AdEnd(val at: Long, val saidAt: Long?)
+    private data class AdEnd(val at: Long, val saidAt: Long)
     private val adEnds = ConcurrentHashMap<MediaSession.Token, AdEnd>()
 
     private fun watchQueue(controller: MediaController) = synchronized(queueWatchers) {
@@ -487,9 +487,9 @@ internal class MediaSessionPlayback(
 
     /**
      * Free YouTube Music plays an ad under the next song's name and queue item, with nothing to tell it by as it
-     * starts. Its end shows: the app says another length for the same song, from one above 0 to another, where a
-     * song's own start goes from 0 to its length. So the length before was an ad's, never one of the song's, and the
-     * song starts over once the app says it plays again; see [adEnding].
+     * starts. Its end shows: back at its start, the app says another length for the same song, from one above 0 to
+     * another, where a song's own start goes from 0 to its length. So the length before was an ad's, never one of the
+     * song's, and the song starts over once the app says it plays again; see [adEnding].
      */
     private fun MediaController.lengthSaid(said: SaidLength) {
         val before = saidLengths.put(sessionToken, said) ?: return
@@ -498,8 +498,12 @@ internal class MediaSessionPlayback(
         if (before.title != said.title || before.artist != said.artist || !sameItem) return
         // Said a second longer or shorter, it's the same song still; see [SteadyLengths].
         if (before.lengthMs <= 0 || said.lengthMs <= 0 || abs(before.lengthMs - said.lengthMs) <= SteadyLengths.SAME_MS) return
+        // Partway through, it's a song that goes on as another take of itself, as its video, and keeps its place.
+        val state = playbackState ?: return
+        val playing = state.state == PlaybackState.STATE_PLAYING
+        if (PlaybackClock(state.position, state.lastPositionUpdateTime, playing = playing).positionAt(now()) >= AD_END_MS) return
         lengths.forget(said.title.orEmpty(), said.artist.orEmpty(), before.lengthMs)
-        adEnds[sessionToken] = AdEnd(SystemClock.uptimeMillis(), playbackState?.lastPositionUpdateTime)
+        adEnds[sessionToken] = AdEnd(SystemClock.uptimeMillis(), state.lastPositionUpdateTime)
     }
 
     /**
@@ -1569,7 +1573,10 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L
 
-/** How long YouTube Music has, once its ad ended, to say the song plays: it took 0.3 s on a phone. */
+/**
+ * How long YouTube Music has, once its ad ended, to say the song plays: it took 0.2 s on a phone. An ad's end is
+ * also said no later than this into what plays, under 0.1 s there.
+ */
 internal const val AD_END_MS = 1_500L
 
 /** Two clocks this close go on from the same: what an app says on a clock is exact to the millisecond. */

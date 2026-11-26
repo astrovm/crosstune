@@ -1376,6 +1376,7 @@ class PlaybackTest {
         assertEquals(PlaybackClock(0, 1_613_334_471), seen.now().clock)
         assertFalse(seen.now().ad)
         assertEquals(15_061L, seen.now().durationMs)
+        assertEquals(listOf(15_061L), keptLengths("Bohemian Rhapsody (Digital Remaster)", "Queen"))
         music.isAt(PlaybackState.STATE_PLAYING, 1_613_334_571, 76, afterMs = 1_100)
         // It ends into a second ad, 20 s long: over, that one was no song, and what follows waits to be said to play.
         music.isAt(PlaybackState.STATE_PLAYING, 1_613_349_656, 76, afterMs = 14_085)
@@ -1482,6 +1483,35 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(triangle.now().ad)
         assertEquals(listOf(120_000L, 262_000L), keptLengths("Bizarre Love Triangle", "New Order"))
+    }
+
+    @Test
+    fun anotherLengthSaidPartwayThroughASongIsNoAdsEnd() {
+        allow()
+        // Not from a recording: a song that goes on as another take of itself where it was, as its video, which is longer.
+        // An ad's end is said back at its start, under 0.1 s into what plays next.
+        val music = youTubeMusic("Faded", "Alan Walker", 212_532, updated = NOW - AD_END_MS, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.says("Faded", "Alan Walker", 233_000)
+        assertEquals(PlaybackClock(0, NOW - AD_END_MS), seen.now().clock)
+        assertFalse(seen.now().ad)
+        // So neither length is taken for an ad's.
+        assertEquals(listOf(212_532L, 233_000L), keptLengths("Faded", "Alan Walker"))
+        // Paused, it's where it said it is, however long ago.
+        music.isAt(PlaybackState.STATE_PAUSED, NOW - 60_000, 26, position = AD_END_MS)
+        music.says("Faded", "Alan Walker", 212_532)
+        assertEquals(PlaybackClock(AD_END_MS, NOW - 60_000, playing = false), seen.now().clock)
+        assertFalse(seen.now().ad)
+        // Nor can an end be told with nothing said of where it is.
+        shadowOf(music).setPlaybackState(null)
+        music.says("Faded", "Alan Walker", 233_000)
+        assertEquals(listOf(212_532L, 233_000L), keptLengths("Faded", "Alan Walker"))
+        // Any nearer its start, it is one.
+        music.isAt(PlaybackState.STATE_PAUSED, NOW - 60_000, 26, position = AD_END_MS - 1)
+        music.says("Faded", "Alan Walker", 212_532)
+        assertEquals(PlaybackClock(0, NOW - 60_000, playing = false), seen.now().clock)
+        assertTrue(seen.now().ad)
+        assertEquals(listOf(212_532L), keptLengths("Faded", "Alan Walker"))
     }
 
     @Test
