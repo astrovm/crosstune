@@ -2743,6 +2743,24 @@ class MainActivityTest {
     }
 
     @Test
+    fun aCopiedRecentVideoUsesItsClassificationForTheAdLength() {
+        val url = "https://www.youtube.com/watch?v=4NRXx6U8ABQ"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.YOUTUBE, ItemType.TRACK, "4NRXx6U8ABQ", url), MusicMetadata("Blinding Lights", "The Weeknd")))
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                FakeSpotify.html(request, """{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV","playlistPanelVideoRenderer":{"videoId":"4NRXx6U8ABQ","lengthText":{"runs":[{"text":"4:23"}]}}}""")
+            } else FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+        }
+        val activity = launch()
+        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
+        copied(url)
+        comeBack()
+        waitUntil { viewModel.uiState.resultVideoAdLength != null }
+        assertEquals(1, fake.requestedUrls.count { "youtubei/v1/next" in it })
+        assertEquals(VideoAdLength("4NRXx6U8ABQ", 263_000), viewModel.uiState.resultVideoAdLength)
+    }
+
+    @Test
     fun aCopiedYouTubeVideoIsLookedUpRightAwayWhenAnyVideoMayBe() {
         prefs().edit().putBoolean("only_music_videos", false).commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"How to tie a tie","author_name":"Someone"}""") }
