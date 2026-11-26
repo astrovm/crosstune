@@ -427,6 +427,56 @@ internal class MediaSessionPlayback(
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
+    // A session can publish the next item's clock before its name. Only compare IDs while it is watched.
+    private data class QueueMetadata(val id: Long, val title: String?, val artist: String?, val renamed: Boolean = false)
+    private val queueMetadata = ConcurrentHashMap<MediaSession.Token, QueueMetadata>()
+    private val queueWatchers = mutableMapOf<MediaSession.Token, Int>()
+
+    private fun watchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
+        queueWatchers[token] = (queueWatchers[token] ?: 0) + 1
+    }
+
+    private fun unwatchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
+        val remaining = (queueWatchers[token] ?: 1) - 1
+        if (remaining == 0) {
+            queueWatchers.remove(token)
+            queueMetadata.remove(token)
+        } else {
+            queueWatchers[token] = remaining
+        }
+    }
+
+    private fun MediaController.metadataArrived(metadata: MediaMetadata?) {
+        val id = playbackState?.activeQueueItemId ?: MediaSession.QueueItem.UNKNOWN_ID.toLong()
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        queueMetadata.compute(sessionToken) { _, previous ->
+            QueueMetadata(id, title, artist, previous != null && (previous.renamed || previous.title != title || previous.artist != artist))
+        }
+    }
+
+    private fun MediaController.stateArrived(state: PlaybackState?) {
+        if (state == null || state.activeQueueItemId == MediaSession.QueueItem.UNKNOWN_ID.toLong()) {
+            queueMetadata.remove(sessionToken)
+            return
+        }
+        queueMetadata.computeIfPresent(sessionToken) { _, previous ->
+            val id = state.activeQueueItemId
+            if (previous.renamed && id != previous.id) previous.copy(id = id, renamed = false) else previous.copy(renamed = false)
+        }
+    }
+
+    private fun MediaController.clockMatches(state: PlaybackState): Boolean {
+        val id = state.activeQueueItemId
+        if (id == MediaSession.QueueItem.UNKNOWN_ID.toLong()) return true
+        if (synchronized(queueWatchers) { sessionToken !in queueWatchers }) return true
+        val metadata = metadata
+        val first = QueueMetadata(id, metadata?.getString(MediaMetadata.METADATA_KEY_TITLE), metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST))
+        val known = queueMetadata.compute(sessionToken) { _, previous ->
+            if (previous == null || previous.id == MediaSession.QueueItem.UNKNOWN_ID.toLong()) first else previous
+        }
+        return known?.id == id
+    }
     /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
     @Volatile
     private var moves = Any()
@@ -522,12 +572,14 @@ internal class MediaSessionPlayback(
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
         fun watch(controllers: List<MediaController>) {
-            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            controllers.forEach { watchQueue(it.sessionToken) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
             watched = controllers
             renamed = controllers.map { controller ->
                 val callback = object : MediaController.Callback() {
-                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onMetadataChanged(metadata: MediaMetadata?) { controller.metadataArrived(metadata); pick(watched) }
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        controller.stateArrived(state)
                         clockLog.note("media_report", now) {
                             put("observer", clockObserver)
                             put("app", controller.packageName)
@@ -559,7 +611,7 @@ internal class MediaSessionPlayback(
         if (!watching) trySend(null)
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
-            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
             followed?.unregisterCallback(callback)
             modesWatched()
             clockLog.note("follow_end", now) { put("observer", clockObserver) }
@@ -998,16 +1050,18 @@ internal class MediaSessionPlayback(
             }
         }
         fun watch(controllers: List<MediaController>) {
-            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            controllers.forEach { watchQueue(it.sessionToken) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
             watched = controllers.map { controller ->
                 // Metadata can change while no screen was watching this session.
                 covers.forget(controller.sessionToken)
                 val callback = object : MediaController.Callback() {
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        controller.metadataArrived(metadata)
                         covers.forget(controller.sessionToken)
                         update()
                     }
-                    override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+                    override fun onPlaybackStateChanged(state: PlaybackState?) { controller.stateArrived(state); update() }
                     override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) = update()
                     override fun onSessionDestroyed() { covers.forget(controller.sessionToken); update() }
                     override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
@@ -1034,7 +1088,7 @@ internal class MediaSessionPlayback(
             handler.removeCallbacks(refreshCover)
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
-            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
         }
     }.distinctUntilChanged()
 
@@ -1111,6 +1165,7 @@ internal class MediaSessionPlayback(
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
+        if (!controller.clockMatches(state)) return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
         if (state.position < 0) return null
         val app = labelOf(controller.packageName)

@@ -147,6 +147,91 @@ class PlaybackTest {
     }
 
     @Test
+    fun nextQueueItemDoesNotGiveTheOldSongItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder()
+            .setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).setActions(PlaybackState.ACTION_SEEK_TO).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val following = followed()
+        assertEquals(42_000L, seen.last()?.offsetMs)
+        shadowOf(music).setPlaybackState(state(26, 0))
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last()?.offsetMs)
+        assertNull(following.last())
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).setMetadata(next)
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun metadataBeforeTheQueueChangeStillGetsTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).setMetadata(next)
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).setPlaybackState(state(26))
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun sameQueueItemAndMissingQueueKeepTheirClocks() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, position: Long, playbackState: Int = PlaybackState.STATE_PLAYING) {
+            val value = PlaybackState.Builder().setState(playbackState, position, 1f, PLAYED_AT)
+                .setActiveQueueItemId(id).setActions(PlaybackState.ACTION_SEEK_TO).build()
+            shadowOf(music).setPlaybackState(value)
+            shadowOf(music).executeOnPlaybackStateChanged(value)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        state(76, 42_000)
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        state(76, 0) // Replay.
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(76, 20_000) // Seek.
+        assertEquals(20_000L, seen.last()?.offsetMs)
+        state(76, 20_000, PlaybackState.STATE_PAUSED)
+        assertNull(seen.last()?.offsetMs)
+        val adEnded = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 200_000).build()
+        shadowOf(music).setMetadata(adEnded)
+        shadowOf(music).executeOnMetadataChanged(adEnded)
+        state(76, 0, PlaybackState.STATE_BUFFERING)
+        state(76, 0)
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(MediaSession.QueueItem.UNKNOWN_ID.toLong(), 12_000)
+        assertEquals(12_000L, seen.last()?.offsetMs)
+        state(MediaSession.QueueItem.UNKNOWN_ID.toLong(), 0)
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(99, 1_000)
+        assertEquals(1_000L, seen.last()?.offsetMs)
+        collecting.forEach(Job::cancel)
+        state(100, 2_000)
+        assertEquals(2_000L, offered().last()?.offsetMs)
+    }
+
+    @Test
     fun clockEvidenceKeepsEveryRawCallbackIncludingRepeatsAndMissingState() {
         ShadowLog.setLoggable("CrosstuneClock", android.util.Log.DEBUG)
         allow()
