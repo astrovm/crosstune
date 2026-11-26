@@ -1542,6 +1542,35 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongWaitsOutItsOwnTimeAfterItsAdWhenAnotherAppsWaitEndsFirst() {
+        allow()
+        val waka = MusicMetadata("Waka Waka", "Shakira")
+        val music = youTubeMusic("Waka Waka", "Shakira", 10_077, updated = 1_613_553_340, item = 26)
+        // Another app has the song too, paused, and goes on to another place in its queue without saying what's there.
+        val other = player("com.spotify.music", "Spotify", "Waka Waka", "Shakira", state = PlaybackState.STATE_PAUSED)
+        fun paused(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 42_000, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(other).setPlaybackState(paused(7))
+        shadowOf(sessions).addController(other)
+        val seen = followed(waka)
+        assertEquals(2, playback.matching(waka).size)
+        shadowOf(other).setPlaybackState(paused(8))
+        assertEquals(2, playback.matching(waka).size)
+        // A second into that app's wait, YouTube Music's ad ends.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_613_563_599, 26, afterMs = 913)
+        music.says("Waka Waka", "Shakira", 210_721, afterMs = 87)
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, seen.now().appPackage)
+        assertTrue(seen.now().ad)
+        // The other app's wait is over half a second on, which is looked at for both: the song has a second left to wait.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertTrue(seen.now().ad)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS - 501))
+        assertTrue(seen.now().ad)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(PlaybackClock(0, 1_613_563_599), seen.now().clock)
+        assertFalse(seen.now().ad)
+    }
+
+    @Test
     fun aSongIsntKeptWaitingOnceNoScreenWatchesItsAdEnd() {
         allow()
         sounding()
