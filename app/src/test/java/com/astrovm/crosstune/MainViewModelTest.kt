@@ -5377,7 +5377,15 @@ class MainViewModelTest {
         }
 
         pass(1)
-        phone.onThePhone = old.copy(sessionReportedAtMs = SystemClock.elapsedRealtime())
+        val fresh = old.copy(sessionReportedAtMs = SystemClock.elapsedRealtime())
+        for (notASkip in listOf(fresh.copy(ad = true), fresh.copy(app = MusicService.SPOTIFY.packageName))) {
+            phone.onThePhone = notASkip
+            idle()
+            assertEquals(requested, model.uiState.player?.song)
+            assertTrue(model.uiState.playingResult)
+            assertEquals(0, phone.cameBack)
+        }
+        phone.onThePhone = fresh
         until("a renewed report for the original video really takes over") { model.uiState.player?.song == previous }
         until("the foreground Play returns") { phone.cameBack == 1 }
     }
@@ -5503,11 +5511,12 @@ class MainViewModelTest {
         assertEquals(requested, model.uiState.player?.song)
         assertEquals(0, phone.cameBack)
 
+        val reportedAt = SystemClock.elapsedRealtime()
         val unknown = requested.copy(url = null, recordingId = "$ytMusic:opaque-track")
-        phone.onThePhone = Heard.Song(unknown, null, app = ytMusic)
+        phone.onThePhone = Heard.Song(unknown, null, app = ytMusic, sessionReportedAtMs = reportedAt)
         idle()
         assertEquals(requested, model.uiState.player?.song)
-        phone.onThePhone = Heard.Song(requested, null, app = ytMusic)
+        phone.onThePhone = Heard.Song(requested, null, app = ytMusic, sessionReportedAtMs = reportedAt)
         idle()
         assertEquals(0, phone.cameBack)
 
