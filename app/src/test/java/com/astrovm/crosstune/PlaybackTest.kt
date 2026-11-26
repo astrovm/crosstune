@@ -1310,9 +1310,26 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    private fun MediaController.isAt(state: Int, updated: Long, item: Long, position: Long = 0, afterMs: Long = 0) {
+    /**
+     * Heard to say where it is. Asked where it is after, a phone's Android answers for one that plays with where it's
+     * got to by then, as if said just then, and never with what the app said: [askedAt] is when it's asked, as the
+     * phone's log had it.
+     */
+    private fun MediaController.isAt(state: Int, updated: Long, item: Long, position: Long = 0, afterMs: Long = 0, askedAt: Long? = null) {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(afterMs))
         shadowOf(this).executeOnPlaybackStateChanged(recorded(state, updated, item, position))
+        if (askedAt != null) answers(position + askedAt - updated, askedAt, item)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    /** What a phone's Android answers when asked where it is as it plays: [position] by [at], when it's asked. */
+    private fun MediaController.answers(position: Long, at: Long, item: Long) =
+        shadowOf(this).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, at, item, position))
+
+    /** What it said to play from, at [updated], heard late by one more screen, with what Android [answers] by then. */
+    private fun MediaController.heardLate(updated: Long, item: Long, answered: Long, at: Long) {
+        shadowOf(this).executeOnPlaybackStateChanged(recorded(PlaybackState.STATE_PLAYING, updated, item, 0))
+        answers(answered, at, item)
         shadowOf(Looper.getMainLooper()).idle()
     }
 
@@ -1410,6 +1427,99 @@ class PlaybackTest {
         // Neither ad's length is kept as one of the song's, and no stop was seen that wasn't an ad's.
         assertEquals(listOf(359_491L), keptLengths("Bohemian Rhapsody (Digital Remaster)", "Queen"))
         assertTrue(seen.filterNotNull().none { it.ad == it.clock.playing })
+    }
+
+    @Test
+    fun aSongStartsOverAfterItsAdsOnAPhoneThatAnswersWhereItIsByNow() {
+        allow()
+        // A first play on the Samsung, 2026-11-26: two ads, 23.3 and 26.7 s long, then the song, 4:04 long.
+        val music = youTubeMusic("Take On Me", "a-ha", 23_266, updated = 1_640_857_548, item = 1)
+        val seen = followed(MusicMetadata("Take On Me", "a-ha"))
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_857_548, 1, position = 1_359, askedAt = 1_640_857_608)
+        assertEquals(1_419L, seen.now().clock.positionAt(1_640_857_608))
+        // The first ad ends into the second: asked where it is as its new length comes, it's 0.15 s in, as of then.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_879_556, 1, afterMs = 21_948, askedAt = 1_640_879_606)
+        assertEquals(PlaybackClock(50, 1_640_879_606), seen.now().clock)
+        music.answers(151, 1_640_879_707, 1)
+        music.says("Take On Me", "a-ha", 26_730, afterMs = 101)
+        assertEquals(PlaybackClock(0, 1_640_879_707, playing = false), seen.now().clock)
+        assertTrue(seen.now().ad)
+        // One that loads is answered as it said so itself.
+        music.isAt(PlaybackState.STATE_BUFFERING, 1_640_880_148, 1, afterMs = 441)
+        assertEquals(PlaybackClock(0, 1_640_880_148, playing = false), seen.now().clock)
+        assertTrue(seen.now().ad)
+        // Then it says it plays, twice, and the second ad is followed from there: 45 ms in, when asked 45 ms after.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_880_149, 1, afterMs = 1, askedAt = 1_640_880_194)
+        assertEquals(PlaybackClock(45, 1_640_880_194), seen.now().clock)
+        assertFalse(seen.now().ad)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_880_149, 1, afterMs = 1, askedAt = 1_640_880_204)
+        music.answers(55, 1_640_880_204, 1)
+        music.says("Take On Me", "a-ha", 26_730, afterMs = 50)
+        assertEquals(0L, seen.now().clock.positionAt(1_640_880_149))
+        assertFalse(seen.now().ad)
+        // The second ad ends into the song the same way.
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_009, 1, afterMs = 26_860, askedAt = 1_640_907_039)
+        music.answers(148, 1_640_907_157, 1)
+        music.says("Take On Me", "a-ha", 244_018, afterMs = 68)
+        assertEquals(PlaybackClock(0, 1_640_907_157, playing = false), seen.now().clock)
+        assertTrue(seen.now().ad)
+        assertEquals(244_018L, seen.now().durationMs)
+        music.isAt(PlaybackState.STATE_BUFFERING, 1_640_907_323, 1, afterMs = 249)
+        assertTrue(seen.now().ad)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_324, 1, afterMs = 1, askedAt = 1_640_907_584)
+        // The song's clock is its own: it started where YouTube Music said it plays, 0.3 s after the ad's last word.
+        assertEquals(PlaybackClock(260, 1_640_907_584), seen.now().clock)
+        assertFalse(seen.now().ad)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_326, 1, afterMs = 1, askedAt = 1_640_907_596)
+        music.answers(280, 1_640_907_606, 1)
+        music.says("Take On Me", "a-ha", 244_018, afterMs = 44)
+        assertEquals(0L, seen.now().clock.positionAt(1_640_907_324))
+        assertFalse(seen.now().ad)
+        assertEquals(244_018L, seen.now().durationMs)
+        // It never stopped other than under an ad, and neither ad's length is kept as one of the song's.
+        assertTrue(seen.filterNotNull().none { it.ad == it.clock.playing })
+        assertEquals(listOf(244_018L), keptLengths("Take On Me", "a-ha"))
+    }
+
+    @Test
+    fun anAdsLastWordHeardAgainLateDoesntStartTheSong() {
+        allow()
+        // Each screen that watches hears all YouTube Music says, in no order between them. Made up, not recorded:
+        // one hears what it said as the ad started only after another heard the ad's last word.
+        val music = youTubeMusic("Take On Me", "a-ha", 26_730, updated = 1_640_880_149, item = 1)
+        val seen = followed(MusicMetadata("Take On Me", "a-ha"))
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_009, 1, askedAt = 1_640_907_039)
+        music.heardLate(1_640_880_149, 1, answered = 91, at = 1_640_907_100)
+        music.answers(148, 1_640_907_157, 1)
+        music.says("Take On Me", "a-ha", 244_018)
+        // And one hears the ad's last word after another saw the ad end: that's no word that the song plays.
+        music.heardLate(1_640_907_009, 1, answered = 191, at = 1_640_907_200)
+        assertEquals(PlaybackClock(0, 1_640_907_200, playing = false), seen.now().clock)
+        assertTrue(seen.now().ad)
+        music.isAt(PlaybackState.STATE_BUFFERING, 1_640_907_323, 1)
+        assertTrue(seen.now().ad)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_324, 1, askedAt = 1_640_907_584)
+        assertEquals(PlaybackClock(260, 1_640_907_584), seen.now().clock)
+        assertFalse(seen.now().ad)
+    }
+
+    @Test
+    fun anAdThatEndsAsItsFirstWatchedWaitsForWhatsSaidAfter() {
+        allow()
+        // Made up, not recorded. Watched from the ad's last moment, nothing was heard of where it is, only asked:
+        // an answer as of just then.
+        val music = youTubeMusic("Take On Me", "a-ha", 26_730, updated = 1_640_907_157, item = 1)
+        music.answers(148, 1_640_907_157, 1)
+        val seen = followed(MusicMetadata("Take On Me", "a-ha"))
+        music.says("Take On Me", "a-ha", 244_018)
+        assertTrue(seen.now().ad)
+        // The ad's last word, said before that and heard now, starts nothing.
+        music.heardLate(1_640_907_009, 1, answered = 191, at = 1_640_907_200)
+        assertTrue(seen.now().ad)
+        music.isAt(PlaybackState.STATE_BUFFERING, 1_640_907_323, 1)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_640_907_324, 1, askedAt = 1_640_907_584)
+        assertEquals(PlaybackClock(260, 1_640_907_584), seen.now().clock)
+        assertFalse(seen.now().ad)
     }
 
     @Test

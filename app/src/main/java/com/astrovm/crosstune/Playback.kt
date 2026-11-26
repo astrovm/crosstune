@@ -439,6 +439,11 @@ internal class MediaSessionPlayback(
     /** When a session's ad ended, and when its app had last said where it was by then; see [adEnding]. */
     private data class AdEnd(val at: Long, val saidAt: Long)
     private val adEnds = ConcurrentHashMap<MediaSession.Token, AdEnd>()
+    /**
+     * When each watched session of YouTube Music last said where it is, as it said so itself. Asked where a playing
+     * one is, Android answers with where it is by now, as if said just then, so an answer never tells what's new.
+     */
+    private val saidAt = ConcurrentHashMap<MediaSession.Token, Long>()
 
     private fun watchQueue(controller: MediaController) = synchronized(queueWatchers) {
         val token = controller.sessionToken
@@ -454,6 +459,7 @@ internal class MediaSessionPlayback(
             queueMetadata.remove(token)
             saidLengths.remove(token)
             adEnds.remove(token)
+            saidAt.remove(token)
         } else {
             queueWatchers[token] = remaining
         }
@@ -503,7 +509,8 @@ internal class MediaSessionPlayback(
         val playing = state.state == PlaybackState.STATE_PLAYING
         if (PlaybackClock(state.position, state.lastPositionUpdateTime, playing = playing).positionAt(now()) >= AD_END_MS) return
         lengths.forget(said.title.orEmpty(), said.artist.orEmpty(), before.lengthMs)
-        adEnds[sessionToken] = AdEnd(SystemClock.uptimeMillis(), state.lastPositionUpdateTime)
+        // Not heard to say where it is yet, as when first watched just now, nothing it said before this counts.
+        adEnds[sessionToken] = AdEnd(SystemClock.uptimeMillis(), saidAt[sessionToken] ?: state.lastPositionUpdateTime)
     }
 
     /**
@@ -511,15 +518,19 @@ internal class MediaSessionPlayback(
      * the song stops to load first, then plays from its start, which is where its clock starts. An app gets [AD_END_MS]
      * to say so, see [expireQueueWaits], as a song never waits long on an app's word.
      */
-    private fun MediaController.adEnding(state: PlaybackState): Boolean {
-        val end = adEnds[sessionToken] ?: return false
-        if (state.state != PlaybackState.STATE_PLAYING || state.lastPositionUpdateTime == end.saidAt) return true
-        adEnds.remove(sessionToken)
-        return false
+    private fun MediaController.adEnding(): Boolean = adEnds.containsKey(sessionToken)
+
+    /** What YouTube Music says of where it is: said to play, later than its ad's last word, the song has started. */
+    private fun MediaController.placeSaid(state: PlaybackState) {
+        val said = state.lastPositionUpdateTime
+        if (state.state == PlaybackState.STATE_PLAYING) adEnds.computeIfPresent(sessionToken) { _, end -> end.takeIf { said <= it.saidAt } }
+        // Each screen that watches hears it, in no order between them, so an old word can come after a newer one.
+        saidAt.merge(sessionToken, said, ::maxOf)
     }
 
     private fun MediaController.stateArrived(state: PlaybackState?) = synchronized(queueWatchers) {
         if (sessionToken !in queueWatchers) return@synchronized
+        if (state != null && namesAdsAsSongs()) placeSaid(state)
         if (state == null || state.activeQueueItemId == MediaSession.QueueItem.UNKNOWN_ID.toLong()) {
             queueMetadata.remove(sessionToken)
             return@synchronized
@@ -690,8 +701,9 @@ internal class MediaSessionPlayback(
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
-            // Moved by Crosstune, where the app says next is believed, even a moment back.
-            if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
+            // Moved by Crosstune, where the app says next is believed, even a moment back. So is where a song starts
+            // once its ad's over: nothing the app said under the ad is the song's.
+            if (moves !== movesSeen || it.ad) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
                 clockLog.note("followed_clock", now) { at ->
                     put("observer", clockObserver)
@@ -1351,7 +1363,7 @@ internal class MediaSessionPlayback(
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over, and its app says it plays.
-        val ad = controller.adEnding(state) || controller.metadata?.let { controller.songUnderAd(it, asked) } != null
+        val ad = controller.adEnding() || controller.metadata?.let { controller.songUnderAd(it, asked) } != null
         val reported = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
         val clock = queueClock(controller, state, reported, matches, at)
         return Following(
@@ -1574,8 +1586,8 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 internal const val LONGEST_AD_MS = 150_000L
 
 /**
- * How long YouTube Music has, once its ad ended, to say the song plays: it took 0.2 s on a phone. An ad's end is
- * also said no later than this into what plays, under 0.1 s there.
+ * How long YouTube Music has, once its ad ended, to say the song plays: it took 0.2 to 0.6 s on a phone. An ad's end
+ * is also said no later than this into what plays, under 0.1 s there.
  */
 internal const val AD_END_MS = 1_500L
 
