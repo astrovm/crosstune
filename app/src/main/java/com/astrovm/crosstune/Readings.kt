@@ -1235,8 +1235,8 @@ internal object Readings {
             val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
                 piece.surface.startsWith("で")) piece.surface.drop(1) else ""
             val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
-            // The dictionaries mistake と and や alone for とる and the copula, but verb endings belong to the verb.
-            val mistakenParticle = (piece.surface == "と" && piece.base == "とる") || (piece.surface == "や" && piece.base == "や")
+            // The dictionaries can take と for a form of とる, but verb endings belong to the verb.
+            val mistakenParticle = piece.surface == "と" && piece.base == "とる"
             val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || mistakenParticle
             val repeatedParticles = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && canBeParticle) {
                 listOf(pieces(piece.surface), pieces("花" + piece.surface).drop(1)).firstOrNull { parts ->
@@ -1245,6 +1245,10 @@ internal object Readings {
             } else null
             // A sentence-final が can be labelled as a conjunction, though it follows the noun.
             val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
+            val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
+                val afterNoun = pieces("花" + pieces.drop(index).joinToString("") { it.surface }).drop(1)
+                afterNoun.firstOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助動詞" }
+            } else null
             val nounParticle = if (nounBefore && piece.kind == "助詞" && piece.subkind == "接続助詞") {
                 pieces("花" + piece.surface).drop(1).singleOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助詞" }
             } else null
@@ -1260,6 +1264,7 @@ internal object Readings {
                     out += repeatedParticles
                 }
                 nounParticle != null -> out += nounParticle
+                nounCopula != null -> out += nounCopula
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {
                     val (surface, base) = splitTari
@@ -1290,13 +1295,13 @@ internal object Readings {
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
                 // The passive される can instead leave な and で as particles.
-                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞") -> {
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))) -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
                 }
                 // Before する or a particle, IPADIC can split these nouns into なでる pieces.
                 piece.surface == "なで" && last != null &&
-                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && next?.kind == "助詞")) -> {
+                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && (next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))))) -> {
                     val noun = last.surface + piece.surface
                     out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
                 }

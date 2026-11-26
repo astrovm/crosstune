@@ -218,7 +218,7 @@ class ReadingsTest {
             Triple("なでなでに", "nadenade ni", listOf("なでなで" to "なでなで", "に" to "に")),
             Triple("なでなでの", "nadenade no", listOf("なでなで" to "なでなで", "の" to "の")),
             Triple("なでなでへ", "nadenade e", listOf("なでなで" to "なでなで", "へ" to "へ")),
-            Triple("なでなでや", "nadenade ya", listOf("なでなで" to "なでなで", "や" to "や")),
+            Triple("なでなでや", "nadenadeya", listOf("なでなでや" to "なでなで")),
             Triple("なでなでって", "nadenade tte", listOf("なでなで" to "なでなで", "って" to "って")),
             Triple("なでなでを", "nadenade o", listOf("なでなで" to "なでなで", "を" to "を")),
             Triple("なでなでが", "nadenade ga", listOf("なでなで" to "なでなで", "が" to "が")),
@@ -233,6 +233,22 @@ class ReadingsTest {
         }
         val expected = cases.map { (_, romaji, words) -> romaji to words }
         assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
+    fun nadenadeBeforeCopulasReadsLikeAnotherNoun() {
+        fun read() = listOf("やけど", "やで", "や", "や犬", "だ", "だが", "だった", "です").map { ending ->
+            fun reading(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized to
+                Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+            val (romanized, words) = reading("花" + ending)
+            val expected = romanized.replaceFirst("hana", "nadenade") to words.map { (text, lookup) ->
+                text.replaceFirst("花", "なでなで") to if (lookup.startsWith("花")) "なでなで" else lookup
+            }
+            expected to reading("なでなで" + ending)
+        }
+        for (cases in listOf(read(), TestUniDic.reading(::read))) {
+            assertEquals(cases.map { it.first }, cases.map { it.second })
+        }
     }
 
     @Test
