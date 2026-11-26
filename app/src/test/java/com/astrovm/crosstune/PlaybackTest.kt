@@ -170,6 +170,26 @@ class PlaybackTest {
     }
 
     @Test
+    fun theFirstReportedClockClearsItsPendingQueueWait() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, state = PlaybackState.STATE_STOPPED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(3, PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(music)
+        offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entry = checkNotNull((field.get(playback) as Map<*, *>)[music.sessionToken])
+        val waitingId = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        assertNull(waitingId.get(entry))
+    }
+
+    @Test
     fun aPauseDuringTheQueueWindowDoesNotMoveAfterItStopped() {
         allow()
         val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
@@ -232,6 +252,11 @@ class PlaybackTest {
         shadowOf(music).executeOnPlaybackStateChanged(state(4, 120_000))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
         shadowOf(music).executeOnPlaybackStateChanged(state(3, 20_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entry = checkNotNull((field.get(playback) as Map<*, *>)[music.sessionToken])
+        val pendingId = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        assertEquals(3L, pendingId.get(entry))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(99))
         assertEquals(142_000L, seen.last()?.offsetMs)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
@@ -415,9 +440,71 @@ class PlaybackTest {
             }
             val pending = callbacks()
             assertTrue(pending.isNotEmpty())
+            val guardField = pending.flatMap { runnable -> runnable.javaClass.declaredFields.map { runnable to it } }
+                .first { (_, field) -> field.type.simpleName == "ObserverGuard" }
+            val guard = guardField.second.apply { isAccessible = true }.get(guardField.first)
+            val active = guard.javaClass.getDeclaredField("active").apply { isAccessible = true }.get(guard) as Function0<*>
+            assertEquals(true, active.invoke())
             job.cancel()
             assertTrue(pending.none(handler::hasCallbacks))
+            assertEquals(false, active.invoke())
         }
+    }
+
+    @Test
+    fun closingHomeAndPlayerUnregistersTheirAndroidListeners() {
+        allow()
+        val listenerField = ShadowMediaSessionManager::class.java.getDeclaredField("listeners").apply { isAccessible = true }
+        val audioShadow = shadowOf(app.getSystemService(AudioManager::class.java))
+        val audioField = audioShadow.javaClass.getDeclaredField("audioPlaybackCallbacks").apply { isAccessible = true }
+        fun listeners() = (listenerField.get(null) as Set<*>).toSet()
+        fun audioCallbacks() = (audioField.get(audioShadow) as Set<*>).toSet()
+        val beforeListeners = listeners()
+        val beforeAudio = audioCallbacks()
+        val follow = CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect {} }
+        collecting += follow
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeListeners.size + 1, listeners().size)
+        follow.cancel()
+        assertEquals(beforeListeners, listeners())
+        val home = CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect {} }
+        collecting += home
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeListeners.size + 1, listeners().size)
+        assertEquals(beforeAudio.size + 1, audioCallbacks().size)
+        home.cancel()
+        assertEquals(beforeListeners, listeners())
+        assertEquals(beforeAudio, audioCallbacks())
+    }
+
+    @Test
+    fun closingHomeRemovesARefreshPostedForCoverChanges() {
+        allow()
+        val source = MediaSessionPlayback(app, now = { NOW }, modes = modes, radioNotices = radioNotices)
+        val handler = MediaSessionPlayback::class.java.getDeclaredField("handler").apply { isAccessible = true }.get(source) as android.os.Handler
+        val covers = MediaSessionPlayback::class.java.getDeclaredField("covers").apply { isAccessible = true }.get(source)
+        val changed = covers.javaClass.getDeclaredField("changed").apply { isAccessible = true }.get(covers)
+        val subscribers = changed.javaClass.getMethod("getSubscriptionCount").apply { isAccessible = true }.invoke(changed) as kotlinx.coroutines.flow.StateFlow<*>
+        val before = subscribers.value as Int
+        val home = CoroutineScope(Dispatchers.Unconfined).launch { source.nowPlayingUpdates().collect {} }
+        collecting += home
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(before + 1, subscribers.value)
+        val current = changed.javaClass.getMethod("getValue").apply { isAccessible = true }.invoke(changed) as Long
+        changed.javaClass.getMethod("setValue", Any::class.java).apply { isAccessible = true }.invoke(changed, current + 1)
+        val queue = Looper.getMainLooper().queue
+        val head = android.os.MessageQueue::class.java.getDeclaredField("mMessages").apply { isAccessible = true }
+        val next = android.os.Message::class.java.getDeclaredField("next").apply { isAccessible = true }
+        val pending = mutableListOf<Runnable>()
+        var message = head.get(queue) as? android.os.Message
+        while (message != null) {
+            if (message.target == handler) message.callback?.let(pending::add)
+            message = next.get(message) as? android.os.Message
+        }
+        assertTrue(pending.isNotEmpty())
+        home.cancel()
+        assertTrue(pending.none(handler::hasCallbacks))
+        assertEquals(before, subscribers.value)
     }
 
     @Test
@@ -454,6 +541,28 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         shadowOf(music).setPlaybackState(state(6))
         assertEquals(42_000L, playback.nowPlaying()?.offsetMs)
+    }
+
+    @Test
+    fun aDirectReadKeepsItsSnapshotWhenAnObserverStartsDuringIt() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(position: Long, at: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, at)
+            .setActiveQueueItemId(5).build()
+        shadowOf(music).setPlaybackState(state(42_000, 0))
+        shadowOf(sessions).addController(music)
+        lateinit var source: MediaSessionPlayback
+        var starting = true
+        source = MediaSessionPlayback(app, modes = modes, now = {
+            if (starting) {
+                starting = false
+                shadowOf(music).setPlaybackState(state(90_000, NOW))
+                collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect {} }
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            NOW
+        })
+        assertEquals(42_000L, source.matching(song).single().following?.clock?.positionMs)
     }
 
     @Test
