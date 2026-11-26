@@ -286,6 +286,7 @@ class ReadingsTest {
             "ここにいてえ奴" to "ここ=ここ|に=に|いて=いる|え=え|奴=奴",
             "君といてえ" to "君=君|と=と|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
+            "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
             // A noun after a noun with nothing between, which can't be.
             "あいつきめえ" to "あいつ=あいつ|きめ=きめる|え=え",
             // A word before a particle that no noun list has.
@@ -301,6 +302,20 @@ class ReadingsTest {
         }
         check()
         TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun shiftedAdjectivesTakeTheirParticlesAsTheStandardAdjectiveDoes() {
+        // と after an adjective is "if" before what follows, joined to it, and quoting before 思う, on its own.
+        fun compare() {
+            for (rest in listOf("とまずい", "と思った", "とすごい")) {
+                val standard = Readings.words("やばい$rest", Script.JAPANESE)
+                val shifted = Readings.words("やべえ$rest", Script.JAPANESE)
+                assertEquals(rest, standard.map { it.text.replace("やばい", "やべえ") to it.lookup }, shifted.map { it.text to it.lookup })
+            }
+        }
+        compare()
+        TestUniDic.reading(::compare)
     }
 
     @Test
