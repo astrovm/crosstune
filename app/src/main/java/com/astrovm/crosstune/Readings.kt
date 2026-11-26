@@ -1158,6 +1158,11 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            val splitTari = last?.takeIf { it.kind == "連体詞" && it.surface.endsWith("んだ") }
+                ?.takeIf { piece.surface == "り" && piece.kind == "助動詞" }
+                ?.surface?.dropLast(1)?.let { surface ->
+                    voicedTariStem(listOf(Piece(surface, surface, "名詞", "一般")))?.let { surface to it.second }
+                }
             // IPADIC takes 返し in 投げ返したり for a noun suffix, including its voiced noun reading.
             val verbSuffix = if (last?.kind == "動詞" && piece.subkind == "接尾" && next?.kana in setOf("たり", "だり")) {
                 tokenizer.knownWord(piece.surface)?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading != null && it.reading != "*" }
@@ -1171,6 +1176,11 @@ internal object Readings {
             val minutes = minutes(piece, next)
             when {
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
+                splitTari != null -> {
+                    val (surface, base) = splitTari
+                    out[out.lastIndex] = Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    out += Piece("だり", "だり", "助詞", "並立助詞", reader = Reader.RULES)
+                }
                 piece.kana == "だり" && piece.kind in setOf("助詞", "助動詞") -> {
                     val stem = voicedTariStem(out)
                     if (stem != null) {
@@ -1178,7 +1188,8 @@ internal object Readings {
                         val surface = out.takeLast(count).joinToString("") { it.surface }
                         repeat(count) { out.removeAt(out.lastIndex) }
                         out += Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
-                    } else if (last?.kind == "動詞" && last.surface.endsWith('ん') && last.base.last() !in "むぶぬ") {
+                    } else if (last?.mistakenTariVerb() == true &&
+                        voicedTariStem(listOf(last.read(last.kana, "名詞", "一般"))) == null) {
                         out[out.lastIndex] = last.read(last.kana, "名詞", "一般")
                     }
                     out += piece
@@ -1246,20 +1257,26 @@ internal object Readings {
         return listedWords(out)
     }
 
+    private fun Piece.mistakenTariVerb() = kind == "動詞" && surface.endsWith('ん') && base.last() !in "むぶぬ"
+
     /** A kana stem split as nouns can still be the voiced form of a known verb. */
     private fun voicedTariStem(pieces: List<Piece>): Pair<Int, String>? {
-        if (pieces.lastOrNull()?.surface?.endsWith('ん') != true) return null
-        val suffix = pieces.takeLastWhile { piece -> piece.surface.all { it in 'ぁ'..'ん' } }
+        if (pieces.lastOrNull()?.surface?.endsWith('ん') != true || pieces.last().kind == "動詞") return null
+        val suffix = pieces.takeLastWhile { piece -> piece.kind != "動詞" && piece.surface.all { it in 'ぁ'..'ん' } }
         for (count in suffix.size downTo 1) {
             val stem = suffix.takeLast(count).joinToString("") { it.surface }
             if (stem.length < 2) continue
-            for (ending in if (stem == "しん") "ぬむぶ" else "むぶぬ") {
+            val candidates = "むぶぬ".mapNotNull { ending ->
                 val base = stem.dropLast(1) + ending
                 // IPADIC writes 死ぬ in kanji and splits its spelling in kana as し + ぬ.
                 val written = if (base == "しぬ") "死ぬ" else base
                 val verb = tokenizer.knownWord(written)
-                if (verb?.partOfSpeechLevel1 == "動詞" && verb.reading?.let(::hiragana) == base) return count to base
+                val cost = verb?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading?.let(::hiragana) == base }
+                    ?.let { tokenizer.knownWordCost(written, it) }
+                cost?.let { base to it }
             }
+            val lowest = candidates.minOfOrNull { it.second } ?: continue
+            return count to (candidates.filter { it.second == lowest }.singleOrNull()?.first ?: stem)
         }
         return null
     }

@@ -52,12 +52,22 @@ class ReadingsTest {
 
     @Test
     fun kanaVoicedTariLooksUpTheVerb() {
-        fun lookups() = listOf("しんだり", "かんだり", "のんだり", "えらんだり").map {
-            Readings.words(it, Script.JAPANESE).single().lookup
+        fun lookups() = listOf("とんだりはねたり", "とんだり", "しんだり", "かんだり", "のんだり", "えらんだり").map {
+            Readings.words(it, Script.JAPANESE).first().lookup
         }
-        val expected = listOf("しぬ", "かむ", "のむ", "えらぶ")
+        val expected = listOf("とぶ", "とぶ", "しぬ", "かむ", "のむ", "えらぶ")
         assertEquals(expected, lookups())
         assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun shinHasTwoDictionaryVerbsButNeitherTokenizerTagsItAsAVerb() {
+        val ipadic = Tokenizer.Builder().build().tokenize("しんだり").first()
+        val unidic = TestUniDic.tokenizer.tokenize("しんだり").first()
+        assertEquals("しん", ipadic.surface)
+        assertEquals("しん", unidic.surface)
+        assertFalse(ipadic.partOfSpeechLevel1 == "動詞")
+        assertFalse(unidic.partOfSpeechLevel1 == "動詞")
     }
 
     @Test
