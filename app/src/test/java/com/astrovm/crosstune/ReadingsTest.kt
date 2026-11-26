@@ -271,6 +271,93 @@ class ReadingsTest {
     }
 
     @Test
+    fun particleAndKatakanaQuestionBoundaries() = assertJapaneseBoundaries(listOf(
+        Triple("何だよもう", "nan da yo moo", listOf("何", "だ", "よ", "もう")),
+        Triple("何だよもうよ", "nan da yomou yo", listOf("何", "だ", "よもう", "よ")),
+        Triple("よもうよ", "yomou yo", listOf("よもう", "よ")),
+    ))
+
+    @Test
+    fun volitionalYomouKeepsItsWord() {
+        fun words() = listOf("本を読もう", "友を呼ぼう").map { line -> Readings.words(line, Script.JAPANESE).map { it.text } }
+        val expected = listOf(listOf("本", "を", "読もう"), listOf("友", "を", "呼ぼう"))
+        assertEquals(expected, words())
+        assertEquals(expected, TestUniDic.reading(::words))
+    }
+
+    @Test
+    fun particleAndMouHaveTheirOwnLookups() {
+        fun lookups() = Readings.words("何だよもう", Script.JAPANESE).takeLast(2).map { it.lookup }
+        assertEquals(listOf("よ", "もう"), lookups())
+        assertEquals(listOf("よ", "もう"), TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun katakanaNanDaAndRepeatedCalls() = assertJapaneseBoundaries(listOf(
+        Triple("これはナンダ？", "kore wa nan da？", listOf("これ", "は", "ナン", "ダ")),
+        Triple("これは何ダ？", "kore wa nan da？", listOf("これ", "は", "何", "ダ")),
+        Triple("これはナンだ？", "kore wa nan da？", listOf("これ", "は", "ナン", "だ")),
+        Triple("ナンダ、君か", "nanda、 kimi ka", listOf("ナンダ", "君", "か")),
+        Triple("ナンダナンダ", "nanda nanda", listOf("ナンダ", "ナンダ")),
+        Triple("これは本ナンダ", "kore wa hon nanda", listOf("これ", "は", "本", "ナンダ")),
+        Triple("ナンダ", "nanda", listOf("ナンダ")),
+        Triple("ナンダの曲", "nanda no kyoku", listOf("ナンダ", "の", "曲")),
+        Triple("ナンダが歌う", "nanda ga utau", listOf("ナンダ", "が", "歌う")),
+        Triple("ナンダカンダ", "nandakanda", listOf("ナンダカンダ")),
+        Triple("なんだ～なんだ", "nanda～ nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ・なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("なんだ・なんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+    ))
+
+    @Test
+    fun repeatedKatakanaCallsKeepTheirPracticeLookups() {
+        val lines = listOf("ナンダナンダよ", "ナンダナンダ", "ナンダ・ナンダね", "ナンダナンダって")
+        fun lookups() = lines.map { line -> Readings.words(line, Script.JAPANESE).map { it.lookup } }
+        val expected = listOf(
+            listOf("ナン", "ダ", "ナン", "ダ", "よ"), listOf("ナンダ", "ナンダ"),
+            listOf("ナン", "ダ", "ナン", "ダ", "ね"), listOf("ナンダナンダ", "って"),
+        )
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun katakanaRepeatedCallsWithParticlesAndMiddleDots() = assertJapaneseBoundaries(listOf(
+        Triple("なんだなんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+        Triple("ナンダ・", "nanda", listOf("ナンダ")),
+        Triple("名前 ナンダだ", "namae nanda da", listOf("名前", "ナンダ", "だ")),
+        Triple("ナンダ・ナンダ・", "nanda nanda", listOf("ナンダ・ナンダ")),
+        Triple("ナンダナンダよ", "nan da nan da yo", listOf("ナン", "ダ", "ナン", "ダ", "よ")),
+        Triple("ナンダナンダね", "nan da nan da ne", listOf("ナン", "ダ", "ナン", "ダ", "ね")),
+        Triple("ナンダナンダか", "nan da nan da ka", listOf("ナン", "ダ", "ナン", "ダ", "か")),
+        Triple("ナンダ・ナンダ", "nanda nanda", listOf("ナンダ", "ナンダ")),
+        Triple("ナンダ・ナンダよ", "nan da nan da yo", listOf("ナン", "ダ", "ナン", "ダ", "よ")),
+        Triple("ナンダ・ナンダの歌", "nanda nanda no uta", listOf("ナンダ・ナンダ", "の", "歌")),
+        Triple("ナンダナンダの歌", "nandananda no uta", listOf("ナンダナンダ", "の", "歌")),
+    ))
+
+    @Test
+    fun katakanaCallReadingsPreserveEveryWrittenMark() {
+        val lines = listOf("ナンダ", "ナンダ・", "ナンダ・ナンダ", "ナンダ・ナンダよ")
+        fun read() = Readings.of(lines, Script.JAPANESE).map { line -> line.parts.joinToString("") { it.text } }
+        assertEquals(lines, read())
+        assertEquals(lines, TestUniDic.reading(::read))
+    }
+
+    @Test
+    fun repeatedCallsDoNotSplitExplanationsOrNames() = assertJapaneseBoundaries(listOf(
+        Triple("好き～なんだ", "suki～ nanda", listOf("好き", "なんだ")),
+        Triple("夢・なんだ", "yume nanda", listOf("夢", "なんだ")),
+        Triple("本当～なんだ", "hontoo～ nanda", listOf("本当", "なんだ")),
+        Triple("ナンダナンダの歌", "nandananda no uta", listOf("ナンダナンダ", "の", "歌")),
+        Triple("ナンダナンダが好き", "nandananda ga suki", listOf("ナンダナンダ", "が", "好き")),
+        Triple("ナンダナンダ！", "nanda nanda！", listOf("ナンダ", "ナンダ")),
+        Triple("ナンダナンダ、", "nanda nanda、", listOf("ナンダ", "ナンダ")),
+        Triple("なんだ・なんだ", "nanda nanda", listOf("なんだ", "なんだ")),
+        Triple("ナンダ～ナンダ", "nanda～ nanda", listOf("ナンダ", "ナンダ")),
+    ))
+
+    @Test
     fun interrogativeNanDaSeparatesAfterATopic() = assertJapaneseBoundaries(listOf(
         Triple("これは何だ", "kore wa nan da", listOf("これ", "は", "何", "だ")),
         Triple("それは何だ?", "sore wa nan da?", listOf("それ", "は", "何", "だ")),
