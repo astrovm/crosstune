@@ -1222,7 +1222,7 @@ internal object Readings {
     }
 
     private fun shiftedNoun(surface: String): Piece? {
-        if (surface.length < 3 || surface.last() !in "えー") return null
+        if (surface.length < 3 || surface.last() !in "えー" || surface.any(::isHan)) return null
         val stem = surface.dropLast(1)
         val a = shiftedE[stem.last()]?.firstOrNull() ?: return null
         val root = stem.dropLast(1) + a + "え"
@@ -1270,7 +1270,7 @@ internal object Readings {
     private fun shiftedWhole(text: String, first: Piece, end: Int, at: Int): ShiftedMatch? {
         val noun = shiftedNoun(text)
         if (noun != null) return ShiftedMatch(end + 1, noun)
-        if (end == at && first.kind == "名詞") return null
+        if (end == at && first.kind == "名詞" && first.base != first.surface) return null
         if (!canShiftAdjective(text, first)) return null
         val adjective = shiftedAdjective(text) ?: return null
         if (tokenizer.knownWord(text)?.partOfSpeechLevel1 == "名詞") return null
@@ -1278,7 +1278,10 @@ internal object Readings {
     }
 
     private fun shiftedMatch(pieces: List<Piece>, at: Int): ShiftedMatch? {
-        if (pieces.getOrNull(at - 1)?.surface == "を") return null
+        val previous = pieces.getOrNull(at - 1)
+        val predicate = previous?.kind in setOf("動詞", "形容詞", "助動詞") &&
+            !(previous?.kind == "助動詞" && previous.surface == "で" && previous.base == "だ")
+        if (previous?.surface == "を" || predicate) return null
         var text = ""
         var found: ShiftedMatch? = null
         for (end in at until minOf(at + 4, pieces.size)) {

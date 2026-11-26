@@ -128,6 +128,12 @@ class ReadingsTest {
                 assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
             }
             assertFalse(Readings.words("ボタンをおせえ", Script.JAPANESE).any { it.lookup == "おそい" })
+            assertEquals("だせる", Readings.words("だせえ", Script.JAPANESE).first().lookup)
+            assertEquals("dase e", Readings.of(listOf("だせえ"), Script.JAPANESE).single().romanized)
+            assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
+            assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
+            val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
+            assertEquals(listOf("死にた", "か", "ねえ", "の", "は", "お互い様"), negative.map { it.text })
             for ((line, adjective, romanized) in listOf(
                 Triple("今日さみいね", "さみい", "kyoo samii ne"), Triple("すげえさ", "すげえ", "sugee sa")
             )) {
