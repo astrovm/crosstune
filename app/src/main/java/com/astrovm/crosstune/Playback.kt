@@ -554,7 +554,7 @@ internal class MediaSessionPlayback(
             val clock = retainedQueueClock(previous, state, reported, matches, at)
             val changed = previous?.playing != clock.playing
             if (entry != null) {
-                if (matches || !clock.playing || changed) {
+                if (matches || changed) {
                     queueMetadata[controller.sessionToken] = entry.copy(id = if (previous == null) state.activeQueueItemId else entry.id,
                         clock = clock, waitingId = if (previous == null) null else entry.waitingId)
                 }

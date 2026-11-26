@@ -163,6 +163,10 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(0L, seen.last()?.offsetMs)
         assertEquals(0L, followed.last()?.clock?.positionMs)
+        val seek = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 5_000, 1f, PLAYED_AT).setActiveQueueItemId(4).build()
+        shadowOf(music).executeOnPlaybackStateChanged(seek)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(5_000L, seen.last()?.offsetMs)
     }
 
     @Test
