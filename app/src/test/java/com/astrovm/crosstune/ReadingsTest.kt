@@ -247,6 +247,9 @@ class ReadingsTest {
     @Test
     fun katakanaRepeatedCallsWithParticlesAndMiddleDots() = assertJapaneseBoundaries(listOf(
         Triple("なんだなんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
+        Triple("ナンダ・", "nanda", listOf("ナンダ")),
+        Triple("名前 ナンダだ", "namae nanda da", listOf("名前", "ナンダ", "だ")),
+        Triple("ナンダ・ナンダ・", "nanda nanda", listOf("ナンダ・ナンダ")),
         Triple("ナンダナンダよ", "nan da nan da yo", listOf("ナン", "ダ", "ナン", "ダ", "よ")),
         Triple("ナンダナンダね", "nan da nan da ne", listOf("ナン", "ダ", "ナン", "ダ", "ね")),
         Triple("ナンダナンダか", "nan da nan da ka", listOf("ナン", "ダ", "ナン", "ダ", "か")),
@@ -255,6 +258,14 @@ class ReadingsTest {
         Triple("ナンダ・ナンダの歌", "nanda nanda no uta", listOf("ナンダ・ナンダ", "の", "歌")),
         Triple("ナンダナンダの歌", "nandananda no uta", listOf("ナンダナンダ", "の", "歌")),
     ))
+
+    @Test
+    fun katakanaCallReadingsPreserveEveryWrittenMark() {
+        val lines = listOf("ナンダ", "ナンダ・", "ナンダ・ナンダ", "ナンダ・ナンダよ")
+        fun read() = Readings.of(lines, Script.JAPANESE).map { line -> line.parts.joinToString("") { it.text } }
+        assertEquals(lines, read())
+        assertEquals(lines, TestUniDic.reading(::read))
+    }
 
     @Test
     fun repeatedCallsDoNotSplitExplanationsOrNames() = assertJapaneseBoundaries(listOf(
