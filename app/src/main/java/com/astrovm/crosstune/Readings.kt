@@ -269,14 +269,10 @@ internal object Readings {
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
-            if (pieces.interrogativeExplanation(at)) {
-                add(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES))
-                skipUntil = at + 2
-                continue
-            }
-            if (pieces.interrogativeNanja(at)) {
-                add(Piece("なんじゃ", "なんじゃ", "名詞", "代名詞", "なんだ", reader = Reader.RULES))
-                skipUntil = at + 2
+            val explanation = pieces.interrogativePiece(at)
+            if (explanation != null) {
+                add(explanation.first)
+                skipUntil = at + explanation.second
                 continue
             }
             val length = pieces.nanDaRewriteLength(at)
@@ -304,12 +300,24 @@ internal object Readings {
         }
     }
 
+    private fun List<Piece>.interrogativePiece(at: Int): Pair<Piece, Int>? {
+        if (interrogativeExplanation(at)) return Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES) to 2
+        val length = interrogativeNanjaLength(at)
+        return if (length > 0) Piece("なんじゃ", "なんじゃ", "名詞", "代名詞", "なんだ", reader = Reader.RULES) to length else null
+    }
+
     private fun List<Piece>.interrogativeExplanation(at: Int) =
         getOrNull(at - 1)?.surface in setOf("何", "なん") && get(at).surface == "な" &&
             getOrNull(at + 1)?.surface == "ん" && getOrNull(at + 2)?.startsCopula == true
 
-    private fun List<Piece>.interrogativeNanja(at: Int) =
-        getOrNull(at - 1)?.surface in setOf("何", "なん") && get(at).surface == "な" && getOrNull(at + 1)?.surface == "んじゃ"
+    private fun List<Piece>.interrogativeNanjaLength(at: Int): Int {
+        if (getOrNull(at - 1)?.surface !in setOf("何", "なん") || get(at).surface != "な") return 0
+        return when {
+            getOrNull(at + 1)?.surface == "んじゃ" -> 2
+            getOrNull(at + 1)?.surface == "ん" && getOrNull(at + 2)?.surface == "じゃ" -> 3
+            else -> 0
+        }
+    }
 
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
         val nameBeforeParticle = piece.surface == "ナンダ" && nameParticle(after)

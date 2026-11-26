@@ -664,6 +664,8 @@ class ReadingsTest {
         Triple("何なんだった", "nan nandatta", listOf("何", "なんだった")),
         Triple("何なんじゃ", "nan nanja", listOf("何", "なんじゃ")),
         Triple("なんなんじゃ", "nan nanja", listOf("なん", "なんじゃ")),
+        Triple("何なんじゃない", "nan nanja nai", listOf("何", "なんじゃ", "ない")),
+        Triple("なんなんじゃない", "nan nanja nai", listOf("なん", "なんじゃ", "ない")),
         Triple("なんなんだっけ", "nan nandakke", listOf("なん", "なんだっ", "け")),
         Triple("なんなんだった", "nan nandatta", listOf("なん", "なんだった")),
         Triple("静かなんだ", "shizuka nanda", listOf("静か", "なんだ")),
@@ -672,10 +674,10 @@ class ReadingsTest {
 
     @Test
     fun interrogativeExplanationLooksUpTheExplanatoryForm() {
-        fun lookups() = listOf("何なんだ", "何なんだろう", "何なんだった", "何なんじゃ", "なんなんじゃ", "何なんですか").map { line ->
+        fun lookups() = listOf("何なんだ", "何なんだろう", "何なんだった", "何なんじゃ", "なんなんじゃ", "何なんじゃない", "なんなんじゃない", "何なんですか").map { line ->
             Readings.words(line, Script.JAPANESE)[1].lookup
         }
-        val expected = List(6) { "なんだ" }
+        val expected = List(8) { "なんだ" }
         assertEquals(expected, lookups())
         assertEquals(expected, TestUniDic.reading(::lookups))
         fun dakke() = Readings.words("何なんだっけ", Script.JAPANESE).map { it.lookup }
@@ -684,6 +686,19 @@ class ReadingsTest {
         fun name() = Readings.words("ナンナンダよ", Script.JAPANESE).map { it.lookup }
         assertEquals(listOf("ナンナンダ", "よ"), name())
         assertEquals(listOf("ナンナンダ", "よ"), TestUniDic.reading(::name))
+    }
+
+    @Test
+    fun nanjaDoesNotRewriteOtherPhrases() {
+        fun words() = listOf("何なのじゃ", "花なんじゃない").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何な" to "何", "の" to "の", "じゃ" to "じゃ"),
+            listOf("花な" to "花", "ん" to "ん", "じゃ" to "じゃ", "ない" to "ない"),
+        )
+        assertEquals(expected, words())
+        assertEquals(expected, TestUniDic.reading(::words))
     }
 
     @Test
