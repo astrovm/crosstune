@@ -279,6 +279,9 @@ class ReadingsTest {
             // the noun it describes, or an ending no command takes.
             Triple("この部屋はくれえ", "くれえ", "くらい"), Triple("超くれえ", "くれえ", "くらい"), Triple("くれえ部屋", "くれえ", "くらい"),
             Triple("おせえから帰る", "おせえ", "おそい"), Triple("おせえのか", "おせえ", "おそい"),
+            // An ending marks the adjective even after a noun a command could act on.
+            Triple("返事おせえのか", "おせえ", "おそい"), Triple("返事おせえでした", "おせえ", "おそい"),
+            Triple("返事おせえから帰る", "おせえ", "おそい"),
             // Any command but くれ is the adjective with nothing before it to act on: alone, after a comma or a pronoun.
             Triple("おせえ", "おせえ", "おそい"), Triple("おせえよ", "おせえ", "おそい"), Triple("おせえよな", "おせえ", "おそい"),
             Triple("おせえ！早くしろ", "おせえ", "おそい"), Triple("あいつおせえ", "おせえ", "おそい"), Triple("だせえ", "だせえ", "ださい"),
