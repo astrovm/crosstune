@@ -254,6 +254,13 @@ class ReadingsTest {
             // The dictionary's verb before え, or before a noun, is the adjective.
             Triple("きたねえ水", "きたねえ", "きたない"), Triple("きたねえな", "きたねえ", "きたない"),
             Triple("体がいてえ", "いてえ", "いたい"), Triple("まじでいてえ", "いてえ", "いたい"),
+            Triple("動くと、いてえ", "いてえ", "いたい"), Triple("お前よええな", "よええ", "よわい"), Triple("俺よええ", "よええ", "よわい"),
+            Triple("あめえのおいしいね", "あめえ", "あまい"), Triple("百メートルぐれえ", "ぐれえ", "ぐらい"),
+            Triple("靴を脱いでいたら、いてえ", "いてえ", "いたい"), Triple("ここに来た。いてえ！", "いてえ", "いたい"),
+            Triple("人に言われてすげえ嬉しい", "すげえ", "すごい"), Triple("とってもおせえ", "おせえ", "おそい"),
+            Triple("まったくおせえ", "おせえ", "おそい"), Triple("本当におせえ", "おせえ", "おそい"),
+            Triple("針で、マジいてえ", "いてえ", "いたい"), Triple("目に入るとすげえいてえ", "いてえ", "いたい"),
+            Triple("まじうぜえ", "うぜえ", "うざい"),
             // の after an adjective ends its phrase.
             Triple("やべえのが来た", "やべえ", "やばい"), Triple("すげえの", "すげえ", "すごい"),
             // A noun after a noun with nothing between can't be, so the adjective.
@@ -339,7 +346,7 @@ class ReadingsTest {
             // A verb that helps the one before it: help me, want to keep watching.
             "助けてくれえ" to "助けて=助ける|くれ=くれる|え=え", "見ていてえ" to "見て=見る|いて=いる|え=え",
             // A particle after a noun, before a word: ええ, good.
-            "母はええ人だ" to "母=母|は=は|え=え|え=え|人=人|だ=だ", "俺よええ" to "俺=俺|よ=よ|え=え|え=え",
+            "母はええ人だ" to "母=母|は=は|え=え|え=え|人=人|だ=だ", "俺よ、ええ" to "俺=俺|よ=よ|ええ=ええ",
             "犬やええ" to "犬=犬|や=や|え=え|え=え",
             // An interjection drawn out: huh?
             "あれえ？" to "あれ=あれ|え=え", "あれー" to "あれー=あれー",
@@ -356,6 +363,29 @@ class ReadingsTest {
         fun check() {
             for ((line, words) in cases) {
                 assertEquals(line, words, Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" })
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun reviewCasesKeepDictionaryLookupsInBothModes() {
+        val cases = listOf(
+            "ここに明日までいてえ" to ("いて" to "いる"),
+            "ここに、もっといてえ" to ("いて" to "いる"),
+            "弟がそこに！いてえ！" to ("いて" to "いる"),
+            "ちゃんとだせえ" to ("だせ" to "だす"),
+            "直ぐだせえ" to ("だせ" to "だする"),
+            "ボタンを思い切っておせえ" to ("おせ" to "おす"),
+            "時計の針をとにかくおせえ" to ("おせ" to "おす"),
+            "お金マジくれえよ" to ("くれえ" to "くれる"),
+            "あめーちょうだい" to ("あめー" to "あめ"),
+            "そのあめえね" to ("あめ" to "あめ")
+        )
+        fun check() {
+            for ((line, expected) in cases) {
+                assertEquals(line, expected.second, Readings.words(line, Script.JAPANESE).firstOrNull { it.text == expected.first }?.lookup)
             }
         }
         check()

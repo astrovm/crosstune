@@ -1262,8 +1262,10 @@ internal object Readings {
     /** Particles that mark the subject an adjective describes: 返事がおせえな, この部屋はくれえ. */
     private val SUBJECT_PARTICLES = setOf("が", "は")
 
-    /** Words of degree, which describe an adjective, not a command: 超くれえ, マジおせえ. */
-    private val DEGREE_WORDS = listOf("超", "ちょー", "マジ", "まじ", "めっちゃ", "めちゃ", "すごく", "とても", "かなり")
+    /** Degree and ambiguous adverbs, which can describe an adjective: 超くれえ, マジおせえ, とにかくおせえ. */
+    private val DEGREE_WORDS = listOf(
+        "超", "ちょー", "マジ", "まじ", "めっちゃ", "めちゃ", "すごく", "すげえ", "とても", "とっても", "かなり", "まったく", "本当に", "とにかく"
+    )
 
     /** What follows an adjective and never a command, besides a copula and a particle that joins clauses: くれえのか, おせえだろ. */
     private val ADJECTIVE_ENDINGS = setOf("の", "だろ", "だろう", "でしょ", "でしょう", "じゃん", "っす")
@@ -1346,11 +1348,11 @@ internal object Readings {
         after.surface in PREDICATE_ENDINGS || after.base == "です" ||
             (after.kind == "助詞" && after.subkind in setOf("終助詞", "接続助詞"))
 
-    private fun placeBefore(after: Piece?, next: Piece?): Place = when {
+    private fun placeBefore(after: Piece?, next: Piece?, following: Piece?): Place = when {
         after == null || after.surface.none(Char::isLetter) -> Place.PREDICATE
-        // の before a noun joins two nouns, あけえの壺, and before an adjective marks its subject, きめえのいい奴 for
-        // 気前のいい奴. With neither after it, あめえのか, a noun would need な first.
-        after.surface == "の" -> if (next?.kind in setOf("名詞", "形容詞")) Place.ARGUMENT else Place.PREDICATE
+        // の joins nouns before a noun, あけえの壺, or an adjective modifying one, きめえのいい奴. Before a predicate,
+        // あめえのおいしいね, or a question, あめえのか, it makes the preceding adjective a noun phrase.
+        after.surface == "の" -> if (next?.kind == "名詞" || next?.kind == "形容詞" && following?.kind == "名詞") Place.ARGUMENT else Place.PREDICATE
         // Before the particles that mark a noun: the が that joins two clauses ends one, すげえが、弟は.
         endsPhrase(after) -> Place.PREDICATE
         after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
@@ -1367,9 +1369,13 @@ internal object Readings {
      */
     private fun keepsVerb(span: List<Piece>, ahead: List<Piece>): Boolean {
         if (span.first().kind != "動詞") return false
+        if (hasDegree(ahead, giving = false)) return false
         if (span.first().subkind == "非自立" && span.drop(1).all { it.kind in setOf("助詞", "フィラー") }) return true
-        val partner = ahead.lastOrNull { !standsBetween(it) }
-        if (partner?.kind == "助詞" && partner.surface in VERB_PARTNERS) return true
+        val clause = ahead.takeLastWhile { it.kind !in setOf("動詞", "形容詞", "助動詞") }
+        if (clause.withIndex().any { (index, piece) ->
+                val partner = piece.kind == "助詞" && piece.surface in VERB_PARTNERS
+                partner && (piece.surface != "と" || clause.getOrNull(index - 1)?.kind == "名詞")
+            }) return true
         val past = span.getOrNull(1)?.let { it.kind == "助動詞" && it.base == "た" } == true
         return past && span.drop(2).all { it.kind == "助詞" }
     }
@@ -1383,19 +1389,32 @@ internal object Readings {
      * it describes after it, くれえ部屋; or an ending no command takes, おせえでした and おせえから.
      */
     private fun keepsCommand(text: String, verb: Piece, ahead: List<Piece>, place: Place, after: Piece?): Boolean {
-        if (!isCommand(text, verb) || marksAdjective(ahead, place, after)) return false
+        if (!isCommand(text, verb) || marksAdjective(ahead, place, after, verb.surface == "くれ")) return false
         // The noun can stand before an adverb or a particle such as こそ, 声を今こそだせえ, but not before a comma.
         val noun = ahead.lastOrNull { it.kind == "記号" || !standsBetween(it) }
-        val acted = ahead.lastOrNull()?.surface in COMMAND_ADVERBS || (noun?.kind == "名詞" && noun.subkind != "代名詞")
+        val last = ahead.lastOrNull()
+        val acted = last?.surface in COMMAND_ADVERBS || last?.kind == "副詞" ||
+            (last?.surface == "と" && ahead.getOrNull(ahead.lastIndex - 1)?.kind == "副詞") ||
+            ahead.takeLastWhile { it.kind != "記号" }.any { it.kind == "助詞" && it.surface == "を" } ||
+            (noun?.kind == "名詞" && noun.subkind != "代名詞")
         return verb.surface == "くれ" || acted
     }
 
     /** Whether the line marks a word, where [ahead] ends and [after] starts, as an adjective. */
-    private fun marksAdjective(ahead: List<Piece>, place: Place, after: Piece?): Boolean {
+    private fun marksAdjective(ahead: List<Piece>, place: Place, after: Piece?, giving: Boolean): Boolean {
         val before = ahead.lastOrNull()
         val subject = before?.kind == "助詞" && before.surface in SUBJECT_PARTICLES
-        val degree = ahead.joinToString("") { it.surface }.let { line -> DEGREE_WORDS.any(line::endsWith) }
+        val degree = hasDegree(ahead, giving)
         return subject || degree || after?.let(::endsAdjective) == true || place == Place.MODIFIES
+    }
+
+    /** マジ can mean "seriously" in a request; とにかく can urge a command when it has an object. */
+    private fun hasDegree(ahead: List<Piece>, giving: Boolean): Boolean = ahead.joinToString("") { it.surface }.let { line ->
+        val objectBefore = ahead.takeLastWhile { it.kind != "記号" }.any { it.kind == "助詞" && it.surface == "を" }
+        DEGREE_WORDS.any {
+            val request = (giving && it in setOf("マジ", "まじ")) || (it == "とにかく" && objectBefore)
+            line.endsWith(it) && !request
+        }
     }
 
     /** Whether [text] is the command the dictionary split as [verb], said long: くれえ from くれ, おせえ from 押せ. */
@@ -1412,10 +1431,12 @@ internal object Readings {
      */
     private fun shiftedWord(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>): Piece? {
         if (dictionaryWordStays(span.first(), ahead.lastOrNull(), text)) return null
+        if (ahead.lastOrNull()?.kind == "連体詞" && span.first().kind == "名詞") return null
+        if (drawnNoun(span) && after.firstOrNull()?.let { it.kind == "動詞" || it.subkind == "動詞非自立的" } == true) return null
         shiftedParticle(text, span.first(), ahead)?.let { return it }
         val noun = shiftedNoun(text)
         if (noun?.subkind == "代名詞") return noun
-        val place = placeBefore(after.firstOrNull(), after.getOrNull(1))
+        val place = placeBefore(after.firstOrNull(), after.getOrNull(1), after.getOrNull(2))
         val adjective = shiftedAdjective(text)?.takeIf {
             canShiftAdjective(text, span.first()) && tokenizer.knownWord(text)?.partOfSpeechLevel1 != "名詞" &&
                 !keepsVerb(span, ahead) && !keepsCommand(text, span.first(), ahead, place, after.firstOrNull())
@@ -1447,7 +1468,7 @@ internal object Readings {
     private fun dictionaryWordStays(first: Piece, before: Piece?, text: String): Boolean {
         val rest = text.drop(first.surface.length)
         return when (first.kind) {
-            "助詞" -> before?.kind == "名詞" && tokenizer.knownWord(rest) != null
+            "助詞" -> first.surface != "よ" && before?.kind == "名詞" && tokenizer.knownWord(rest) != null
             "感動詞" -> rest.all { it in "えー" }
             else -> false
         }
@@ -1464,7 +1485,7 @@ internal object Readings {
     private fun shiftedParticle(text: String, first: Piece, ahead: List<Piece>): Piece? {
         val counted = ahead.lastOrNull()?.takeUnless { isCommand(text, first) } ?: return null
         val quantity = counted.subkind in NUMBERS || counted.subkind == "代名詞" ||
-            (counted.counts() && ahead.getOrNull(ahead.size - 2)?.subkind in NUMBERS)
+            ((counted.counts() || counted.kind == "名詞" && counted.subkind == "接尾") && ahead.getOrNull(ahead.size - 2)?.subkind in NUMBERS)
         if (!quantity) return null
         val root = shiftedRoots(text).firstOrNull { root ->
             tokenizer.tokenize(counted.surface + root).last().let { it.surface == root && it.partOfSpeechLevel1 == "助詞" }
@@ -1485,7 +1506,7 @@ internal object Readings {
         val particles = suffix.second.map { token ->
             Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
         }
-        val after = particles + pieces.drop(end + suffix.first).take(1)
+        val after = particles + pieces.drop(end + suffix.first).take(3)
         val word = shiftedWord(prefix, pieces.subList(at, end + 1), pieces.subList(0, at), after) ?: return null
         return ShiftedMatch(end + suffix.first, word, particles)
     }
@@ -1493,7 +1514,7 @@ internal object Readings {
     private fun shiftedWhole(pieces: List<Piece>, at: Int, end: Int, text: String): ShiftedMatch? {
         val first = pieces[at]
         if (end == at && first.kind == "名詞" && first.base != first.surface) return null
-        val word = shiftedWord(text, pieces.subList(at, end + 1), pieces.subList(0, at), pieces.drop(end + 1).take(2)) ?: return null
+        val word = shiftedWord(text, pieces.subList(at, end + 1), pieces.subList(0, at), pieces.drop(end + 1).take(3)) ?: return null
         return ShiftedMatch(end + 1, word)
     }
 
@@ -1501,7 +1522,7 @@ internal object Readings {
         val previous = pieces.getOrNull(at - 1)
         val predicate = previous?.kind in setOf("動詞", "形容詞", "助動詞") &&
             !(previous?.kind == "助動詞" && previous.surface == "で" && previous.base == "だ")
-        if (predicate) return null
+        if (predicate && !hasDegree(pieces.take(at), giving = false)) return null
         var text = ""
         var found: ShiftedMatch? = null
         for (end in at until minOf(at + 4, pieces.size)) {
