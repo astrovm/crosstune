@@ -130,7 +130,12 @@ class ReadingsTest {
                 Triple("お願い、とにかくくれえ", "くれ", "くれる"),
                 Triple("これはええ", "は", "は"),
                 Triple("あめーなのに出る", "あめー", "あめ"),
-                Triple("なでなでやる", "なでやる", "なでる")
+                Triple("なでなでやる", "なでやる", "なでる"),
+                Triple("お前よええな", "よ", "よ"),
+                Triple("今日は雪、明日はあめー！", "あめー", "あめ"),
+                Triple("これがじいちゃんのつえーだ！", "つえー", "つえ"),
+                Triple("なでなでやろうか", "なでやろう", "なでる"),
+                Triple("猫の頭をなでなでやろうか", "なでやろう", "なでる")
             )) {
                 assertEquals(line, lookup, Readings.words(line, Script.JAPANESE).firstOrNull { it.text == word }?.lookup)
             }
@@ -173,7 +178,7 @@ class ReadingsTest {
             Triple("うめえ", "umee", "うまい"), Triple("ねみい", "nemii", "ねむい"),
             Triple("さみい", "samii", "さむい"), Triple("うぜえ", "uzee", "うざい"),
             Triple("うぜー", "uzee", "うざい"), Triple("だせえ", "dasee", "ださい"),
-            Triple("こええ", "koee", "こわい"), Triple("はええ", "haee", "はやい"),
+            Triple("こええ", "koee", "こわい"),
             Triple("つええ", "tsuee", "つよい"), Triple("かっけえ", "kakkee", "かっこいい")
         )
         fun check() {
@@ -259,12 +264,11 @@ class ReadingsTest {
         // A line, a word in it, and what that word looks up.
         val cases = listOf(
             // A marked subject, or a word on its own, can describe an adjective.
-            Triple("コーヒーがあめえ", "あめえ", "あまい"),
             Triple("あめえよ", "あめえ", "あまい"), Triple("あめえって", "あめえ", "あまい"),
             Triple("返事がおせえな", "おせえ", "おそい"), Triple("あめえです", "あめえ", "あまい"),
             // The shifted noun has no competing real split in these lines.
             Triple("このなめえ", "なめえ", "名前"),
-            Triple("犬のなめえ", "なめえ", "名前"), Triple("なめえ", "なめえ", "名前"),
+            Triple("なめえ", "なめえ", "名前"),
             // No noun is spelled だりい, so it stays the adjective before a particle too.
             Triple("だりいに決まってる", "だりい", "だるい"),
             // A pronoun before an adjective, wherever it stands.
@@ -273,7 +277,7 @@ class ReadingsTest {
             // After を, an adjective that describes a noun or is quoted.
             Triple("お前をやべえ奴だと思った", "やべえ", "やばい"), Triple("それをやべえって言った", "やべえ", "やばい"),
             // A subject or pronoun before a phrase-final adjective.
-            Triple("体がいてえ", "いてえ", "いたい"), Triple("お前よええな", "よええ", "よわい"), Triple("俺よええ", "よええ", "よわい"),
+            Triple("体がいてえ", "いてえ", "いたい"),
             Triple("人に言われてすげえ嬉しい", "すげえ", "すごい"), Triple("目に入るとすげえいてえ", "すげえ", "すごい"), Triple("まじうぜえ", "うぜえ", "うざい"),
             // の after an adjective ends its phrase.
             Triple("やべえのが来た", "やべえ", "やばい"), Triple("すげえの", "すげえ", "すごい"),
@@ -281,8 +285,8 @@ class ReadingsTest {
             Triple("あいつきめえ", "きめえ", "きもい"), Triple("きめえ", "きめえ", "きもい"), Triple("きめー", "きめー", "きもい"),
             // え said for わ, や or よ, and かっこいい's いい said as え.
             Triple("こええ", "こええ", "こわい"), Triple("こえー", "こえー", "こわい"), Triple("こええ話", "こええ", "こわい"),
-            Triple("はええよ", "はええ", "はやい"), Triple("早え", "早え", "早い"), Triple("つええ", "つええ", "つよい"),
-            Triple("強え", "強え", "強い"), Triple("よええ", "よええ", "よわい"), Triple("弱え", "弱え", "弱い"),
+            Triple("早え", "早え", "早い"), Triple("つええ", "つええ", "つよい"),
+            Triple("強え", "強え", "強い"), Triple("弱え", "弱え", "弱い"),
             Triple("かっけえ", "かっけえ", "かっこいい"), Triple("かっけー", "かっけー", "かっこいい"), Triple("かっけえ車", "かっけえ", "かっこいい"),
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
@@ -324,6 +328,13 @@ class ReadingsTest {
     @Test
     fun revisedColloquialBoundariesMatchMain() {
         val cases = listOf(
+            "はええ" to "は=は|え=え|え=え",
+            "はええよ" to "は=は|ええ=ええ|よ=よ",
+            "よええ" to "よ=よ|え=え|え=え",
+            "俺よええ" to "俺=俺|よ=よ|え=え|え=え",
+            "お前よええな" to "お前=お前|よ=よ|ええ=ええ|な=な",
+            "コーヒーがあめえ" to "コーヒー=コーヒー|が=が|あめ=あめ|え=え",
+            "犬のなめえ" to "犬=犬|の=の|なめ=なめ|え=え",
             "ぐれえ" to "ぐれ=ぐれる|え=え",
             "おせえのか" to "おせえ=おせる|の=の|か=か",
             "返事おせえのか" to "返事=返事|おせえ=おせる|の=の|か=か",

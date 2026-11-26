@@ -1289,23 +1289,27 @@ internal object Readings {
     private fun realSplit(text: String, first: Piece): Boolean {
         val ending = text.removePrefix(first.surface)
         if (ending !in setOf("え", "ー", "い", "ええ", "えー", "てえ", "てー")) return false
-        if (first.kind == "助詞" && first.surface in setOf("よ", "は")) return true
-        if (first.kind !in setOf("動詞", "名詞")) return false
-        // え can stand for わ or よ: こええ and つええ still read as こわい and つよい.
+        if (first.kind == "名詞") return true
+        if (first.kind != "動詞") return false
+        // え can stand for わ: こええ can read as こわい.
         if (first.surface.endsWith("え")) return false
-        if (first.kind == "名詞" && first.surface in commonSplitWords) return true
         if (first.base in commonSplitWords) return true
         val command = tokenizer.tokenize(first.surface + "よ").first()
         return command.surface == first.surface && command.conjugationForm.startsWith("命令") && command.baseForm in commonSplitWords
     }
 
-    private fun realSplitCanJoin(text: String, ahead: List<Piece>, after: List<Piece>): Boolean {
+    private fun markedSubject(ahead: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
         val noun = ahead.getOrNull(ahead.lastIndex - 1)
-        val subject = before?.kind == "助詞" && before.surface in setOf("が", "は", "も") &&
+        return before?.kind == "助詞" && before.surface in setOf("が", "は", "も") &&
             noun?.kind == "名詞" && noun.subkind != "非自立"
-        if (text.startsWith("くれ") && !(subject && before.surface in setOf("が", "は"))) return false
-        val starts = before == null || before.subkind == "代名詞" || subject
+    }
+
+    private fun realSplitCanJoin(text: String, first: Piece, ahead: List<Piece>, after: List<Piece>): Boolean {
+        val before = ahead.lastOrNull()
+        val subject = markedSubject(ahead)
+        if (text.startsWith("くれ") && !(subject && before?.surface in setOf("が", "は"))) return false
+        val starts = before == null || before.subkind == "代名詞" || (first.kind != "名詞" && subject)
         val next = after.firstOrNull()
         val endings = setOf("よ", "な", "ね", "ぞ", "ぜ", "わ", "さ", "って", "だろ", "じゃん", "っす")
         val ends = next == null || (next.surface.none(Char::isLetterOrDigit) && after.drop(1).none { it.surface.any(Char::isLetterOrDigit) }) ||
@@ -1373,12 +1377,16 @@ internal object Readings {
      * The word [text] over [span] of the dictionary's pieces. A real split stays unless its place marks a
      * phrase-final adjective. Null keeps the dictionary's pieces.
      */
+    private fun particleBeforeEe(text: String, first: Piece): Boolean =
+        first.kind == "助詞" && first.surface in setOf("よ", "は", "や") && text.removePrefix(first.surface).startsWith("え")
+
     private fun shiftedWord(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>): Piece? {
+        if (particleBeforeEe(text, span.first())) return null
         if (dictionaryWordStays(span.first(), ahead.lastOrNull(), text)) return null
         if (pastVerb(span)) return null
         val adjective = shiftedAdjective(text)
         if (realSplit(text, span.first())) {
-            return adjective?.takeIf { canShiftAdjective(text, span.first()) && realSplitCanJoin(text, ahead, after) }
+            return adjective?.takeIf { canShiftAdjective(text, span.first()) && realSplitCanJoin(text, span.first(), ahead, after) }
         }
         // ぐれえ can be a form of ぐれる or ぐらい, so keep the dictionary's split.
         if (adjective?.base == "ぐろい") return null
@@ -1563,8 +1571,9 @@ internal object Readings {
                 }
             } else null
             // A copula after なでなで, standard or Kansai: なでなでだ, なでなでやん, and なでなでやろ, which IPADIC takes for a form of やる.
-            val copulaNext = (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や", "やん")) ||
-                (next?.base == "やる" && next.surface == "やろ")
+            val volitional = next?.surface == "やろ" && pieces.getOrNull(index + 2)?.surface == "う"
+            val copulaNext = !volitional && ((next?.kind == "助動詞" && next.base in setOf("だ", "です", "や", "やん")) ||
+                (next?.base == "やる" && next.surface == "やろ"))
             // A sentence-final が can be labelled as a conjunction, though it follows the noun.
             val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
             val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
