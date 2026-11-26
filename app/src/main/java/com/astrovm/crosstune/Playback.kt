@@ -428,7 +428,7 @@ internal class MediaSessionPlayback(
     private val late = ConcurrentHashMap<String, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
     // A session can publish the next item's clock before its name. Only compare IDs while it is watched.
-    private data class QueueMetadata(val id: Long, val title: String?, val artist: String?, val renamed: Boolean = false)
+    private data class QueueMetadata(val id: Long, val title: String?, val artist: String?, val renamed: Boolean = false, val clock: PlaybackClock? = null)
     private val queueMetadata = ConcurrentHashMap<MediaSession.Token, QueueMetadata>()
     private val queueWatchers = mutableMapOf<MediaSession.Token, Int>()
 
@@ -451,7 +451,7 @@ internal class MediaSessionPlayback(
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
         queueMetadata.compute(sessionToken) { _, previous ->
-            QueueMetadata(id, title, artist, previous != null && (previous.renamed || previous.title != title || previous.artist != artist))
+            QueueMetadata(id, title, artist, previous != null && (previous.renamed || previous.title != title || previous.artist != artist), previous?.clock)
         }
     }
 
@@ -1165,7 +1165,7 @@ internal class MediaSessionPlayback(
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
-        if (!controller.clockMatches(state)) return null
+        val matches = controller.clockMatches(state)
         // An app that doesn't say where it is gives nothing to keep the words in time with.
         if (state.position < 0) return null
         val app = labelOf(controller.packageName)
@@ -1174,7 +1174,13 @@ internal class MediaSessionPlayback(
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
         val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
-        val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
+        val reported = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
+        val clock = if (matches) {
+            queueMetadata.computeIfPresent(controller.sessionToken) { _, previous -> previous.copy(clock = reported) }
+            reported
+        } else {
+            queueMetadata[controller.sessionToken]?.clock?.copy(playing = false) ?: return null
+        }
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,

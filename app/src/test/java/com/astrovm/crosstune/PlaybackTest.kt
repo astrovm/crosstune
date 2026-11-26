@@ -163,7 +163,7 @@ class PlaybackTest {
         shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(seen.last()?.offsetMs)
-        assertNull(following.last())
+        assertEquals(PlaybackClock(42_000, PLAYED_AT, 1f, false), following.last()?.clock)
         val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
         shadowOf(music).setMetadata(next)
         shadowOf(music).executeOnMetadataChanged(next)
