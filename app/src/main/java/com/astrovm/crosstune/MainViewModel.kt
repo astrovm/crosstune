@@ -757,6 +757,7 @@ internal class MainViewModel(
                 songSearchQuery = words,
                 songSearch = emptyList(),
                 result = null,
+                resultVideoAdLength = null,
                 destinationUrls = emptyMap(),
                 link = null
             )
@@ -1766,6 +1767,7 @@ internal class MainViewModel(
                 isMatching = false,
                 error = null,
                 result = null,
+                resultVideoAdLength = null,
                 destinationUrls = emptyMap(),
                 selectedDestination = destination,
                 link = null,
@@ -1874,6 +1876,7 @@ internal class MainViewModel(
         uiState = uiState.copy(
             isLoading = false,
             result = resolution.metadata,
+            resultVideoAdLength = resolution.videoAdLength,
             songsLike = false,
             link = resolution.link,
             linkText = fieldText(resolution.link),
@@ -2250,7 +2253,7 @@ internal class MainViewModel(
     private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean, withinMs: Long = LOAD_SONG_MS): Seen? {
         val over = uiState.player?.over
         val (following, playing) = withTimeoutOrNull(withinMs) {
-            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
+            combine(source.follow(song, videoAdLength = playerVideoAdLength(song)), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
                     following == null && playing != null && startedAsked(playing, app, over, link)
             }
@@ -2281,7 +2284,7 @@ internal class MainViewModel(
         if (uiState.coveringApp) return
         viewModelScope.launchKept({ leftJob = it }) {
             // Stopped, or let go of altogether, as YouTube does, and not waiting under an ad, which YouTube Music plays on as if it were the song.
-            val stopped = withTimeoutOrNull(START_MS) { source.follow(song).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
+            val stopped = withTimeoutOrNull(START_MS) { source.follow(song, videoAdLength = playerVideoAdLength(song)).dropWhile { it == null }.first { it == null || !it.clock.playing && !it.ad }; true }
             if (stopped == true) source.playPause(song, true)
         }
     }
@@ -2293,13 +2296,21 @@ internal class MainViewModel(
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
         val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
         val stationApp = unnamed?.takeUnless { it.reportsState }?.let { it.label ?: it.app }
+        val video = uiState.resultVideoAdLength?.takeIf {
+            val target = link?.let(MusicLinks::linkFor)
+            uiState.result?.let { result -> sameSong(result, song) } == true && uiState.link?.id == it.id && target != null && target.id == it.id &&
+                target.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC)
+        }
         uiState = uiState.copy(
-            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = session),
+            player = PlayerState(song, app, link, played = played, over = over, songless = unnamed != null, stationAppLabel = stationApp, session = session, videoAdLength = video),
             canFollowApps = playback?.hasAccess() == true
         )
         followPlayer()
         peekWords()
     }
+
+    private fun playerVideoAdLength(song: MusicMetadata): VideoAdLength? =
+        uiState.player?.takeIf { sameSong(it.song, song) }?.videoAdLength
 
     private var peekJob: Job? = null
 
@@ -2349,7 +2360,7 @@ internal class MainViewModel(
         }
         val song = opened.song
         viewModelScope.launchKept({ playerJob = it }) {
-            combine(source.follow(song, opened.followApp, opened.session), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
+            combine(source.follow(song, opened.followApp, opened.session, opened.videoAdLength), source.nowPlayingUpdates(), source.unnamedUpdates(), ::Triple).collect { (following, playing, unnamed) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
@@ -4140,7 +4151,7 @@ internal class MainViewModel(
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         viewModelScope.launchKept({ followJob = it }) {
-            source.follow(song).collect { playing ->
+            source.follow(song, videoAdLength = playerVideoAdLength(song)).collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
@@ -5841,6 +5852,7 @@ internal class MainViewModel(
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
+            resultVideoAdLength = null,
             destinationUrls = savedDestinations(entry),
             selectedDestination = null,
             link = entry.link,

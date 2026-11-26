@@ -2,7 +2,13 @@ package com.astrovm.crosstune
 
 import androidx.annotation.StringRes
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -32,8 +38,11 @@ internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boole
     NO_SONGS_LIKE(R.string.error_no_songs_like)
 }
 
+/** The duration of one exact YouTube video, used only to recognize its ad. */
+internal data class VideoAdLength(val id: String, val lengthMs: Long)
+
 internal sealed interface Resolution {
-    data class Resolved(val link: MusicLink, val metadata: MusicMetadata) : Resolution
+    data class Resolved(val link: MusicLink, val metadata: MusicMetadata, val videoAdLength: VideoAdLength? = null) : Resolution
     data class Failed(val error: AppError, val link: MusicLink? = null) : Resolution
 }
 
@@ -89,29 +98,59 @@ internal class LinkResolver(
         return Resolution.Resolved(MusicLink(null, ItemType.TRACK, recognized.url, recognized.url), metadata)
     }
 
-    private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {
+    private suspend fun resolveLink(link: MusicLink): Resolution {
+        // Never wait for this optional answer. It runs alongside the normal link lookup and is
+        // cancelled when that lookup finishes, so a slow catalogue does not hold up the link.
+        val scope = if (link.isYouTubeVideo()) CoroutineScope(SupervisorJob() + ioDispatcher) else null
+        val video = scope?.async(start = CoroutineStart.UNDISPATCHED) {
+            youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", link.id)
+        }
+        return try {
+            resolveLink(link, video)
+        } finally {
+            scope?.cancel()
+        }
+    }
+
+    private suspend fun resolveLink(link: MusicLink, video: Deferred<JSONObject?>?): Resolution = guarded(link) {
         if (link.service == MusicService.YOUTUBE_MUSIC && (link.type == ItemType.ALBUM || link.type == ItemType.ARTIST)) {
             return@guarded youTubeMusicPage(link)?.let { Resolution.Resolved(link, it) } ?: Resolution.Failed(AppError.METADATA_UNAVAILABLE, link)
         }
         val (response, body) = fetch(metadataUrl(link))
+        resolveResponse(link, video, response, body)
+    }
+
+    private suspend fun resolveResponse(link: MusicLink, video: Deferred<JSONObject?>?, response: Response, body: String): Resolution {
         // A video its owner keeps from being embedded elsewhere, as many labels' are, has no oEmbed,
-        // but YouTube Music still says what it is.
-        if ((response.code == 401 || response.code == 403) && link.isYouTubeVideo()) {
-            youTubeMusicVideo(link.id)?.let { return@guarded Resolution.Resolved(link, it) }
+        // but YouTube Music still says what it is. SoundCloud's API can also name a refused upload.
+        if (response.code == 401 || response.code == 403) {
+            refusedTrack(link, video)?.let { return it }
         }
-        // The same goes for a SoundCloud upload whose owner keeps it on SoundCloud: its API still names it.
-        if ((response.code == 401 || response.code == 403) && link.service == MusicService.SOUNDCLOUD && link.type == ItemType.TRACK) {
-            soundCloudTrack(link.url)?.let { return@guarded Resolution.Resolved(link, it) }
-        }
-        httpError(response, privateWhenRefused = link.isOEmbed())?.let { return@guarded Resolution.Failed(it, link) }
+        httpError(response, privateWhenRefused = link.isOEmbed())?.let { return Resolution.Failed(it, link) }
         // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
         if (link.service == MusicService.DEEZER) {
-            MetadataParsers.deezerError(JSONObject(body))?.let { return@guarded Resolution.Failed(it, link) }
+            MetadataParsers.deezerError(JSONObject(body))?.let { return Resolution.Failed(it, link) }
         }
-        when (val metadata = parse(link, body)) {
+        return when (val metadata = parse(link, body)) {
             null -> Resolution.Failed(if (isApiNotFound(link)) AppError.NOT_FOUND else AppError.METADATA_UNAVAILABLE, link)
-            else -> Resolution.Resolved(link, withTracks(link, metadata, body))
+            else -> {
+                val length = video?.takeIf { it.isCompleted }?.await()?.let { MetadataParsers.youtubeMusicVideoLength(it, link.id) }
+                Resolution.Resolved(link, withTracks(link, metadata, body), length?.let { VideoAdLength(link.id, it) })
+            }
         }
+    }
+
+    private suspend fun refusedTrack(link: MusicLink, video: Deferred<JSONObject?>?): Resolution.Resolved? {
+        if (link.isYouTubeVideo()) {
+            val answer = video?.await() ?: return null
+            val metadata = MetadataParsers.youtubeMusicVideo(answer, link.id) ?: return null
+            val length = MetadataParsers.youtubeMusicVideoLength(answer, link.id)
+            return Resolution.Resolved(link, metadata, length?.let { VideoAdLength(link.id, it) })
+        }
+        if (link.service == MusicService.SOUNDCLOUD && link.type == ItemType.TRACK) {
+            return soundCloudTrack(link.url)?.let { Resolution.Resolved(link, it) }
+        }
+        return null
     }
 
     /**
@@ -207,10 +246,6 @@ internal class LinkResolver(
     /** Cancelling the calling coroutine cancels the HTTP call. */
     private fun MusicLink.isYouTubeVideo() =
         (service == MusicService.YOUTUBE || service == MusicService.YOUTUBE_MUSIC) && type == ItemType.TRACK
-
-    /** The video [id] as YouTube Music names it, or null when it can't. */
-    private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
-        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
 
     /** The SoundCloud upload at [url] as SoundCloud's own API has it, or null when it can't say. */
     private suspend fun soundCloudTrack(url: String): MusicMetadata? = try {

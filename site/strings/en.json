@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "When resolving a YouTube or YouTube Music video link, Crosstune sends the video ID to YouTube Music (music.youtube.com) to check its length, even on a metered network. The length helps tell ads from the song. The request carries no account or listening history."
+    ],
+    [
+      "p",
       "When Apple's regional search finds no match or fails, Crosstune can send the title and artist to Apple's US store."
     ],
     [

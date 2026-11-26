@@ -132,9 +132,9 @@ class PlaybackTest {
         return controller
     }
 
-    private fun followed(song: MusicMetadata = this.song): MutableList<Following?> {
+    private fun followed(song: MusicMetadata = this.song, videoAdLength: VideoAdLength? = null): MutableList<Following?> {
         val seen = mutableListOf<Following?>()
-        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { seen += it } }
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song, videoAdLength = videoAdLength).collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
     }
@@ -449,6 +449,56 @@ class PlaybackTest {
         assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         assertFalse(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
+    }
+
+    @Test
+    fun aFirstYouTubeMusicPlayUsesTheExactVideoLengthForAnAd() {
+        val fake = FakeSpotify()
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                FakeSpotify.html(request, """{"playlistPanelVideoRenderer":{"videoId":"4NRXx6U8ABQ","lengthText":{"runs":[{"text":"4:23"}]}}}""")
+            } else {
+                FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+            }
+        }
+        val input = checkNotNull(MusicLinks.parse("https://music.youtube.com/watch?v=4NRXx6U8ABQ"))
+        val asked = runBlocking { LinkResolver(fake.inlineClient(), Dispatchers.Unconfined).resolve(input) } as Resolution.Resolved
+        allow()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", position = 5_000, duration = 30_000)
+        shadowOf(music).setMetadata(MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "4NRXx6U8ABQ").build())
+        shadowOf(sessions).addController(music)
+        val seen = followed(asked.metadata, asked.videoAdLength)
+        assertTrue(checkNotNull(seen.last()).ad)
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), checkNotNull(seen.last()).clock)
+        val actual = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 263_000).build()
+        shadowOf(music).setMetadata(actual)
+        shadowOf(music).executeOnMetadataChanged(actual)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(checkNotNull(seen.last()).ad)
+    }
+
+    @Test
+    fun videoAdLengthDoesNotChangeOtherReports() {
+        allow()
+        fun seen(packageName: String, id: String?, duration: Long, asked: MusicMetadata, video: VideoAdLength? = null, uri: String? = null): Following {
+            ShadowMediaSessionManager.reset()
+            val controller = player(packageName, "Player", "Blinding Lights", "The Weeknd", position = 5_000, duration = duration)
+            shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata)
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id).putString(MediaMetadata.METADATA_KEY_MEDIA_URI, uri).build())
+            shadowOf(sessions).addController(controller)
+            return checkNotNull(followed(asked, video).last())
+        }
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val evidence = VideoAdLength("4NRXx6U8ABQ", 263_000)
+        val asked = song
+        assertFalse(seen(music, "other-video", 30_000, asked, evidence).ad)
+        assertFalse(seen(music, null, 30_000, asked, evidence).ad)
+        assertFalse(seen(music, evidence.id, 30_000, asked, evidence, "https://youtu.be/dQw4w9WgXcQ").ad)
+        assertFalse(seen("com.spotify.music", evidence.id, 30_000, asked, evidence).ad)
+        assertFalse(seen(music, evidence.id, 30_000, song, evidence.copy(lengthMs = 100_000)).ad)
+        assertFalse(seen(music, evidence.id, 30_000, song).ad)
+        assertTrue(seen(music, evidence.id, 30_000, asked.copy(lengthMs = 263_000), evidence).ad)
+        assertFalse(seen(music, evidence.id, 263_000, asked, evidence).ad)
     }
 
     @Test

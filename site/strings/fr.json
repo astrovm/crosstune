@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Pour résoudre un lien vidéo YouTube ou YouTube Music, Crosstune envoie son identifiant à YouTube Music (music.youtube.com) pour vérifier sa durée, même sur un réseau avec un forfait de données limité. La durée aide à distinguer les annonces du morceau. La requête ne contient ni données de compte ni historique d’écoute."
+    ],
+    [
+      "p",
       "Si la recherche dans la boutique régionale d’Apple échoue ou ne trouve aucun résultat, Crosstune peut envoyer le titre et l’artiste à la boutique américaine d’Apple."
     ],
     [

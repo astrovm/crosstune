@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Ao resolver um link de vídeo do YouTube ou YouTube Music, o Crosstune envia o ID do vídeo ao YouTube Music (music.youtube.com) para consultar sua duração, mesmo em uma rede com franquia de dados. A duração ajuda a distinguir os anúncios da música. A solicitação não inclui dados da conta nem o histórico de reprodução."
+    ],
+    [
+      "p",
       "Se a busca na loja regional da Apple falhar ou não encontrar a música, o Crosstune pode enviar o título e o artista à loja da Apple nos EUA."
     ],
     [

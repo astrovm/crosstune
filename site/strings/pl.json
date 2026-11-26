@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Podczas rozpoznawania linku do filmu YouTube lub YouTube Music Crosstune wysyła identyfikator filmu do YouTube Music (music.youtube.com), aby sprawdzić jego długość, także w sieci taryfowej. Czas trwania pomaga odróżnić reklamy od utworu. Żądanie nie zawiera danych konta ani historii słuchania."
+    ],
+    [
+      "p",
       "Jeśli wyszukiwanie w regionalnym sklepie Apple się nie powiedzie lub nie da wyniku, Crosstune może wysłać tytuł utworu i nazwę wykonawcy do amerykańskiego sklepu Apple."
     ],
     [

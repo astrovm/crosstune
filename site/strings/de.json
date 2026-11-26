@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Beim Auflösen eines YouTube- oder YouTube-Music-Videolinks sendet Crosstune die Video-ID an YouTube Music (music.youtube.com), um die Videolänge zu prüfen, auch bei einer getakteten Verbindung. Die Länge hilft, Werbung vom Song zu unterscheiden. Die Anfrage enthält weder Kontodaten noch deinen Hörverlauf."
+    ],
+    [
+      "p",
       "Wenn die Suche im regionalen Apple-Store fehlschlägt oder keinen Treffer findet, kann Crosstune Titel und Interpret an Apples US-Store senden."
     ],
     [

@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Saat memproses tautan video YouTube atau YouTube Music, Crosstune mengirim ID video ke YouTube Music (music.youtube.com) untuk memeriksa durasinya, bahkan di jaringan dengan kuota data. Durasi ini membantu membedakan iklan dari lagu. Permintaan ini tidak membawa informasi akun atau riwayat mendengarkan."
+    ],
+    [
+      "p",
       "Jika pencarian di toko regional Apple gagal atau tidak menemukan lagu yang cocok, Crosstune dapat mengirim judul dan nama artis ke toko Apple di AS."
     ],
     [

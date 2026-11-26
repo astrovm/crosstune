@@ -1,12 +1,16 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** Checks each service is read from the right endpoint. Runs under Robolectric for org.json. */
 @RunWith(RobolectricTestRunner::class)
@@ -87,7 +91,8 @@ class LinkResolverTest {
     fun youtubeAndYoutubeMusicUseOEmbed() {
         respond("""{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
         val oEmbed = "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ"
-        assertResolved("https://music.youtube.com/watch?v=4NRXx6U8ABQ", oEmbed, MusicMetadata("Blinding Lights", "The Weeknd"))
+        assertEquals(MusicMetadata("Blinding Lights", "The Weeknd"), (resolve("https://music.youtube.com/watch?v=4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        assertTrue(fake.requestedUrls.contains(oEmbed))
     }
 
     @Test
@@ -178,6 +183,52 @@ class LinkResolverTest {
             "navigationEndpoint":{"watchEndpoint":{"watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}}}]}}}"""
 
     @Test
+    fun videoDurationIsOptionalAndMustNameTheExactVideo() {
+        var answer = nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "4:23", "OMV")
+        var status = 200
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, answer, code = status)
+            else FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+        }
+        val immediate = LinkResolver(fake.inlineClient(), Dispatchers.Unconfined)
+        fun found() = runBlocking { immediate.resolve(checkNotNull(MusicLinks.parse("https://youtu.be/4NRXx6U8ABQ"))) } as Resolution.Resolved
+        assertEquals(VideoAdLength("4NRXx6U8ABQ", 263_000), found().videoAdLength)
+        assertEquals(null, found().metadata.lengthMs)
+        answer = nextFor("dQw4w9WgXcQ", "Other", "Other", "4:23", "OMV")
+        assertEquals(null, found().videoAdLength)
+        answer = nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "bad", "OMV")
+        assertEquals(null, found().videoAdLength)
+        answer = nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "0:00", "OMV")
+        assertEquals(null, found().videoAdLength)
+        status = 503
+        assertEquals(null, found().videoAdLength)
+    }
+
+    @Test
+    fun aSlowVideoDurationDoesNotHoldTheLink() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                started.countDown()
+                release.await(10, TimeUnit.SECONDS)
+                FakeSpotify.html(request, nextFor("4NRXx6U8ABQ", "Blinding Lights", "The Weeknd", "4:23", "OMV"))
+            } else {
+                check(started.await(5, TimeUnit.SECONDS))
+                FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+            }
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val answer = executor.submit<Resolution> { resolve("https://youtu.be/4NRXx6U8ABQ") }.get(5, TimeUnit.SECONDS)
+            assertEquals(MusicMetadata("Blinding Lights", "The Weeknd"), (answer as Resolution.Resolved).metadata)
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun aVideoKeptFromBeingEmbeddedIsNamedByYouTubeMusic() {
         var next = nextFor("4NRXx6U8ABQ", "プラスティック・ラブ - Plastic Love (Official Video)", "Mariya Takeuchi • 79M views", "5:09", "OMV")
         fake.handler = { request ->
@@ -186,13 +237,16 @@ class LinkResolverTest {
         // A label's official video is named as its channel names it, without what the title adds.
         val official = resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved
         assertEquals(MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi", artworkUrl = "https://i.ytimg.com/big.jpg"), official.metadata)
-        assertTrue(fake.requestBodies.last().contains("\"videoId\":\"4NRXx6U8ABQ\""))
+        assertEquals(VideoAdLength("4NRXx6U8ABQ", 309_000), official.videoAdLength)
+        assertTrue(fake.requestBodies.any { it.contains("\"videoId\":\"4NRXx6U8ABQ\"") })
         // A song says how long it is.
         next = nextFor("4NRXx6U8ABQ", "夜に駆ける", "YOASOBI • 夜に駆ける • 2019", "4:22", "ATV")
         assertEquals(MusicMetadata("夜に駆ける", "YOASOBI", artworkUrl = "https://i.ytimg.com/big.jpg", lengthMs = 262_000), (resolve("https://music.youtube.com/watch?v=4NRXx6U8ABQ") as Resolution.Resolved).metadata)
         // Anyone else's upload is read from its title.
         next = nextFor("4NRXx6U8ABQ", "The Blue Hearts - Owaranai Uta (with lyrics)", "Fan • 195K views", "3:04", "UGC")
-        assertEquals(MusicMetadata("Owaranai Uta", "The Blue Hearts", artworkUrl = "https://i.ytimg.com/big.jpg"), (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        val upload = resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved
+        assertEquals(MusicMetadata("Owaranai Uta", "The Blue Hearts", artworkUrl = "https://i.ytimg.com/big.jpg"), upload.metadata)
+        assertEquals(VideoAdLength("4NRXx6U8ABQ", 184_000), upload.videoAdLength)
         // Not in its answer, or no answer, it's not found, as before.
         next = """{"contents":{}}"""
         assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)

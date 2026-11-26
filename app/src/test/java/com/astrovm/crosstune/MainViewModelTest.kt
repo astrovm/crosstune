@@ -2474,7 +2474,7 @@ class MainViewModelTest {
             onThePhone = Heard.Song(song, null, app = "com.spotify")
         }
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = playback.follow(song, app, session).distinctUntilChanged()
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> = playback.follow(song, app, session, videoAdLength).distinctUntilChanged()
         }
         val model = model(playback = source)
         model.viewModelScope.launch { model.watchPlayingNow() }
@@ -4389,6 +4389,37 @@ class MainViewModelTest {
     private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
+    @Test
+    fun exactVideoAdLengthTravelsOnlyWithThisPlay() {
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, """{"playlistPanelVideoRenderer":{"videoId":"sPmul8b17AU","title":{"runs":[{"text":"Dakare Ni Kita Onna"}]},"longBylineText":{"runs":[{"text":"Kingo Hamada"}]},"lengthText":{"runs":[{"text":"4:23"}]}}}""")
+            else FakeSpotify.html(request, "Forbidden", code = 403)
+        }
+        val playback = FakePlayback().apply { access = true }
+        val asked = mutableListOf<VideoAdLength?>()
+        val source = object : PlaybackSource by playback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> {
+                asked += videoAdLength
+                return playback.follow(song, app, session, videoAdLength)
+            }
+        }
+        val model = model(playback = source)
+        model.refreshSystemState()
+        model.onUrlChange(ytLink)
+        model.resolveTypedInput()
+        until("the link is resolved") { model.uiState.result != null && !model.uiState.isLoading }
+        val evidence = VideoAdLength("sPmul8b17AU", 263_000)
+        assertEquals(evidence, model.uiState.resultVideoAdLength)
+        assertNull(model.uiState.result?.lengthMs)
+        model.playResult()
+        until("the player follows the exact video") { evidence in asked }
+        assertEquals(evidence, model.uiState.player?.videoAdLength)
+        model.showHistoryEntry(model.uiState.history.first())
+        assertNull(model.uiState.resultVideoAdLength)
+    }
+
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
     private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null, playQueue: PlayQueue? = null): MainViewModel {
         shadowOf(app.packageManager).installPackage(installedApp(packageName, "YouTube Music"))
@@ -4412,7 +4443,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = answers
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> = answers
         }
         val model = ytMusicModel(source, packageName = morpheMusic)
         val effects = mutableListOf<Effect>()
@@ -4985,7 +5016,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val sessionNumber = 23
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> {
                 val wanted = if (session == sessionNumber) morpheMusic else app
                 return playback.follow(song, wanted, session).map { it?.takeIf { wanted == null || it.appPackage == wanted } }
             }
@@ -5040,7 +5071,7 @@ class MainViewModelTest {
         val resumes = mutableListOf<Int?>()
         val fakePlayback = FakePlayback().apply { access = true }
         val playback = object : PlaybackSource by fakePlayback {
-            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+            override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?) = media.follow(song, app, session, videoAdLength)
 
             override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
                 resumes += session

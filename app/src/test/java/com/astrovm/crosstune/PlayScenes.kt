@@ -24,7 +24,7 @@ import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
 
 /** A kind of session an app shows: what it says it plays, by which app. */
-internal data class Kind(val name: String, val app: String, val label: String, val title: String, val artist: String?, val album: String? = null)
+internal data class Kind(val name: String, val app: String, val label: String, val title: String, val artist: String?, val album: String? = null, val duration: Long = 200_000, val id: String? = null)
 
 /** A session of a [kind], on the phone or played [remote]ly, as a speaker, a TV or a computer has it, [playing] or paused. */
 internal data class Played(val kind: Kind, val remote: Boolean, val playing: Boolean) {
@@ -46,6 +46,8 @@ internal object PlayScenes {
     val kinds = listOf(
         Kind("song", "com.spotify.music", "Spotify", "Fake Song", "Fake Band", "Fake Album"),
         Kind("ytmusic", "com.google.android.apps.youtube.music", "YouTube Music", "Other Song", "Other Band", "Other Album"),
+        Kind("ytmusic-short", "com.google.android.apps.youtube.music", "YouTube Music", "Short Song", "Short Band", duration = 30_000, id = "4NRXx6U8ABQ"),
+        Kind("spotify-short", "com.spotify.music", "Spotify", "Short Spotify", "Short Band", duration = 30_000, id = "4NRXx6U8ABQ"),
         Kind("station", "com.ilv.vradio", "VRadio", "Fake FM", ""),
         Kind("file", "com.example.player", "Fake Player", "Fake Song.mp3", null),
         Kind("untitled", "com.example.untitled", "Untitled Player", "", null),
@@ -58,7 +60,8 @@ internal object PlayScenes {
     /** Songs a follow asks for: the song, as an app with no artist names it, a station, a video, and another one. */
     val asked = listOf(
         MusicMetadata("Fake Song", "Fake Band"), MusicMetadata("Fake Song", ""), MusicMetadata("Fake FM", ""),
-        MusicMetadata("Fake Vlog Day 3", "Fake Channel"), MusicMetadata("Other Song", "Other Band"), MusicMetadata("Fake Band - Fake Song", "")
+        MusicMetadata("Fake Vlog Day 3", "Fake Channel"), MusicMetadata("Other Song", "Other Band"), MusicMetadata("Fake Band - Fake Song", ""),
+        MusicMetadata("Short Song", "Short Band"), MusicMetadata("Short Spotify", "Short Band")
     )
 
     private fun each(kind: Kind) = listOf(false, true).flatMap { remote -> listOf(true, false).map { playing -> Played(kind, remote, playing) } }
@@ -112,7 +115,8 @@ internal object PlayScenes {
             MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, kind.title)
                 .apply { if (kind.artist != null) putString(MediaMetadata.METADATA_KEY_ARTIST, kind.artist) }
                 .apply { if (kind.album != null) putString(MediaMetadata.METADATA_KEY_ALBUM, kind.album) }
-                .putLong(MediaMetadata.METADATA_KEY_DURATION, 200_000).build()
+                .apply { if (kind.id != null) putString(MediaMetadata.METADATA_KEY_MEDIA_ID, kind.id) }
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, kind.duration).build()
         )
         val state = if (played.playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
         shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, 42_000, 1f, at).setActions(PlaybackState.ACTION_SEEK_TO).build())

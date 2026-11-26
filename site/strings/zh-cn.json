@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "解析 YouTube 或 YouTube Music 视频链接时，Crosstune 会将视频 ID 发送给 YouTube Music（music.youtube.com）以查询时长，即使在按流量计费的网络上也是如此。时长有助于区分广告和歌曲。请求不包含账号信息或收听记录。"
+    ],
+    [
+      "p",
       "如果在 Apple 的地区商店搜索失败或找不到匹配的歌曲，Crosstune 可能会将歌名和艺人姓名发送给 Apple 的美国商店。"
     ],
     [

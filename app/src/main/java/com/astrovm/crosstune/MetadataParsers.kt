@@ -286,6 +286,11 @@ internal object MetadataParsers {
         return named.copy(artworkUrl = artwork, lengthMs = lengthMs)
     }
 
+    /** The duration of this exact video, including any introduction. */
+    fun youtubeMusicVideoLength(json: JSONObject, id: String): Long? =
+        findObject(json) { it.optJSONObject("playlistPanelVideoRenderer")?.takeIf { video -> video.optString("videoId") == id } }
+            ?.optJSONObject("lengthText").runsText().let(::clockMs)?.takeIf { it > 0 }
+
     /** How long "3:45" or "1:02:03" is, as a clock shows a song's length; null for anything else. */
     fun clockMs(text: String): Long? = text.split(":").takeIf { it.size in 2..3 }?.map { it.toLongOrNull() ?: return null }
         ?.fold(0L) { total, part -> total * 60 + part }?.times(1000)

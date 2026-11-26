@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "解析 YouTube 或 YouTube Music 影片連結時，Crosstune 會將影片 ID 傳送給 YouTube Music（music.youtube.com）以查詢長度，即使在計量付費網路上也是如此。影片長度有助於區分廣告和歌曲。要求不包含帳戶資料或收聽記錄。"
+    ],
+    [
+      "p",
       "如果在 Apple 的地區商店搜尋失敗或找不到相符的歌曲，Crosstune 可能會將歌名和藝人姓名傳送給 Apple 的美國商店。"
     ],
     [

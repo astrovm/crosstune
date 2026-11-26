@@ -104,6 +104,10 @@
     ],
     [
       "p",
+      "Bij het verwerken van een YouTube- of YouTube Music-videolink stuurt Crosstune de video-ID naar YouTube Music (music.youtube.com) om de duur te controleren, ook via een verbinding met een datalimiet. De duur helpt om advertenties van het nummer te onderscheiden. Het verzoek bevat geen accountgegevens of luistergeschiedenis."
+    ],
+    [
+      "p",
       "Als de zoekopdracht in de regionale Apple Store mislukt of geen overeenkomst oplevert, kan Crosstune de titel en artiest naar de Amerikaanse Apple Store sturen."
     ],
     [

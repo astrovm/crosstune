@@ -797,7 +797,7 @@ class PracticeCardsTest {
         val source = object : PlaybackSource by playback {
             override fun matching(song: MusicMetadata): List<PlaybackMatch> = playback.matching(song).map { match ->
                 val waiting = object : PlaybackSource by match.source {
-                    override fun follow(song: MusicMetadata, app: String?, session: Int?) = kotlinx.coroutines.flow.flowOf<Following?>(null)
+                    override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?) = kotlinx.coroutines.flow.flowOf<Following?>(null)
                 }
                 match.copy(following = null, playing = true, source = waiting)
             }

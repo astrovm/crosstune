@@ -238,7 +238,7 @@ internal interface PlaybackSource {
      * Asked of [app], what plays with no song named is [song] by just what it calls it, as
      * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
      */
-    fun follow(song: MusicMetadata, app: String? = null, session: Int? = null): Flow<Following?>
+    fun follow(song: MusicMetadata, app: String? = null, session: Int? = null, videoAdLength: VideoAdLength? = null): Flow<Following?>
 
     /** Existing sessions that have [song], including paused sessions. No app is started. */
     fun matching(song: MusicMetadata): List<PlaybackMatch>
@@ -462,7 +462,7 @@ internal class MediaSessionPlayback(
     }.getOrDefault(emptyList())
 
     private fun forSession(token: MediaSession.Token): PlaybackSource = object : PlaybackSource by this {
-        override fun follow(song: MusicMetadata, app: String?, session: Int?) = followSession(song, app, token, session)
+        override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?) = followSession(song, app, token, session, videoAdLength)
         override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) = seekIn(song, positionMs, app, token, session)
         override fun playPause(song: MusicMetadata, play: Boolean, app: String?, session: Int?) {
             if (play) playIn(song, app, token, session) else pauseIn(song, app, token, session)
@@ -477,9 +477,10 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> = followSession(song, app, null, session)
+    override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> =
+        followSession(song, app, null, session, videoAdLength)
 
-    private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?, session: Int?): Flow<Following?> = callbackFlow {
+    private fun followSession(song: MusicMetadata, app: String?, token: MediaSession.Token?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> = callbackFlow {
         val clockObserver = PracticeClockLog.nextId()
         clockLog.note("follow_begin", now) { put("observer", clockObserver) }
         var followed: MediaController? = null
@@ -489,7 +490,7 @@ internal class MediaSessionPlayback(
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
+        fun steadily(controller: MediaController) = following(controller, controller.adLengthFor(song, videoAdLength))?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller), session = sessionNumbers.of(controller.sessionToken)).also { seen ->
@@ -965,6 +966,17 @@ internal class MediaSessionPlayback(
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
         // The one said last, of the song's versions, when not asked for one.
         return (listOfNotNull(asked) + known.asReversed()).firstOrNull { it >= LONGEST_AD_MS }
+    }
+
+    /** A video duration is evidence only for that video in YouTube Music, never for another app or recording. */
+    private fun MediaController.adLengthFor(song: MusicMetadata, video: VideoAdLength?): Long? {
+        video ?: return song.lengthMs
+        if (song.lengthMs != null || MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return song.lengthMs
+        val current = metadata
+        val uri = current?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+        val uriLink = (uri?.let(MusicLinks::parse) as? LinkInput.Link)?.link
+        if (uriLink != null && uriLink.id != video.id) return null
+        return video.lengthMs.takeIf { current?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) == video.id }
     }
 
     /** What plays, as the app names it. */

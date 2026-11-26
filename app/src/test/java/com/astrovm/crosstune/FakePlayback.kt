@@ -104,7 +104,7 @@ internal class FakePlayback : PlaybackSource {
     }
 
     private fun forSession(flow: MutableStateFlow<Following?>): PlaybackSource = object : PlaybackSource by this {
-        override fun follow(song: MusicMetadata, app: String?, session: Int?) = followed(song, app, flow.map { it?.copy(session = number(flow)) }, sessionSongs[number(flow)])
+        override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?) = followed(song, app, flow.map { it?.copy(session = number(flow)) }, sessionSongs[number(flow)])
         override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) {
             seeks += positionMs
             seekedApps += app
@@ -124,7 +124,7 @@ internal class FakePlayback : PlaybackSource {
         }
     }
 
-    override fun follow(song: MusicMetadata, app: String?, session: Int?): Flow<Following?> {
+    override fun follow(song: MusicMetadata, app: String?, session: Int?, videoAdLength: VideoAdLength?): Flow<Following?> {
         followedSessions += session
         return followed(song, app, app?.let(appPlaying::get) ?: playing)
     }

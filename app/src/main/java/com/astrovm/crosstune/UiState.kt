@@ -12,6 +12,8 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
+    /** Exact video evidence for this link resolution; never saved in Recent. */
+    val resultVideoAdLength: VideoAdLength? = null,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
@@ -443,7 +445,8 @@ internal data class PlayerState(
      */
     val songless: Boolean = false,
     val stationAppLabel: String? = null,
-    val session: Int? = null
+    val session: Int? = null,
+    val videoAdLength: VideoAdLength? = null
 ) {
     val stationOnly: Boolean get() = stationAppLabel != null
 
