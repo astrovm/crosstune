@@ -127,6 +127,10 @@ class ReadingsTest {
                 Triple("友よええ歌を歌おう", "よ", "よ"),
                 Triple("君よええ夢を", "よ", "よ"),
                 Triple("声をめっちゃだせえ", "だせ", "だす"),
+                Triple("金はだせえ", "だせ", "だせる"),
+                Triple("あいつもおせえ", "おせ", "おせる"),
+                Triple("君はいてえ", "いて", "いる"),
+                Triple("この部屋はくれえ", "くれ", "くれる"),
                 Triple("お願い、とにかくくれえ", "くれ", "くれる"),
                 Triple("これはええ", "は", "は"),
                 Triple("あめーなのに出る", "あめー", "あめ"),
@@ -297,13 +301,10 @@ class ReadingsTest {
             Triple("からくてかれえ", "かれえ", "からい"),
             // The が that joins two clauses ends the first.
             Triple("あいつはすげえが、弟は普通だ", "すげえが", "すごい"),
-            // A marked subject before a phrase-final adjective.
-            Triple("この部屋はくれえ", "くれえ", "くらい"),
             // An adjective on its own or after a pronoun.
             Triple("おせえ", "おせえ", "おそい"), Triple("おせえよ", "おせえ", "おそい"), Triple("おせえよな", "おせえ", "おそい"),
             Triple("あいつおせえ", "おせえ", "おそい"), Triple("だせえ", "だせえ", "ださい"),
             Triple("だせえな", "だせえ", "ださい"), Triple("かてえ", "かてえ", "かたい"), Triple("なげえ", "なげえ", "ながい"),
-            Triple("あいつもおせえ", "おせえ", "おそい"),
             // Words that only look shifted.
             Triple("ねえ", "ねえ", "ねえ"), Triple("ねええ", "ねえ", "ねえ"), Triple("見てえ", "見て", "見る"),
             Triple("このカレーかれー", "かれー", "カレー")

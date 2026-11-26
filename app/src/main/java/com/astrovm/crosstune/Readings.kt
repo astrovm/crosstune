@@ -1301,14 +1301,14 @@ internal object Readings {
     private fun markedSubject(ahead: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
         val noun = ahead.getOrNull(ahead.lastIndex - 1)
-        return before?.kind == "助詞" && before.surface in setOf("が", "は", "も") &&
+        return before?.kind == "助詞" && before.surface == "が" &&
             noun?.kind == "名詞" && noun.subkind != "非自立"
     }
 
     private fun realSplitCanJoin(text: String, first: Piece, ahead: List<Piece>, after: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
         val subject = markedSubject(ahead)
-        if (text.startsWith("くれ") && !(subject && before?.surface in setOf("が", "は"))) return false
+        if (text.startsWith("くれ") && !subject) return false
         val starts = before == null || before.subkind == "代名詞" || (first.kind != "名詞" && subject)
         val next = after.firstOrNull()
         val endings = setOf("よ", "な", "ね", "ぞ", "ぜ", "わ", "さ", "って", "だろ", "じゃん", "っす")
