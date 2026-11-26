@@ -141,6 +141,19 @@ class ReadingsTest {
     }
 
     @Test
+    fun shiftedAdjectivesDoNotChangeTheVerbAmaeru() {
+        fun check() {
+            for ((text, base) in listOf("甘えとか" to "甘え", "しさに甘えてい" to "甘える")) {
+                val word = Readings.words(text, Script.JAPANESE).first { it.text.startsWith("甘え") }
+                assertEquals(text, base, word.lookup)
+                assertTrue(text, word.romanized?.startsWith("amae") == true)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun colloquialUzaIsKnownWithUniDic() {
         assertEquals("u ze e", Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized)
         TestUniDic.reading {

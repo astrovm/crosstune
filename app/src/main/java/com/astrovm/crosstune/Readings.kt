@@ -1231,6 +1231,13 @@ internal object Readings {
         return null
     }
 
+    private fun canShiftAdjective(text: String, first: Piece): Boolean {
+        if (text == "だりい" || (text.length <= 2 && !isHan(text.first()))) return false
+        if (text.none(::isHan)) return true
+        if (first.kind == "動詞") return false
+        return !text.endsWith("え") || tokenizer.knownWord(text + "る")?.partOfSpeechLevel1 != "動詞"
+    }
+
     private fun shiftedAdjectives(pieces: List<Piece>): List<Piece> = buildList {
         var at = 0
         while (at < pieces.size) {
@@ -1239,9 +1246,7 @@ internal object Readings {
             for (end in at until minOf(at + 4, pieces.size)) {
                 text += pieces[end].surface
                 if (text.length > 12 || text.any { !it.isLetter() && it != 'ー' }) break
-                if (text != "だりい" && (text.length > 2 || text.firstOrNull()?.let(::isHan) == true)) {
-                    shiftedAdjective(text)?.let { found = end + 1 to it }
-                }
+                if (canShiftAdjective(text, pieces[at])) shiftedAdjective(text)?.let { found = end + 1 to it }
             }
             val match = found
             if (match == null) add(pieces[at++]) else {
