@@ -1171,8 +1171,18 @@ internal object Readings {
             val minutes = minutes(piece, next)
             when {
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
-                piece.surface == "しん" && next?.kana == "だり" && pieces.getOrNull(index + 2)?.surface == "する" ->
-                    out += piece.read("しん", "動詞", "自立")
+                piece.kana == "だり" && piece.kind in setOf("助詞", "助動詞") -> {
+                    val stem = voicedTariStem(out)
+                    if (stem != null) {
+                        val (count, base) = stem
+                        val surface = out.takeLast(count).joinToString("") { it.surface }
+                        repeat(count) { out.removeAt(out.lastIndex) }
+                        out += Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    } else if (last?.kind == "動詞" && last.surface.endsWith('ん') && last.base.last() !in "むぶぬ") {
+                        out[out.lastIndex] = last.read(last.kana, "名詞", "一般")
+                    }
+                    out += piece
+                }
                 // Both dictionaries can take 一撫で + する for ひと + な + です.
                 piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
                     (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
@@ -1234,6 +1244,24 @@ internal object Readings {
             }
         }
         return listedWords(out)
+    }
+
+    /** A kana stem split as nouns can still be the voiced form of a known verb. */
+    private fun voicedTariStem(pieces: List<Piece>): Pair<Int, String>? {
+        if (pieces.lastOrNull()?.surface?.endsWith('ん') != true) return null
+        val suffix = pieces.takeLastWhile { piece -> piece.surface.all { it in 'ぁ'..'ん' } }
+        for (count in suffix.size downTo 1) {
+            val stem = suffix.takeLast(count).joinToString("") { it.surface }
+            if (stem.length < 2) continue
+            for (ending in if (stem == "しん") "ぬむぶ" else "むぶぬ") {
+                val base = stem.dropLast(1) + ending
+                // IPADIC writes 死ぬ in kanji and splits its spelling in kana as し + ぬ.
+                val written = if (base == "しぬ") "死ぬ" else base
+                val verb = tokenizer.knownWord(written)
+                if (verb?.partOfSpeechLevel1 == "動詞" && verb.reading?.let(::hiragana) == base) return count to base
+            }
+        }
+        return null
     }
 
     /** A compound noun can hide two verbs before そう, as 溺れ死 and に in 溺れ死にそう. */
