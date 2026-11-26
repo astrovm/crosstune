@@ -246,7 +246,7 @@ class ListeningTest {
     private val fake = FakeSpotify()
     private var microphone = FakeMicrophone()
     private var controller: ActivityController<MainActivity>? = null
-    private var releaseRadioGarden: (() -> Unit)? = null
+    private var releaseSession: (() -> Unit)? = null
 
     /** Put back after, so other tests still tell the phone as the app does. */
     private val realPhone = MainActivity.phoneFactory
@@ -281,7 +281,7 @@ class ListeningTest {
         try {
             controller?.destroyAndSettle()
         } finally {
-            releaseRadioGarden?.invoke()
+            releaseSession?.invoke()
         }
         // Anything still listening hears the end.
         microphone.end()
@@ -1496,15 +1496,17 @@ class ListeningTest {
             "trackViewUrl":"https://music.apple.com/us/album/fixture/123?i=456"$length}]}"""
     }
 
-    /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
-    private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String?) -> Unit {
-        val garden = RadioGarden.PACKAGE
+    /**
+     * An app's media session as Android hands it to Crosstune, which has notification access and hears the phone
+     * sounding. All of it is put back after the test. It shows once it's added to the phone's sessions.
+     */
+    private fun appSession(packageName: String, label: String, tag: String): MediaController {
         val listenerSetting = "enabled_notification_listeners"
         val previous = Settings.Secure.getString(app.contentResolver, listenerSetting)
         val audio = app.getSystemService(AudioManager::class.java)
         val sounding = audio.isMusicActive
-        val session = MediaSession(app, "KotlinAudioPlayer")
-        releaseRadioGarden = {
+        val session = MediaSession(app, tag)
+        releaseSession = {
             session.release()
             ShadowMediaSessionManager.reset()
             shadowOf(audio).setIsMusicActive(sounding)
@@ -1513,14 +1515,18 @@ class ListeningTest {
             NotificationManagerCompat.getEnabledListenerPackages(app)
         }
         shadowOf(app.packageManager).installPackage(PackageInfo().apply {
-            packageName = garden
-            applicationInfo = ApplicationInfo().apply { packageName = garden; nonLocalizedLabel = "Radio Garden" }
+            this.packageName = packageName
+            applicationInfo = ApplicationInfo().apply { this.packageName = packageName; nonLocalizedLabel = label }
         })
         Settings.Secure.putString(app.contentResolver, listenerSetting,
             ComponentName(app, NowPlayingListener::class.java).flattenToString())
         shadowOf(audio).setIsMusicActive(true)
-        val controller = MediaController(app, session.sessionToken)
-        shadowOf(controller).setPackageName(garden)
+        return MediaController(app, session.sessionToken).also { shadowOf(it).setPackageName(packageName) }
+    }
+
+    /** Radio Garden's Android session announces a station and puts the stream text in a single queue item. */
+    private fun radioGarden(station: String, subtitle: String, activeId: Long = 0, otherSubtitle: String? = null): (String?) -> Unit {
+        val controller = appSession(RadioGarden.PACKAGE, "Radio Garden", "KotlinAudioPlayer")
         shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, station).build())
         shadowOf(controller).setPlaybackState(PlaybackState.Builder()
             .setState(PlaybackState.STATE_PLAYING, 0, 1f, SystemClock.elapsedRealtime()).setActiveQueueItemId(activeId).build())
@@ -1534,6 +1540,65 @@ class ListeningTest {
             items = queue(text)
             shadowOf(controller).callbacks.forEach { it.onQueueChanged(items) }
         }
+    }
+
+    @Test
+    fun whenAnAdEndsTheBarAndThePlayerShowTheSongWaitingAtItsStartUntilItPlays() {
+        // Free YouTube Music as a phone had it (the Samsung, 2026-11-26): a song's first play there, behind two ads under
+        // its name, 15 and 20 s long, with nothing to tell them from the song by until each ends.
+        val title = "Bohemian Rhapsody (Digital Remaster)"
+        val music = appSession(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "YouTube music")
+        fun long(ms: Long) = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title).putString(MediaMetadata.METADATA_KEY_ARTIST, "Queen")
+            .putString(MediaMetadata.METADATA_KEY_ALBUM, "").putLong(MediaMetadata.METADATA_KEY_DURATION, ms).build()
+        fun at(state: Int) = PlaybackState.Builder().setState(state, 0, 1f, SystemClock.elapsedRealtime()).setActions(2_600_887).setActiveQueueItemId(76).build()
+        fun says(metadata: MediaMetadata) {
+            shadowOf(music).executeOnMetadataChanged(metadata)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        fun isAt(state: Int, afterMs: Long) {
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(afterMs))
+            shadowOf(music).executeOnPlaybackStateChanged(at(state))
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        shadowOf(music).setMetadata(long(15_061))
+        shadowOf(music).setPlaybackState(at(PlaybackState.STATE_PLAYING))
+        shadowOf(app.getSystemService(MediaSessionManager::class.java)).addController(music)
+        MainActivity.playbackFactory = { MediaSessionPlayback(it) }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown(title))
+        assertTrue(described(string(R.string.lyrics_pause)))
+        // The first ad ends into the second: the bar no longer shows it playing, until YouTube Music says it plays again.
+        isAt(PlaybackState.STATE_PLAYING, afterMs = 15_000)
+        says(long(20_131))
+        waitForDescription(string(R.string.lyrics_play))
+        assertFalse(described(string(R.string.lyrics_pause)))
+        isAt(PlaybackState.STATE_BUFFERING, afterMs = 202)
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.lyrics_play)))
+        isAt(PlaybackState.STATE_PLAYING, afterMs = 3)
+        waitForDescription(string(R.string.lyrics_pause))
+        // Opened now, the player has the second ad for the song, as long as the ad is.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player != null }
+        waitForText("0:20")
+        // The ad over, the player is on the song, as long as it is, waiting at its start.
+        isAt(PlaybackState.STATE_PLAYING, afterMs = 20_000)
+        says(long(359_491))
+        waitForText("5:59")
+        waitForDescription(string(R.string.lyrics_play))
+        assertFalse(described(string(R.string.lyrics_pause)))
+        assertTrue(shown("0:00"))
+        assertTrue(shown(title))
+        isAt(PlaybackState.STATE_BUFFERING, afterMs = 215)
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.lyrics_play)))
+        // Said to play, it does, from its start.
+        isAt(PlaybackState.STATE_PLAYING, afterMs = 4)
+        waitForDescription(string(R.string.lyrics_pause))
+        assertFalse(described(string(R.string.lyrics_play)))
+        assertTrue(shown("0:00"))
+        assertTrue(shown("5:59"))
     }
 
     @Test

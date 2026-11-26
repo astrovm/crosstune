@@ -115,6 +115,17 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
     @Synchronized
     fun known(title: String, artist: String): List<Long> = seen.optJSONArray(keyOf(title, artist))?.let { known -> (0 until known.length()).map(known::getLong) }.orEmpty()
 
+    /** [lengthMs] turned out not to be the song's, as an ad's that played under its name: it's no longer one said for it. */
+    @Synchronized
+    fun forget(title: String, artist: String, lengthMs: Long) {
+        val key = keyOf(title, artist)
+        val known = known(title, artist)
+        val kept = known.filter { abs(it - lengthMs) > SAME_MS }
+        if (kept.size == known.size) return
+        if (kept.isEmpty()) seen.remove(key) else seen.put(key, JSONArray(kept))
+        preferences.edit { putString(KEY, seen.toString()) }
+    }
+
     private fun keyOf(title: String, artist: String) = "${SongNames.normalize(title)}\u0000${SongNames.normalize(artist)}"
 
     companion object {

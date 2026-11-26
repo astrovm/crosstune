@@ -433,9 +433,18 @@ internal class MediaSessionPlayback(
     private val queueMetadata = ConcurrentHashMap<MediaSession.Token, QueueMetadata>()
     private val queueWatchers = mutableMapOf<MediaSession.Token, Int>()
     private val queueGraceMs = 1_500L
+    /** What each watched session of YouTube Music last said it plays, and how long that is: an ad's end only shows against it, see [lengthSaid]. */
+    private data class SaidLength(val title: String?, val artist: String?, val lengthMs: Long, val item: Long)
+    private val saidLengths = ConcurrentHashMap<MediaSession.Token, SaidLength>()
+    /** When a session's ad ended, and when its app had last said where it was by then; see [adEnding]. */
+    private data class AdEnd(val at: Long, val saidAt: Long?)
+    private val adEnds = ConcurrentHashMap<MediaSession.Token, AdEnd>()
 
-    private fun watchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
+    private fun watchQueue(controller: MediaController) = synchronized(queueWatchers) {
+        val token = controller.sessionToken
         queueWatchers[token] = (queueWatchers[token] ?: 0) + 1
+        // Already on an ad as it's first watched, its end is seen against that.
+        if (controller.namesAdsAsSongs()) saidLengths.computeIfAbsent(token) { controller.saidLength(controller.metadata) }
     }
 
     private fun unwatchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
@@ -443,6 +452,8 @@ internal class MediaSessionPlayback(
         if (remaining == 0) {
             queueWatchers.remove(token)
             queueMetadata.remove(token)
+            saidLengths.remove(token)
+            adEnds.remove(token)
         } else {
             queueWatchers[token] = remaining
         }
@@ -463,7 +474,44 @@ internal class MediaSessionPlayback(
             val previous = queueMetadata[sessionToken]
             val renamed = previous == null || previous.title != title || previous.artist != artist
             queueMetadata[sessionToken] = QueueMetadata(id, title, artist, if (renamed) SystemClock.uptimeMillis() else previous.renamedAt, previous?.clock)
+            if (namesAdsAsSongs()) lengthSaid(saidLength(metadata))
         }
+    }
+
+    /** Free YouTube Music plays its ads under the next song's name, with all of the song's details but its length. */
+    private fun MediaController.namesAdsAsSongs(): Boolean = MusicService.ofPackage(packageName) == MusicService.YOUTUBE_MUSIC
+
+    private fun MediaController.saidLength(metadata: MediaMetadata?): SaidLength =
+        SaidLength(metadata?.getString(MediaMetadata.METADATA_KEY_TITLE), metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+            metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0, playbackState?.activeQueueItemId ?: MediaSession.QueueItem.UNKNOWN_ID.toLong())
+
+    /**
+     * Free YouTube Music plays an ad under the next song's name and queue item, with nothing to tell it by as it
+     * starts. Its end shows: the app says another length for the same song, from one above 0 to another, where a
+     * song's own start goes from 0 to its length. So the length before was an ad's, never one of the song's, and the
+     * song starts over once the app says it plays again; see [adEnding].
+     */
+    private fun MediaController.lengthSaid(said: SaidLength) {
+        val before = saidLengths.put(sessionToken, said) ?: return
+        val unknown = MediaSession.QueueItem.UNKNOWN_ID.toLong()
+        val sameItem = before.item == said.item || before.item == unknown || said.item == unknown
+        if (before.title != said.title || before.artist != said.artist || !sameItem) return
+        // Said a second longer or shorter, it's the same song still; see [SteadyLengths].
+        if (before.lengthMs <= 0 || said.lengthMs <= 0 || abs(before.lengthMs - said.lengthMs) <= SteadyLengths.SAME_MS) return
+        lengths.forget(said.title.orEmpty(), said.artist.orEmpty(), before.lengthMs)
+        adEnds[sessionToken] = AdEnd(SystemClock.uptimeMillis(), playbackState?.lastPositionUpdateTime)
+    }
+
+    /**
+     * Whether its ad ended and it hasn't said since that it plays. Where it says it is by then is the ad's last word:
+     * the song stops to load first, then plays from its start, which is where its clock starts. An app gets [AD_END_MS]
+     * to say so, see [expireQueueWaits], as a song never waits long on an app's word.
+     */
+    private fun MediaController.adEnding(state: PlaybackState): Boolean {
+        val end = adEnds[sessionToken] ?: return false
+        if (state.state != PlaybackState.STATE_PLAYING || state.lastPositionUpdateTime == end.saidAt) return true
+        adEnds.remove(sessionToken)
+        return false
     }
 
     private fun MediaController.stateArrived(state: PlaybackState?) = synchronized(queueWatchers) {
@@ -504,8 +552,10 @@ internal class MediaSessionPlayback(
     /** A single refresh covers all pending sessions, without extending a wait when more states arrive. */
     private fun scheduleQueueRefresh(controllers: List<MediaController>, refresh: Runnable) {
         val deadline = synchronized(queueWatchers) {
-            controllers.mapNotNull { queueMetadata[it.sessionToken]?.takeIf { entry -> entry.waitingId != null }?.waitingAt }
-                .minOrNull()?.plus(queueGraceMs)
+            controllers.flatMap {
+                listOfNotNull(queueMetadata[it.sessionToken]?.takeIf { entry -> entry.waitingId != null }?.waitingAt?.plus(queueGraceMs),
+                    adEnds[it.sessionToken]?.at?.plus(AD_END_MS))
+            }.minOrNull()
         }
         handler.removeCallbacks(refresh)
         if (deadline != null) handler.postDelayed(refresh, (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
@@ -518,6 +568,8 @@ internal class MediaSessionPlayback(
                 val id = previous.waitingId
                 if (id != null && time - previous.waitingAt >= queueGraceMs) previous.copy(id = id, waitingId = null) else previous
             }
+            // A song that never said it plays again after its ad goes on from where its app last said it is.
+            adEnds.computeIfPresent(controller.sessionToken) { _, end -> end.takeIf { time - it.at < AD_END_MS } }
         }
     }
 
@@ -701,10 +753,12 @@ internal class MediaSessionPlayback(
                     }
                 }
                 controller.registerCallback(callback, handler)
-                watchQueue(controller.sessionToken)
+                watchQueue(controller)
                 renamed = renamed + (controller to callback)
             } } finally { unwatchQueues(before) }
             pick(controllers)
+            // Started while a session waits, as on an ad's end, it's told when the wait's over too.
+            scheduleQueueRefresh(watched, refreshQueue)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
@@ -1119,7 +1173,7 @@ internal class MediaSessionPlayback(
      * or as said before, it's an ad. A short song of no longer length known is the song.
      */
     private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: Long?): Long? {
-        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
+        if (!namesAdsAsSongs()) return null
         if (metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) !in 1 until LONGEST_AD_MS) return null
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
         // The one said last, of the song's versions, when not asked for one.
@@ -1182,10 +1236,11 @@ internal class MediaSessionPlayback(
                     override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
                 }
                 controller.registerCallback(callback, handler)
-                watchQueue(controller.sessionToken)
+                watchQueue(controller)
                 watched = watched + (controller to callback)
             } } finally { unwatchQueues(before) }
             update()
+            scheduleQueueRefresh(watched.map { it.first }, refreshQueue)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
         // Audio can fall silent before a player updates its session, or start after it says PLAYING.
@@ -1291,8 +1346,8 @@ internal class MediaSessionPlayback(
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
-        // Under an ad, the song waits at its start until the ad's over.
-        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
+        // Under an ad, the song waits at its start until the ad's over, and its app says it plays.
+        val ad = controller.adEnding(state) || controller.metadata?.let { controller.songUnderAd(it, asked) } != null
         val reported = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
         val clock = queueClock(controller, state, reported, matches, at)
         return Following(
@@ -1513,6 +1568,9 @@ private const val SAME_CLOCK_NOTE_MS = 20L
 
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L
+
+/** How long YouTube Music has, once its ad ended, to say the song plays: it took 0.3 s on a phone. */
+internal const val AD_END_MS = 1_500L
 
 /** Two clocks this close go on from the same: what an app says on a clock is exact to the millisecond. */
 internal const val SAME_CLOCK_MS = 50L
