@@ -1182,14 +1182,16 @@ internal object Readings {
                     out += Piece("だり", "だり", "助詞", "並立助詞", reader = Reader.RULES)
                 }
                 piece.kana == "だり" && piece.kind in setOf("助詞", "助動詞") -> {
-                    val stem = voicedTariStem(out)
+                    val candidate = if (last?.mistakenTariVerb() == true) {
+                        out.dropLast(1) + last.read(last.kana, "名詞", "一般")
+                    } else out
+                    val stem = voicedTariStem(candidate)
                     if (stem != null) {
                         val (count, base) = stem
                         val surface = out.takeLast(count).joinToString("") { it.surface }
                         repeat(count) { out.removeAt(out.lastIndex) }
                         out += Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
-                    } else if (last?.mistakenTariVerb() == true &&
-                        voicedTariStem(listOf(last.read(last.kana, "名詞", "一般"))) == null) {
+                    } else if (last?.mistakenTariVerb() == true) {
                         out[out.lastIndex] = last.read(last.kana, "名詞", "一般")
                     }
                     out += piece

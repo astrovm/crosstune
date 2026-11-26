@@ -52,12 +52,15 @@ class ReadingsTest {
 
     @Test
     fun kanaVoicedTariLooksUpTheVerb() {
-        fun lookups() = listOf("とんだりはねたり", "とんだり", "しんだり", "かんだり", "のんだり", "えらんだり").map {
+        fun lookups() = listOf("とんだり", "すんだり", "しんだり", "かんだり", "のんだり", "えらんだり").map {
             Readings.words(it, Script.JAPANESE).first().lookup
         }
-        val expected = listOf("とぶ", "とぶ", "しぬ", "かむ", "のむ", "えらぶ")
+        val expected = listOf("とぶ", "すむ", "しぬ", "かむ", "のむ", "えらぶ")
         assertEquals(expected, lookups())
         assertEquals(expected, TestUniDic.reading(::lookups))
+        fun phrase() = Readings.words("とんだりはねたり", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("とぶ", "はねる"), phrase())
+        assertEquals(listOf("とぶ", "はねる"), TestUniDic.reading(::phrase))
     }
 
     @Test
