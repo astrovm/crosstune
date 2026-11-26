@@ -155,6 +155,9 @@ class ReadingsTest {
     fun ambiguousDeshiteKeepsTheExistingBoundary() = assertJapaneseBoundaries(listOf(
         Triple("ひとなでして", "hitonade shite", listOf("ひとなで", "して")),
         Triple("花でして", "hanadeshite", listOf("花でして")),
+        Triple("これはわなでして", "kore wa wanadeshite", listOf("これ", "は", "わなでして")),
+        Triple("きれいなでして", "kireenadeshite", listOf("きれいなでして")),
+        Triple("静かなでして", "shizukanadeshite", listOf("静かなでして")),
         Triple("花でした", "hana deshita", listOf("花", "でした")),
         Triple("花でします", "hana deshimasu", listOf("花", "でします")),
         Triple("花でしたら", "hana deshitara", listOf("花", "でしたら")),
@@ -191,6 +194,37 @@ class ReadingsTest {
             Readings.words("ひとなでしても", Script.JAPANESE).map { it.text to it.lookup }
         val expectedMo = "hitonade shite mo" to listOf("ひとなで" to "ひとなで", "して" to "する", "も" to "も")
         assertEquals(listOf(expectedMo, expectedMo), listOf(withMo(), TestUniDic.reading(::withMo)))
+    }
+
+    @Test
+    fun nadenadeAndSuruFormsHaveTheirOwnWordsAndLookups() {
+        val cases = listOf(
+            Triple("なでなでして", "nadenade shite", "して"),
+            Triple("なでなでした", "nadenade shita", "した"),
+            Triple("なでなでする", "nadenade suru", "する"),
+            Triple("なでなでしない", "nadenade shinai", "しない"),
+            Triple("なでなでしよう", "nadenade shiyou", "しよう"),
+            Triple("なでなでされて", "nadenade sarete", "されて")
+        )
+        fun read() = cases.map { (line, _, _) ->
+            val words = Readings.words(line, Script.JAPANESE)
+            Triple(Readings.of(listOf(line), Script.JAPANESE).single().romanized, words.map { it.text }, words.map { it.lookup })
+        }
+        val expected = cases.map { (_, romaji, verb) -> Triple(romaji, listOf("なでなで", verb), listOf("なでなで", "する")) }
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
+    fun nadenadeBeforeParticlesIsOneNoun() {
+        val cases = listOf(
+            Triple("なでなでで", "nadenade de", listOf("なでなで" to "なでなで", "で" to "で")),
+            Triple("なでなでが好き", "nadenade ga suki", listOf("なでなで" to "なでなで", "が" to "が", "好き" to "好き"))
+        )
+        fun read() = cases.map { (line, _, _) ->
+            Readings.of(listOf(line), Script.JAPANESE).single().romanized to Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = cases.map { (_, romaji, words) -> romaji to words }
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
     }
 
     @Test
