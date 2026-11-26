@@ -106,8 +106,11 @@ class OldKana(unittest.TestCase):
             word([], [("すげる", [], False, ["*"])], [(["v1"], [])]),
             word([], [("やばい", [], True, ["*"])], [(["adj-i"], [])]),
             word([], [("しかし", [], True, ["*"])], [(["conj"], [])]),
+            word([], [("あめ", [], True, ["*"])], [(["n"], [])]),
+            word([], [("わたし", [], True, ["*"])], [(["pn"], [])]),
+            word([], [("ねがう", [], True, ["*"])], [(["n"], []), (["v5u"], [])]),
         ]
-        self.assertEqual(["おす", "押す"], readingsaudit.common_split_words(words))
+        self.assertEqual(["おす", "ねがう", "押す"], readingsaudit.common_split_words(words))
 
     def test_shifted_nouns_use_unambiguous_common_spellings(self):
         words = [

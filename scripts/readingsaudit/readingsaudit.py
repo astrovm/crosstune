@@ -218,9 +218,9 @@ def shifted_nouns(words):
 
 
 def common_split_words(words):
-    """Common nouns and verbs, to recognize a real word in a shifted split."""
+    """Common forms of verbs, to recognize a real verb in a shifted split."""
     return sorted({form["text"] for entry in words
-                   if any(any(pos.startswith("v") or pos in {"n", "pn"} for pos in sense.get("partOfSpeech", []))
+                   if any(any(pos.startswith("v") for pos in sense.get("partOfSpeech", []))
                           for sense in entry.get("sense", []))
                    for form in entry["kana"] + entry["kanji"] if form.get("common")})
 
@@ -295,7 +295,7 @@ def oldkana(folder):
     shifted = shifted_nouns(jmdict["words"])
     shifted_adjective = shifted_adjectives(jmdict["words"])
     OLD_KANA.with_name("common-split-words.txt").write_text(
-        "\n".join(header[:3] + ["# Changed: common nouns and verbs, for shifted-word boundaries.",
+        "\n".join(header[:3] + ["# Changed: common verb forms, for shifted-word boundaries.",
                                 "# Made by scripts/readingsaudit/readingsaudit.py oldkana."] +
                   common_split_words(jmdict["words"])) + "\n")
     OLD_KANA.with_name("shifted-words.txt").write_text("\n".join(header[:3] + ["# Common nouns and pronouns in -ae, with their common written form,",
