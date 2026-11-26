@@ -113,7 +113,7 @@ internal object Readings {
      * 19 to distinguish interrogative 何だ from the interjection.
      * 25 to keep なでなで together before particles and copulas.
      */
-    const val VERSION = 25
+    const val VERSION = 26
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -166,7 +166,7 @@ internal object Readings {
 
     private fun japanese(line: String): LineReading {
         val given = givenReadings(line)
-        val pieces = readAsGiven(together(pieces(withoutGiven(line))), given)
+        val pieces = readAsGiven(together(shiftedAdjectives(pieces(withoutGiven(line)))), given)
         val parts = pieces.flatMap { piece ->
             if (piece.surface.none(::isHan) || piece.kana == piece.surface) return@flatMap listOf(Ruby(piece.surface))
             // A reading the lyrics give for kanji with kana among them, 不本意な現状 as いま, goes over all of it.
@@ -1195,6 +1195,62 @@ internal object Readings {
         private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
+    private val shiftedE = mapOf(
+        'け' to "かこ", 'げ' to "がご", 'せ' to "さそ", 'ぜ' to "ざぞ", 'て' to "たと", 'で' to "だど",
+        'ね' to "なの", 'へ' to "はほ", 'べ' to "ばぼ", 'ぺ' to "ぱぽ", 'め' to "まも", 'れ' to "らろ"
+    )
+    private val shiftedI = mapOf('き' to 'く', 'ぎ' to 'ぐ', 'し' to 'す', 'じ' to 'ず', 'ち' to 'つ', 'に' to 'ぬ',
+        'ひ' to 'ふ', 'び' to 'ぶ', 'ぴ' to 'ぷ', 'み' to 'む', 'り' to 'る')
+
+    private fun shiftedRoots(surface: String): List<String> {
+        if (surface.length < 2) return emptyList()
+        val stem = surface.dropLast(1)
+        val before = stem.last()
+        return when (surface.last()) {
+            'え', 'ー' -> shiftedE[before]?.map { stem.dropLast(1) + it + "い" }.orEmpty() +
+                if (isHan(before)) listOf(stem + "い") else emptyList()
+            'い' -> listOfNotNull(shiftedI[before]?.let { stem.dropLast(1) + it + "い" }) +
+                if (before in shiftedI && stem.length > 1 && isHan(stem[stem.lastIndex - 1])) listOf(stem.dropLast(1) + "い") else emptyList()
+            else -> emptyList()
+        }
+    }
+
+    private fun shiftedAdjective(surface: String): Piece? {
+        for (root in shiftedRoots(surface)) {
+            val ipadic = tokenizer.knownWord(root)?.takeIf { it.partOfSpeechLevel1 == "形容詞" }
+            val unidic = uniDic?.tokenize(root)?.singleOrNull()?.takeIf { it.partOfSpeechLevel1 == "形容詞" }
+            val reading = ipadic?.reading ?: unidic?.lemmaReadingForm ?: continue
+            val kana = hiragana(reading)
+            if (kana.length < 2) continue
+            val vowel = kana[kana.lastIndex - 1]
+            val shifted = if (surface.last() == 'い') shiftedI.entries.firstOrNull { it.value == vowel }?.key else
+                shiftedE.entries.firstOrNull { vowel in it.value }?.key
+            if (shifted == null) continue
+            return Piece(surface, kana.dropLast(2) + shifted + if (surface.last() == 'い') "い" else "え", "形容詞", "自立", root, reader = Reader.RULES)
+        }
+        return null
+    }
+
+    private fun shiftedAdjectives(pieces: List<Piece>): List<Piece> = buildList {
+        var at = 0
+        while (at < pieces.size) {
+            var found: Pair<Int, Piece>? = null
+            var text = ""
+            for (end in at until minOf(at + 4, pieces.size)) {
+                text += pieces[end].surface
+                if (text.length > 12 || text.any { !it.isLetter() && it != 'ー' }) break
+                if (text != "だりい" && (text.length > 2 || text.firstOrNull()?.let(::isHan) == true)) {
+                    shiftedAdjective(text)?.let { found = end + 1 to it }
+                }
+            }
+            val match = found
+            if (match == null) add(pieces[at++]) else {
+                add(match.second)
+                at = match.first
+            }
+        }
+    }
+
     /** Read whole pieces after だり as after 高い; a particle may span several original pieces. */
     private fun adjectiveParticles(pieces: List<Piece>, start: Int): Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? {
         val suffix = StringBuilder()
@@ -1888,7 +1944,7 @@ internal object Readings {
         val reads = letterReadings(parts)
         val given = givenReadings(line)
         var from = 0
-        val pieces = readAsGiven(together(pieces(withoutGiven(line))), given).map { piece ->
+        val pieces = readAsGiven(together(shiftedAdjectives(pieces(withoutGiven(line)))), given).map { piece ->
             val start = from.also { from += piece.surface.length }
             // Where each letter is in the line, past the readings it gives in brackets.
             val letters = piece.surface.indices.map { inLine(start + it, given) }
@@ -2070,7 +2126,7 @@ internal object Readings {
      * [askToday], as the line spelled today is itself a line to read.
      */
     private fun japaneseWords(line: String, askToday: Boolean): List<Word> {
-        val groups = grouped(readAsGiven(together(pieces(withoutGiven(line))), givenReadings(line)))
+        val groups = grouped(readAsGiven(together(shiftedAdjectives(pieces(withoutGiven(line)))), givenReadings(line)))
         val written = groups.joinToString("") { word -> word.joinToString("") { it.surface } }
         var at = 0
         val words = groups.map { word ->
@@ -2150,7 +2206,7 @@ internal object Readings {
     /** The lookup of each word of [line] spelled today, by where it starts in the line. */
     private fun wordsAt(line: String): List<Pair<Int, String>> {
         var at = 0
-        return grouped(together(pieces(line))).map { word ->
+        return grouped(together(shiftedAdjectives(pieces(line)))).map { word ->
             val written = word.joinToString("") { it.surface }
             val start = at + written.indexOfFirst(Char::isLetterOrDigit).coerceAtLeast(0)
             at += written.length

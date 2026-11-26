@@ -123,7 +123,7 @@ class ReadingsTest {
     @Test
     fun colloquialAdjectivesKeepTheirWordsAndLookups() {
         val cases = listOf(
-            Triple("うぜえ", "uzee", "うざい"), Triple("すげえ", "sugee", "すごい"),
+            Triple("すげえ", "sugee", "すごい"),
             Triple("やべえ", "yabee", "やばい"), Triple("いてえ", "itee", "いたい"),
             Triple("うめえ", "umee", "うまい"), Triple("ねみい", "nemii", "ねむい"),
             Triple("さみい", "samii", "さむい")
@@ -141,13 +141,24 @@ class ReadingsTest {
     }
 
     @Test
+    fun colloquialUzaIsKnownWithUniDic() {
+        assertEquals("u ze e", Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized)
+        TestUniDic.reading {
+            for (text in listOf("うぜえ", "うぜー")) {
+                assertEquals(text, "uzee", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+                assertEquals(text, "うざい", Readings.words(text, Script.JAPANESE).single().lookup)
+            }
+        }
+    }
+
+    @Test
     fun colloquialAdjectivesIncludeKanjiAndParticles() {
         fun check() {
             for ((text, romanized, base) in listOf(
                 Triple("痛え", "itee", "痛い"), Triple("寒みい", "samii", "寒い"),
                 Triple("眠みい", "nemii", "眠い"), Triple("凄え", "sugee", "凄い"),
                 Triple("すげー", "sugee", "すごい"), Triple("やべー", "yabee", "やばい"),
-                Triple("うぜー", "uzee", "うざい")
+                Triple("高え", "takee", "高い")
             )) {
                 assertEquals(text, romanized, Readings.of(listOf(text), Script.JAPANESE).single().romanized)
                 assertEquals(text, base, Readings.words(text, Script.JAPANESE).single().lookup)
@@ -166,7 +177,8 @@ class ReadingsTest {
         Triple("行きてえ", "ikitee", listOf("行きてえ")), Triple("知らねえ", "shiranee", listOf("知らねえ")),
         Triple("いいねえ", "ii nee", listOf("いい", "ねえ")), Triple("そうですねえ", "soodesune e", listOf("そうですね", "え")),
         Triple("ええ", "ee", listOf("ええ")), Triple("手え", "te e", listOf("手", "え")),
-        Triple("花へ", "hana e", listOf("花", "へ"))
+        Triple("花へ", "hana e", listOf("花", "へ")), Triple("高い", "takai", listOf("高い")),
+        Triple("高いよ", "takai yo", listOf("高い", "よ"))
     ))
 
     @Test
