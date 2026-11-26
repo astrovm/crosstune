@@ -1219,6 +1219,15 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            val splitTari = last?.takeIf { it.kind == "連体詞" && it.surface.endsWith("んだ") }
+                ?.takeIf { piece.surface == "り" && piece.kind == "助動詞" }
+                ?.surface?.dropLast(1)?.let { surface ->
+                    voicedTariStem(listOf(Piece(surface, surface, "名詞", "一般")))?.let { surface to it.second }
+                }
+            // IPADIC takes 返し in 投げ返したり for a noun suffix, including its voiced noun reading.
+            val verbSuffix = if (last?.kind == "動詞" && piece.subkind == "接尾" && next?.kana in setOf("たり", "だり")) {
+                tokenizer.knownWord(piece.surface)?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading != null && it.reading != "*" }
+            } else null
             val inflected = last?.let { inflectedCompound(it, piece, next) }
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
@@ -1227,6 +1236,27 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
+                splitTari != null -> {
+                    val (surface, base) = splitTari
+                    out[out.lastIndex] = Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    out += Piece("だり", "だり", "助詞", "並立助詞", reader = Reader.RULES)
+                }
+                piece.kana == "だり" && piece.kind in setOf("助詞", "助動詞") -> {
+                    val candidate = if (last?.mistakenTariVerb() == true) {
+                        out.dropLast(1) + last.read(last.kana, "名詞", "一般")
+                    } else out
+                    val stem = voicedTariStem(candidate)
+                    if (stem != null) {
+                        val (count, base) = stem
+                        val surface = out.takeLast(count).joinToString("") { it.surface }
+                        repeat(count) { out.removeAt(out.lastIndex) }
+                        out += Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    } else if (last?.mistakenTariVerb() == true) {
+                        out[out.lastIndex] = last.read(last.kana, "名詞", "一般")
+                    }
+                    out += piece
+                }
                 // Both dictionaries can take 一撫で + する for ひと + な + です.
                 piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "ひと" &&
                     (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
@@ -1288,6 +1318,30 @@ internal object Readings {
             }
         }
         return listedWords(out)
+    }
+
+    private fun Piece.mistakenTariVerb() = kind == "動詞" && surface.endsWith('ん') && base.last() !in "むぶぬ"
+
+    /** A kana stem split as nouns can still be the voiced form of a known verb. */
+    private fun voicedTariStem(pieces: List<Piece>): Pair<Int, String>? {
+        if (pieces.lastOrNull()?.surface?.endsWith('ん') != true || pieces.last().kind == "動詞") return null
+        val suffix = pieces.takeLastWhile { piece -> piece.kind != "動詞" && piece.surface.all { it in 'ぁ'..'ん' } }
+        for (count in suffix.size downTo 1) {
+            val stem = suffix.takeLast(count).joinToString("") { it.surface }
+            if (stem.length < 2) continue
+            val candidates = "むぶぬ".mapNotNull { ending ->
+                val base = stem.dropLast(1) + ending
+                // IPADIC writes 死ぬ in kanji and splits its spelling in kana as し + ぬ.
+                val written = if (base == "しぬ") "死ぬ" else base
+                val verb = tokenizer.knownWord(written)
+                val cost = verb?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading?.let(::hiragana) == base }
+                    ?.let { tokenizer.knownWordCost(written, it) }
+                cost?.let { base to it }
+            }
+            val lowest = candidates.minOfOrNull { it.second } ?: continue
+            return count to (candidates.filter { it.second == lowest }.singleOrNull()?.first ?: stem)
+        }
+        return null
     }
 
     /** A compound noun can hide two verbs before そう, as 溺れ死 and に in 溺れ死にそう. */
@@ -1874,7 +1928,8 @@ internal object Readings {
             }
             val opening = piece.surface in OPENING
             // Both dictionaries can tag たり as a particle, but it is part of the preceding predicate.
-            val tari = piece.kana in setOf("たり", "だり") && piece.kind in setOf("助詞", "助動詞")
+            val tari = piece.kana in setOf("たり", "だり") &&
+                (piece.kind in setOf("助詞", "助動詞") || (piece.surface in setOf("タリ", "ダリ") && previous?.kind == "動詞"))
             val afterTe = tari && followsPredicateTe(previous, pieces.getOrNull(at - 2))
             val ending = piece.isEnding(tari, afterTe, previous)
             // An ending after a particle starts a word of its own: だけだった is dake datta. English

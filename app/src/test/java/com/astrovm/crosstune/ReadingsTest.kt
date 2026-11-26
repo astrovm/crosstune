@@ -33,7 +33,51 @@ class ReadingsTest {
     ))
 
     @Test
+    fun kanaVoicedTariStaysWithItsVerb() = assertJapaneseBoundaries(listOf(
+        Triple("しんだりして", "shindari shite", listOf("しんだり", "して")),
+        Triple("しんだりしない", "shindari shinai", listOf("しんだり", "しない")),
+        Triple("しんだり", "shindari", listOf("しんだり")),
+        Triple("かんだり", "kandari", listOf("かんだり")),
+        Triple("のんだり", "nondari", listOf("のんだり")),
+        Triple("えらんだり", "erandari", listOf("えらんだり")),
+        Triple("とんだりはねたり", "tondari hanetari", listOf("とんだり", "はねたり")),
+        Triple("よんだり", "yondari", listOf("よんだり")),
+        Triple("あそんだり", "asondari", listOf("あそんだり")),
+        Triple("すんだり", "sundari", listOf("すんだり")),
+        Triple("ころんだり", "korondari", listOf("ころんだり")),
+        Triple("パンだり", "pan dari", listOf("パン", "だり")),
+        Triple("けんだり", "ken dari", listOf("けん", "だり")),
+        Triple("ほんだり", "hon dari", listOf("ほん", "だり")),
+    ))
+
+    @Test
+    fun kanaVoicedTariLooksUpTheVerb() {
+        fun lookups() = listOf("とんだり", "すんだり", "しんだり", "かんだり", "のんだり", "えらんだり").map {
+            Readings.words(it, Script.JAPANESE).first().lookup
+        }
+        val expected = listOf("とぶ", "すむ", "しぬ", "かむ", "のむ", "えらぶ")
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+        fun phrase() = Readings.words("とんだりはねたり", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("とぶ", "はねる"), phrase())
+        assertEquals(listOf("とぶ", "はねる"), TestUniDic.reading(::phrase))
+    }
+
+    @Test
+    fun shinHasTwoDictionaryVerbsButNeitherTokenizerTagsItAsAVerb() {
+        val ipadic = Tokenizer.Builder().build().tokenize("しんだり").first()
+        val unidic = TestUniDic.tokenizer.tokenize("しんだり").first()
+        assertEquals("しん", ipadic.surface)
+        assertEquals("しん", unidic.surface)
+        assertFalse(ipadic.partOfSpeechLevel1 == "動詞")
+        assertFalse(unidic.partOfSpeechLevel1 == "動詞")
+    }
+
+    @Test
     fun tariFormsStayWithTheirVerbOrAdjective() = assertJapaneseBoundaries(listOf(
+        Triple("投げ返したり", "nagekaeshitari", listOf("投げ返したり")),
+        Triple("しんだりする", "shindari suru", listOf("しんだり", "する")),
+        Triple("読んダリ", "yondari", listOf("読んダリ")),
         Triple("食べたり", "tabetari", listOf("食べたり")),
         Triple("行ったり", "ittari", listOf("行ったり")),
         Triple("読んだり", "yondari", listOf("読んだり")),
@@ -42,8 +86,22 @@ class ReadingsTest {
         Triple("静かだったり", "shizuka dattari", listOf("静か", "だったり")),
         Triple("読んだりする", "yondari suru", listOf("読んだり", "する")),
         Triple("あたり", "atari", listOf("あたり")),
+        Triple("ぴったり", "pittari", listOf("ぴったり")),
+        Triple("ばったり", "battari", listOf("ばったり")),
+        Triple("ふたり", "futari", listOf("ふたり")),
+        Triple("新だり", "shin dari", listOf("新", "だり")),
+        Triple("時たり", "toki tari", listOf("時", "たり")),
+        Triple("太郎だり", "taroo dari", listOf("太郎", "だり")),
         Triple("本たり", "hon tari", listOf("本", "たり")),
     ))
+
+    @Test
+    fun dariiIsNotAJoiningEnding() {
+        fun read() = Readings.of(listOf("だりい"), Script.JAPANESE).single().romanized to
+            Readings.words("だりい", Script.JAPANESE).map { it.text }
+        assertEquals("dari i" to listOf("だり", "い"), read())
+        assertEquals("dari i" to listOf("だり", "い"), TestUniDic.reading(::read))
+    }
 
     @Test
     fun copulasHaveTheirOwnRomajiAndPracticeWords() {

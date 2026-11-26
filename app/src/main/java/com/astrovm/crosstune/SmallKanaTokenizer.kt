@@ -96,6 +96,11 @@ internal class SmallKanaTokenizer(private val words: () -> Readings.OldKana) : T
     /** The word IPADIC knows for [text], when it keeps it whole. */
     fun knownWord(text: String): Token? = plain.tokenize(text).singleOrNull()?.takeIf { it.isKnown }
 
+    /** The dictionary's cost for the token its tokenizer chose for this word. */
+    fun knownWordCost(text: String, word: Token): Int? = startingAt(text, 0, unknown = false)
+        .filter { it.surface == text && tokenInfoDictionary.getAllFeatures(it.wordId) == word.allFeatures }
+        .minOfOrNull { tokenInfoDictionary.getWordCost(it.wordId) }
+
     /** A noun IPADIC knows as one word, read as written. */
     fun isNoun(text: String): Boolean = knownWord(text)?.let {
         it.partOfSpeechLevel1 == "名詞" && Readings.hiragana(it.reading) == Readings.hiragana(text)
