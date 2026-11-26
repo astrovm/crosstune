@@ -147,6 +147,101 @@ class PlaybackTest {
     }
 
     @Test
+    fun queueIdChangesWithoutMetadataEventuallyUseTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val following = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 42_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, following.last()?.clock?.playing)
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 120_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(120_000L, seen.last()?.offsetMs)
+        assertEquals(120_000L, following.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun youtubeMusicMetadataArrivingAfterItsNewQueueIdRestoresTheClock() {
+        allow()
+        sounding()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist, album = "After Hours", duration = 240_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnPlaybackStateChanged(state(27, 0))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(75))
+        assertEquals(142_000L, seen.last()?.offsetMs)
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun sameMetadataBeforeNextQueueItemEventuallyUsesItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnMetadataChanged(music.metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(77))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun bufferingBetweenNewMetadataAndQueueItemStillUsesItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, playing: Int) = PlaybackState.Builder().setState(playing, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, PlaybackState.STATE_PLAYING))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(76, PlaybackState.STATE_BUFFERING))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun firstMetadataAfterStoppedSessionCanTakeTheNewQueueId() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, state = PlaybackState.STATE_STOPPED)
+        fun state(id: Long, playing: Int) = PlaybackState.Builder().setState(playing, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(3, PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
     fun nextQueueItemDoesNotGiveTheOldSongItsClock() {
         allow()
         sounding()
@@ -162,8 +257,8 @@ class PlaybackTest {
         shadowOf(music).setPlaybackState(state(26, 0))
         shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
         shadowOf(Looper.getMainLooper()).idle()
-        assertNull(seen.last()?.offsetMs)
-        assertEquals(PlaybackClock(42_000, PLAYED_AT, 1f, false), following.last()?.clock)
+        assertEquals(142_000L, seen.last()?.offsetMs)
+        assertEquals(true, following.last()?.clock?.playing)
         val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
         shadowOf(music).setMetadata(next)
         shadowOf(music).executeOnMetadataChanged(next)
@@ -191,6 +286,43 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("Next Song", seen.last()?.metadata?.title)
         assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun changedArtistBeforeTheQueueChangeGetsTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_ARTIST, "Other Artist").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Other Artist", seen.last()?.metadata?.artist)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun followingAloneKeepsTheOldClockUntilMetadataArrives() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(142_000L, seen.last()?.clock?.positionAt(NOW))
+        assertEquals(true, seen.last()?.clock?.playing)
+        shadowOf(music).executeOnMetadataChanged(music.metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, seen.last()?.clock?.positionMs)
     }
 
     @Test
