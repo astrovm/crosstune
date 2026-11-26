@@ -11,7 +11,7 @@
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
   python3 scripts/readingsaudit/readingsaudit.py lines     # every audit line read whole by origin/main's code and HEAD's, as the app shows it; anything right that changes fails it. Before merging a readings change
   python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the golden file guards on every wider stretch of their line, and how many a break on the whole line slips past; --golden FILE, again for more
-  python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
+  python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's kana and shifted-word tables from jmdict.json
   python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
   python3 scripts/readingsaudit/readingsaudit.py age       # fail when either file's JMdict is older than MAX_AGE_DAYS; the release runs it
 
@@ -217,6 +217,14 @@ def shifted_nouns(words):
     return {kana: next(iter(forms)) for kana, forms in sorted(found.items()) if len(forms) == 1}
 
 
+def common_split_words(words):
+    """Common nouns and verbs, to recognize a real word in a shifted split."""
+    return sorted({form["text"] for entry in words
+                   if any(any(pos.startswith("v") or pos in {"n", "pn"} for pos in sense.get("partOfSpeech", []))
+                          for sense in entry.get("sense", []))
+                   for form in entry["kana"] + entry["kanji"] if form.get("common")})
+
+
 # The kana before an adjective's い that a shifted ending can change: ざ in うざい, said うぜえ, or む in さむい, said さみい.
 SHIFTING_KANA = "かこがごさそざぞたとだどなのはほばぼぱぽまもらろわやよくぐすずつぬふぶぷむる"
 
@@ -275,16 +283,21 @@ def old_kana_header(date, version):
 
 
 def oldkana(folder):
-    """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
+    """Writes the app's kana and shifted-word tables from JMdict: see old_kana."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     no_downgrade(jmdict["dictDate"], OLD_KANA)
     no_downgrade(jmdict["dictDate"], OLD_KANA.with_name("shifted-words.txt"))
+    no_downgrade(jmdict["dictDate"], OLD_KANA.with_name("common-split-words.txt"))
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     small = small_kana(jmdict["words"])
     adjectives = kana_adjectives(jmdict["words"])
     shifted = shifted_nouns(jmdict["words"])
     shifted_adjective = shifted_adjectives(jmdict["words"])
+    OLD_KANA.with_name("common-split-words.txt").write_text(
+        "\n".join(header[:3] + ["# Changed: common nouns and verbs, for shifted-word boundaries.",
+                                "# Made by scripts/readingsaudit/readingsaudit.py oldkana."] +
+                  common_split_words(jmdict["words"])) + "\n")
     OLD_KANA.with_name("shifted-words.txt").write_text("\n".join(header[:3] + ["# Common nouns and pronouns in -ae, with their common written form,",
                             "# then ~ colloquial and slang い adjectives in kana, for IPADIC, which lacks some.",
                             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."] +
@@ -807,7 +820,7 @@ def main(argv=None):
     elif args.step == "fetch":
         fetch(folder, args.tag)
     elif args.step == "age":
-        sys.exit(age([TABLE, OLD_KANA, OLD_KANA.with_name("shifted-words.txt")], datetime.date.today()))
+        sys.exit(age([TABLE, OLD_KANA, OLD_KANA.with_name("shifted-words.txt"), OLD_KANA.with_name("common-split-words.txt")], datetime.date.today()))
     elif args.step == "lines":
         # wholelines.py reads this module's audit too.
         import wholelines

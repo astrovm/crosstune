@@ -100,6 +100,15 @@ def word(kanji, kana, senses):
 
 class OldKana(unittest.TestCase):
 
+    def test_common_split_words_exclude_uncommon_and_other_parts_of_speech(self):
+        words = [
+            word([("押す", [], True)], [("おす", [], True, ["*"])], [(["v5s"], [])]),
+            word([], [("すげる", [], False, ["*"])], [(["v1"], [])]),
+            word([], [("やばい", [], True, ["*"])], [(["adj-i"], [])]),
+            word([], [("しかし", [], True, ["*"])], [(["conj"], [])]),
+        ]
+        self.assertEqual(["おす", "押す"], readingsaudit.common_split_words(words))
+
     def test_shifted_nouns_use_unambiguous_common_spellings(self):
         words = [
             word([("お前", [], True)], [("おまえ", [], True, ["*"])], [(["pn"], [])]),
@@ -646,7 +655,8 @@ class Main(unittest.TestCase):
             with mock.patch.object(readingsaudit, "age", return_value=1) as age, self.assertRaises(SystemExit) as stop:
                 readingsaudit.main(["age"])
             self.assertEqual(1, stop.exception.code)
-            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA, readingsaudit.OLD_KANA.with_name("shifted-words.txt")],
+            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA, readingsaudit.OLD_KANA.with_name("shifted-words.txt"),
+                              readingsaudit.OLD_KANA.with_name("common-split-words.txt")],
                                  age.call_args.args[0])
 
 

@@ -35,6 +35,7 @@ translate: note
 covers: file app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt
 covers: file app/src/main/resources/com/astrovm/crosstune/old-kana.txt
 covers: file app/src/main/resources/com/astrovm/crosstune/shifted-words.txt
+covers: file app/src/main/resources/com/astrovm/crosstune/common-split-words.txt
 
 Kuromoji
 by: Atilika Inc. and contributors

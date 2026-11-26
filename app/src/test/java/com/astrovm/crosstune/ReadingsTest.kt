@@ -121,6 +121,25 @@ class ReadingsTest {
     }
 
     @Test
+    fun colloquialWordsKeepRealWordsOutsidePhraseBoundaries() {
+        fun check() {
+            for ((line, word, lookup) in listOf(
+                Triple("友よええ歌を歌おう", "よ", "よ"),
+                Triple("君よええ夢を", "よ", "よ"),
+                Triple("声をめっちゃだせえ", "だせ", "だす"),
+                Triple("お願い、とにかくくれえ", "くれ", "くれる"),
+                Triple("これはええ", "は", "は"),
+                Triple("あめーなのに出る", "あめー", "あめ"),
+                Triple("なでなでやる", "なでやる", "なでる")
+            )) {
+                assertEquals(line, lookup, Readings.words(line, Script.JAPANESE).firstOrNull { it.text == word }?.lookup)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun colloquialAdjectiveBoundariesKeepKnownWordsAndPronouns() {
         fun check() {
             assertEquals("カレー", Readings.words("かれーを食べた", Script.JAPANESE).first().lookup)
@@ -128,9 +147,10 @@ class ReadingsTest {
                 assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
             }
             assertFalse(Readings.words("ボタンをおせえ", Script.JAPANESE).any { it.lookup == "おそい" })
-            assertEquals("ださい", Readings.words("だせえ服", Script.JAPANESE).first().lookup)
-            assertEquals("dasee fuku", Readings.of(listOf("だせえ服"), Script.JAPANESE).single().romanized)
+            assertEquals("だせる", Readings.words("だせえ服", Script.JAPANESE).first().lookup)
+            assertEquals("dase e fuku", Readings.of(listOf("だせえ服"), Script.JAPANESE).single().romanized)
             assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
+            assertEquals("すごい", Readings.words("すごくすげえ", Script.JAPANESE).last().lookup)
             assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
             val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
             assertEquals(listOf("死にた", "か", "ねえ", "の", "は", "お互い様"), negative.map { it.text })
@@ -151,7 +171,10 @@ class ReadingsTest {
             Triple("すげえ", "sugee", "すごい"),
             Triple("やべえ", "yabee", "やばい"), Triple("いてえ", "itee", "いたい"),
             Triple("うめえ", "umee", "うまい"), Triple("ねみい", "nemii", "ねむい"),
-            Triple("さみい", "samii", "さむい")
+            Triple("さみい", "samii", "さむい"), Triple("うぜえ", "uzee", "うざい"),
+            Triple("うぜー", "uzee", "うざい"), Triple("だせえ", "dasee", "ださい"),
+            Triple("こええ", "koee", "こわい"), Triple("はええ", "haee", "はやい"),
+            Triple("つええ", "tsuee", "つよい"), Triple("かっけえ", "kakkee", "かっこいい")
         )
         fun check() {
             for ((surface, romanized, base) in cases) {
@@ -159,6 +182,8 @@ class ReadingsTest {
                 val word = Readings.words(surface, Script.JAPANESE).single()
                 assertEquals(surface, surface, word.text)
                 assertEquals(surface, base, word.lookup)
+                val withParticle = Readings.words(surface + "よ", Script.JAPANESE)
+                assertEquals(surface + "よ", base, withParticle.first().lookup)
             }
         }
         check()
@@ -233,16 +258,12 @@ class ReadingsTest {
     fun shiftedWordsLookUpWhatWhereTheyStandSays() {
         // A line, a word in it, and what that word looks up.
         val cases = listOf(
-            // At the end of a phrase or before the noun it describes, the adjective, though a noun is spelled so too.
-            Triple("このジュースあめえ", "あめえ", "あまい"), Triple("コーヒーがあめえ", "あめえ", "あまい"),
+            // A marked subject, or a word on its own, can describe an adjective.
+            Triple("コーヒーがあめえ", "あめえ", "あまい"),
             Triple("あめえよ", "あめえ", "あまい"), Triple("あめえって", "あめえ", "あまい"),
-            Triple("返事がおせえな", "おせえ", "おそい"), Triple("おせえ返事", "おせえ", "おそい"),
-            Triple("あめえです", "あめえ", "あまい"), Triple("おせえでした", "おせえ", "おそい"),
-            Triple("あめえのか", "あめえ", "あまい"),
-            // Before a particle, the noun.
-            Triple("あめえは", "あめえ", "甘え"), Triple("おせえを外す", "おせえ", "抑え"),
-            Triple("きめえのいいやつ", "きめえ", "気前"),
-            Triple("なめえを教えて", "なめえ", "名前"), Triple("このなめえ", "なめえ", "名前"),
+            Triple("返事がおせえな", "おせえ", "おそい"), Triple("あめえです", "あめえ", "あまい"),
+            // The shifted noun has no competing real split in these lines.
+            Triple("このなめえ", "なめえ", "名前"),
             Triple("犬のなめえ", "なめえ", "名前"), Triple("なめえ", "なめえ", "名前"),
             // No noun is spelled だりい, so it stays the adjective before a particle too.
             Triple("だりいに決まってる", "だりい", "だるい"),
@@ -251,16 +272,9 @@ class ReadingsTest {
             Triple("おめえさ、お前のせいだ", "おめえ", "お前"), Triple("てめえ", "てめえ", "手前"),
             // After を, an adjective that describes a noun or is quoted.
             Triple("お前をやべえ奴だと思った", "やべえ", "やばい"), Triple("それをやべえって言った", "やべえ", "やばい"),
-            // The dictionary's verb before え, or before a noun, is the adjective.
-            Triple("きたねえ水", "きたねえ", "きたない"), Triple("きたねえな", "きたねえ", "きたない"),
-            Triple("体がいてえ", "いてえ", "いたい"), Triple("まじでいてえ", "いてえ", "いたい"),
-            Triple("動くと、いてえ", "いてえ", "いたい"), Triple("お前よええな", "よええ", "よわい"), Triple("俺よええ", "よええ", "よわい"),
-            Triple("あめえのおいしいね", "あめえ", "あまい"), Triple("百メートルぐれえ", "ぐれえ", "ぐらい"),
-            Triple("靴を脱いでいたら、いてえ", "いてえ", "いたい"), Triple("ここに来た。いてえ！", "いてえ", "いたい"),
-            Triple("人に言われてすげえ嬉しい", "すげえ", "すごい"), Triple("とってもおせえ", "おせえ", "おそい"),
-            Triple("まったくおせえ", "おせえ", "おそい"), Triple("本当におせえ", "おせえ", "おそい"),
-            Triple("針で、マジいてえ", "いてえ", "いたい"), Triple("目に入るとすげえいてえ", "いてえ", "いたい"),
-            Triple("まじうぜえ", "うぜえ", "うざい"),
+            // A subject or pronoun before a phrase-final adjective.
+            Triple("体がいてえ", "いてえ", "いたい"), Triple("お前よええな", "よええ", "よわい"), Triple("俺よええ", "よええ", "よわい"),
+            Triple("人に言われてすげえ嬉しい", "すげえ", "すごい"), Triple("目に入るとすげえいてえ", "すげえ", "すごい"), Triple("まじうぜえ", "うぜえ", "うざい"),
             // の after an adjective ends its phrase.
             Triple("やべえのが来た", "やべえ", "やばい"), Triple("すげえの", "すげえ", "すごい"),
             // A noun after a noun with nothing between can't be, so the adjective.
@@ -272,30 +286,20 @@ class ReadingsTest {
             Triple("かっけえ", "かっけえ", "かっこいい"), Triple("かっけー", "かっけー", "かっこいい"), Triple("かっけえ車", "かっけえ", "かっこいい"),
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
-            Triple("だせえ服", "だせえ", "ださい"), Triple("ちょれえ", "ちょれえ", "ちょろい"),
+            Triple("ちょれえ", "ちょれえ", "ちょろい"),
             // A particle after a noun joins the word when what follows it is no word: お前 か っけ え.
-            Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("おい、はええよ", "はええ", "はやい"),
-            Triple("疲れてねみい", "ねみい", "ねむい"),
+            Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("疲れてねみい", "ねみい", "ねむい"),
             // A verb split from a word, after て, is no helper verb.
             Triple("からくてかれえ", "かれえ", "からい"),
             // The が that joins two clauses ends the first.
             Triple("あいつはすげえが、弟は普通だ", "すげえが", "すごい"),
-            // After a number or its counter, a particle.
-            Triple("一時間ぐれえ待った", "ぐれえ", "ぐらい"), Triple("百ぐれえ", "ぐれえ", "ぐらい"), Triple("それぐれえなら大丈夫", "ぐれえ", "ぐらい"),
-            // A command said long is the adjective where the line marks one: its subject, a word of degree,
-            // the noun it describes, or an ending no command takes.
-            Triple("この部屋はくれえ", "くれえ", "くらい"), Triple("超くれえ", "くれえ", "くらい"), Triple("くれえ部屋", "くれえ", "くらい"),
-            Triple("おせえから帰る", "おせえ", "おそい"), Triple("おせえのか", "おせえ", "おそい"),
-            // An ending marks the adjective even after a noun a command could act on.
-            Triple("返事おせえのか", "おせえ", "おそい"), Triple("返事おせえでした", "おせえ", "おそい"),
-            Triple("返事おせえから帰る", "おせえ", "おそい"),
-            // Any command but くれ is the adjective with nothing before it to act on: alone, after a comma or a pronoun.
+            // A marked subject before a phrase-final adjective.
+            Triple("この部屋はくれえ", "くれえ", "くらい"),
+            // An adjective on its own or after a pronoun.
             Triple("おせえ", "おせえ", "おそい"), Triple("おせえよ", "おせえ", "おそい"), Triple("おせえよな", "おせえ", "おそい"),
-            Triple("おせえ！早くしろ", "おせえ", "おそい"), Triple("あいつおせえ", "おせえ", "おそい"), Triple("だせえ", "だせえ", "ださい"),
+            Triple("あいつおせえ", "おせえ", "おそい"), Triple("だせえ", "だせえ", "ださい"),
             Triple("だせえな", "だせえ", "ださい"), Triple("かてえ", "かてえ", "かたい"), Triple("なげえ", "なげえ", "ながい"),
-            Triple("ああ、なげえ", "なげえ", "ながい"), Triple("あいつもおせえ", "おせえ", "おそい"), Triple("今日、おせえ", "おせえ", "おそい"),
-            // A noun the dictionary read, drawn out, is still the adjective at the end.
-            Triple("このジュースあめー", "あめー", "あまい"),
+            Triple("あいつもおせえ", "おせえ", "おそい"),
             // Words that only look shifted.
             Triple("ねえ", "ねえ", "ねえ"), Triple("ねええ", "ねえ", "ねえ"), Triple("見てえ", "見て", "見る"),
             Triple("このカレーかれー", "かれー", "カレー")
@@ -306,11 +310,61 @@ class ReadingsTest {
                 assertEquals(line, lookup, word?.lookup)
             }
             for ((line, romanized) in listOf(
-                "このジュースあめえ" to "kono juusu amee", "おめえさ、何してる" to "omee sa、 nani shiteru",
+                "おめえさ、何してる" to "omee sa、 nani shiteru",
                 "お前をやべえと思った" to "omae o yabee to omotta", "強え" to "tsuee", "かっけえな" to "kakkee na",
                 "うぜーな" to "uzee na"
             )) {
                 assertEquals(line, romanized, Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun revisedColloquialBoundariesMatchMain() {
+        val cases = listOf(
+            "ぐれえ" to "ぐれ=ぐれる|え=え",
+            "おせえのか" to "おせえ=おせる|の=の|か=か",
+            "返事おせえのか" to "返事=返事|おせえ=おせる|の=の|か=か",
+            "返事おせえでした" to "返事=返事|おせえ=おせる|でした=です",
+            "返事おせえから帰る" to "返事=返事|おせえ=おせる|から=から|帰る=帰る",
+            "今日、おせえ" to "今日=今日|おせ=おせる|え=え",
+            "このジュースあめえ" to "この=この|ジュース=ジュース|あめ=あめ|え=え",
+            "おせえ返事" to "おせ=おせる|え=え|返事=返事",
+            "おせえでした" to "おせえ=おせる|でした=です",
+            "あめえのか" to "あめ=あめ|え=え|の=の|か=か",
+            "あめえは" to "あめ=あめ|え=え|は=は",
+            "おせえを外す" to "おせえ=おせる|を=を|外す=外す",
+            "きめえのいいやつ" to "きめえ=きめる|の=の|いい=いい|やつ=やつ",
+            "なめえを教えて" to "なめえ=なめる|を=を|教えて=教える",
+            "きたねえ水" to "きた=くる|ね=ね|え=え|水=水",
+            "きたねえな" to "きた=くる|ね=ね|え=え|な=な",
+            "まじでいてえ" to "まじで=まじ|いて=いる|え=え",
+            "動くと、いてえ" to "動くと=動く|いて=いる|え=え",
+            "あめえのおいしいね" to "あめ=あめ|え=え|の=の|おいしい=おいしい|ね=ね",
+            "百メートルぐれえ" to "百メートル=百|ぐれ=ぐれる|え=え",
+            "靴を脱いでいたら、いてえ" to "靴=靴|を=を|脱いで=脱ぐ|いたら=いる|いて=いる|え=え",
+            "ここに来た。いてえ！" to "ここ=ここ|に=に|来た=来る|いて=いる|え=え",
+            "とってもおせえ" to "とっても=とっても|おせ=おす|え=え",
+            "まったくおせえ" to "まったく=まったく|おせ=おす|え=え",
+            "本当におせえ" to "本当に=本当に|おせ=おす|え=え",
+            "針で、マジいてえ" to "針=針|で=で|マジ=マジ|いて=いる|え=え",
+            "だせえ服" to "だせ=だせる|え=え|服=服",
+            "おい、はええよ" to "おい=おい|は=は|ええ=ええ|よ=よ",
+            "一時間ぐれえ待った" to "一時間=一|ぐれえ=ぐれる|待った=待つ",
+            "百ぐれえ" to "百=百|ぐれ=ぐれる|え=え",
+            "それぐれえなら大丈夫" to "それ=それ|ぐれえ=ぐれる|なら=だ|大丈夫=大丈夫",
+            "超くれえ" to "超=超|くれ=くれる|え=え",
+            "くれえ部屋" to "くれ=くれる|え=え|部屋=部屋",
+            "おせえから帰る" to "おせえ=おせる|から=から|帰る=帰る",
+            "おせえ！早くしろ" to "おせえ=おせる|早く=早い|しろ=する",
+            "ああ、なげえ" to "ああ=ああ|なげ=なげる|え=え",
+            "このジュースあめー" to "この=この|ジュース=ジュース|あめー=あめ",
+        )
+        fun check() {
+            for ((line, words) in cases) {
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" })
             }
         }
         check()
