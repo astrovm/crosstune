@@ -798,7 +798,6 @@ internal class MediaSessionPlayback(
         return if (released) appFor(song, controllers) else appFor(song, controllers, app, token, session)
     }
 
-    /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
     /** The clock of the app a screen follows, steadied; see [of] for when it's begun again. */
     private inner class FollowedClock {
         private lateinit var clocks: SteadyClock
@@ -825,6 +824,7 @@ internal class MediaSessionPlayback(
         }
     }
 
+    /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
     private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
 
     /**
