@@ -43,7 +43,7 @@ person() { git -c user.name=test -c user.email=test@example.invalid "$@"; }
 # (64 KiB), so a reader that leaves a pipe early ends the writer with SIGPIPE.
 awk 'BEGIN { for (i = 0; i < 60000; i++) printf "語%05d\tご%05d\n", i, i }' > "$work/filler"
 list() { printf '# JMdict %s, by the Group\n%s\n' "$1" "$2"; cat "$work/filler"; }
-remade() { list 2000-02-01 "星空	ほしぞら$1" > "$TABLES/jmdict-readings.txt"; list 2000-02-01 "おもいで	思い出" > "$TABLES/old-kana.txt"; list 2000-02-01 "おまえ	お前" > "$TABLES/shifted-nouns.txt"; }
+remade() { list 2000-02-01 "星空	ほしぞら$1" > "$TABLES/jmdict-readings.txt"; list 2000-02-01 "おもいで	思い出" > "$TABLES/old-kana.txt"; list 2000-02-01 "おまえ	お前" > "$TABLES/shifted-words.txt"; }
 # As the workflow's propose job: a fresh checkout of main with all of origin's history and no other
 # local branch, the remade lists put in it, then propose.sh. This repository then fetches what it pushed.
 checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp -R "$TABLES/." "$work/ci/$TABLES/" && cp "$NOTICE_MANIFEST" "$work/ci/"; }
@@ -74,7 +74,7 @@ printf 'old documentation\n' > "$TABLES/notices/jmdict-documentation.txt"
 printf 'old digests\n' > "$NOTICE_MANIFEST"
 list 2000-01-01 "星空	ほしぞら" > "$TABLES/jmdict-readings.txt"
 list 2000-01-01 "おもいで	思い出" > "$TABLES/old-kana.txt"
-list 2000-01-01 "おまえ	お前" > "$TABLES/shifted-nouns.txt"
+list 2000-01-01 "おまえ	お前" > "$TABLES/shifted-words.txt"
 person add "$TABLES" "$NOTICE_MANIFEST" && person commit -q -m "chore: main" && main_to_origin
 
 # The same lists as main: nothing is pushed or asked.

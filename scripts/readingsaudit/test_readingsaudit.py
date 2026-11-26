@@ -112,6 +112,28 @@ class OldKana(unittest.TestCase):
         words.append(restricted)
         self.assertEqual({"おまえ": "お前", "てまえ": "手前"}, readingsaudit.shifted_nouns(words))
 
+    def test_shifted_adjectives_are_colloquial_kana_adjectives_with_an_ending_that_shifts(self):
+        colloquial = (["adj-i"], ["col"])
+        words = [
+            word([], [("うざい", [], False, ["*"])], [colloquial]),
+            word([], [("やばい", [], True, ["*"])], [(["adj-i"], ["sl"])]),
+            # Usually written in kana, though it has kanji.
+            word([("蘞い", [], False)], [("えぐい", [], False, ["*"])], [(["adj-i"], ["uk", "col"])]),
+            # Written in kanji, not colloquial, not an い adjective, too short, an ending that doesn't shift, or odd kana.
+            word([("凄い", [], True)], [("すごい", [], True, ["*"])], [colloquial]),
+            word([], [("あまい", [], True, ["*"])], [(["adj-i"], [])]),
+            word([], [("ちょろ", [], False, ["*"])], [(["adj-na"], ["col"])]),
+            word([], [("えい", [], False, ["*"])], [colloquial]),
+            word([], [("あおい", [], False, ["*"])], [colloquial]),
+            word([], [("いいい", [], False, ["*"])], [colloquial]),
+            word([], [("ウザい", [], False, ["*"])], [colloquial]),
+            word([], [("うぜい", ["ik"], False, ["*"])], [colloquial]),
+        ]
+        restricted = word([], [("ださい", [], False, ["*"]), ("だっさい", [], False, ["*"])], [colloquial])
+        restricted["sense"][0]["appliesToKana"] = ["ださい"]
+        words.append(restricted)
+        self.assertEqual(["うざい", "えぐい", "ださい", "やばい"], readingsaudit.shifted_adjectives(words))
+
     def test_kana_adjectives_keep_each_applicable_spelling_for_the_tokenizer(self):
         words = [
             word([("在り来たり", [], False), ("在り来り", ["sK"], False)],
@@ -624,7 +646,7 @@ class Main(unittest.TestCase):
             with mock.patch.object(readingsaudit, "age", return_value=1) as age, self.assertRaises(SystemExit) as stop:
                 readingsaudit.main(["age"])
             self.assertEqual(1, stop.exception.code)
-            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA, readingsaudit.OLD_KANA.with_name("shifted-nouns.txt")],
+            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA, readingsaudit.OLD_KANA.with_name("shifted-words.txt")],
                                  age.call_args.args[0])
 
 

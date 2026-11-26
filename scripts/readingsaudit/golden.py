@@ -50,7 +50,7 @@ READING_SOURCES = (
     "app/src/test/java/com/astrovm/crosstune/TestUniDic.kt",
     "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt",
     "app/src/main/resources/com/astrovm/crosstune/old-kana.txt",
-    "app/src/main/resources/com/astrovm/crosstune/shifted-nouns.txt",
+    "app/src/main/resources/com/astrovm/crosstune/shifted-words.txt",
 )
 # The dictionaries are Kuromoji's jars, named with their version in the app's build file, or in Gradle's version catalog
 # when the build moves them there.

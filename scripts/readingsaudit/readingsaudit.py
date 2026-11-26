@@ -217,6 +217,27 @@ def shifted_nouns(words):
     return {kana: next(iter(forms)) for kana, forms in sorted(found.items()) if len(forms) == 1}
 
 
+# The kana before an adjective's い that a shifted ending can change: ざ in うざい, said うぜえ, or む in さむい, said さみい.
+SHIFTING_KANA = "かこがごさそざぞたとだどなのはほばぼぱぽまもらろわやよくぐすずつぬふぶぷむる"
+
+
+def shifted_adjectives(words):
+    """Colloquial and slang い adjectives JMdict writes in kana, which IPADIC can lack: うざい, ださい."""
+    found = set()
+    for entry in words:
+        for sense in entry.get("sense", []):
+            misc = set(sense.get("misc", []))
+            if "adj-i" not in sense.get("partOfSpeech", []) or not misc & {"col", "sl"} or (entry["kanji"] and "uk" not in misc):
+                continue
+            for kana in entry["kana"]:
+                text = kana["text"]
+                if ("*" in sense.get("appliesToKana", ["*"]) or text in sense["appliesToKana"]) and len(text) >= 3 and \
+                        text[-1] == "い" and text[-2] in SHIFTING_KANA and all("ぁ" <= c <= "ゖ" for c in text) and \
+                        not set(kana["tags"]) & ODD_KANA:
+                    found.add(text)
+    return sorted(found)
+
+
 def old_kana(words):
     """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with ひ, ふ or ほ after their first kana.
 
@@ -257,15 +278,18 @@ def oldkana(folder):
     """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     no_downgrade(jmdict["dictDate"], OLD_KANA)
-    no_downgrade(jmdict["dictDate"], OLD_KANA.with_name("shifted-nouns.txt"))
+    no_downgrade(jmdict["dictDate"], OLD_KANA.with_name("shifted-words.txt"))
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     small = small_kana(jmdict["words"])
     adjectives = kana_adjectives(jmdict["words"])
     shifted = shifted_nouns(jmdict["words"])
-    OLD_KANA.with_name("shifted-nouns.txt").write_text("\n".join(header[:3] + ["# Common nouns and pronouns in -ae, with their common written form.",
+    shifted_adjective = shifted_adjectives(jmdict["words"])
+    OLD_KANA.with_name("shifted-words.txt").write_text("\n".join(header[:3] + ["# Common nouns and pronouns in -ae, with their common written form,",
+                            "# then ~ colloquial and slang い adjectives in kana, for IPADIC, which lacks some.",
                             "# Made by scripts/readingsaudit/readingsaudit.py oldkana."] +
-                            [f"{kana}\t{written}" for kana, written in shifted.items()]) + "\n")
+                            [f"{kana}\t{written}" for kana, written in shifted.items()] +
+                            [f"~{kana}" for kana in shifted_adjective]) + "\n")
     OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern
                                    + [f"+{kana}\t{lookup}" for kana, lookup in small.items()]
                                    + [f"~{kana}\t" + "\t".join(forms) for kana, forms in adjectives.items()]) + "\n")
@@ -783,7 +807,7 @@ def main(argv=None):
     elif args.step == "fetch":
         fetch(folder, args.tag)
     elif args.step == "age":
-        sys.exit(age([TABLE, OLD_KANA, OLD_KANA.with_name("shifted-nouns.txt")], datetime.date.today()))
+        sys.exit(age([TABLE, OLD_KANA, OLD_KANA.with_name("shifted-words.txt")], datetime.date.today()))
     elif args.step == "lines":
         # wholelines.py reads this module's audit too.
         import wholelines

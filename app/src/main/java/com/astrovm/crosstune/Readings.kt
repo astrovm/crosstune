@@ -1244,8 +1244,9 @@ internal object Readings {
         private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
+    /** Each kana of the え row, what the shifted adjective said before it: すげえ from すごい, こええ from こわい, はええ from はやい, つええ from つよい. */
     private val shiftedE = mapOf(
-        'け' to "かこ", 'げ' to "がご", 'せ' to "さそ", 'ぜ' to "ざぞ", 'て' to "たと", 'で' to "だど",
+        'え' to "わやよ", 'け' to "かこ", 'げ' to "がご", 'せ' to "さそ", 'ぜ' to "ざぞ", 'て' to "たと", 'で' to "だど",
         'ね' to "なの", 'へ' to "はほ", 'べ' to "ばぼ", 'ぺ' to "ぱぽ", 'め' to "まも", 'れ' to "らろ"
     )
     /** Particles a noun takes: before them a shifted word is the noun, あめえは. */
@@ -1264,7 +1265,8 @@ internal object Readings {
         val stem = surface.dropLast(1)
         val before = stem.lastOrNull() ?: return emptyList()
         return when (surface.last()) {
-            'え', 'ー' -> shiftedE[before]?.map { stem.dropLast(1) + it + "い" }.orEmpty() +
+            // かっけえ shifts かっこいい's こ and says its いい as え.
+            'え', 'ー' -> shiftedE[before]?.let { row -> row.map { stem.dropLast(1) + it + "い" } + (stem.dropLast(1) + row.last() + "いい") }.orEmpty() +
                 if (isHan(before)) listOf(stem + "い") else emptyList()
             'い' -> listOfNotNull(shiftedI[before]?.let { stem.dropLast(1) + it + "い" }) +
                 if (before in shiftedI && stem.getOrNull(stem.lastIndex - 1)?.let(::isHan) == true) listOf(stem.dropLast(1) + "い") else emptyList()
@@ -1272,12 +1274,15 @@ internal object Readings {
         }
     }
 
-    private val shiftedNouns: Map<String, String> by lazy {
-        checkNotNull(Readings::class.java.getResourceAsStream("/com/astrovm/crosstune/shifted-nouns.txt"))
-            .bufferedReader().useLines { lines ->
-                lines.filterNot { it.startsWith('#') }.associate { it.substringBefore('\t') to it.substringAfter('\t') }
-            }
+    /** JMdict's nouns in -ae with their written form, おまえ and お前, and its kana adjectives IPADIC can lack, ~うざい. */
+    private val shiftedWords: Pair<List<String>, List<String>> by lazy {
+        checkNotNull(Readings::class.java.getResourceAsStream("/com/astrovm/crosstune/shifted-words.txt"))
+            .bufferedReader().useLines { lines -> lines.filterNot { it.startsWith('#') }.partition { it.startsWith('~') } }
     }
+    private val shiftedNouns: Map<String, String> by lazy {
+        shiftedWords.second.associate { it.substringBefore('\t') to it.substringAfter('\t') }
+    }
+    private val shiftedKanaAdjectives: Set<String> by lazy { shiftedWords.first.map { it.drop(1) }.toSet() }
 
     private fun shiftedNoun(surface: String): Piece? {
         if (surface.length < 3 || surface.last() !in "えー" || surface.any(::isHan)) return null
@@ -1291,14 +1296,18 @@ internal object Readings {
 
     private fun shiftedAdjective(surface: String): Piece? {
         for (root in shiftedRoots(surface)) {
-            val ipadic = tokenizer.knownWord(root)?.takeIf { it.partOfSpeechLevel1 == "形容詞" }
-            val reading = ipadic?.reading ?: continue
+            // The adjective itself, not a form of a longer one: かわい is part of かわいい.
+            val ipadic = tokenizer.knownWord(root)?.takeIf { it.partOfSpeechLevel1 == "形容詞" && it.baseForm == root }
+            val reading = ipadic?.reading ?: root.takeIf { it in shiftedKanaAdjectives } ?: continue
             val kana = hiragana(reading)
-            val vowel = kana.getOrNull(kana.lastIndex - 1) ?: continue
+            // The kana that shifts, and the ending said after it: こ and いい in かっこいい, ご and い in すごい.
+            val ending = if (root.endsWith("いい")) 2 else 1
+            val vowel = kana.getOrNull(kana.length - ending - 1) ?: continue
             val shifted = if (surface.last() == 'い') shiftedI.entries.firstOrNull { it.value == vowel }?.key else
                 shiftedE.entries.firstOrNull { vowel in it.value }?.key
             if (shifted == null) continue
-            return Piece(surface, kana.dropLast(2) + shifted + if (surface.last() == 'い') "い" else "え", "形容詞", "自立", root, reader = Reader.RULES)
+            val kept = kana.dropLast(ending + 1)
+            return Piece(surface, kept + shifted + if (surface.last() == 'い') "い" else "え", "形容詞", "自立", root, reader = Reader.RULES)
         }
         return null
     }
@@ -1358,7 +1367,7 @@ internal object Readings {
                 Place.OTHER -> null
             }
             // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
-            // あいつきめえ is no 気前, and きめえ alone stays as it was.
+            // なめえ alone is 名前.
             noun != null -> noun.takeIf { place == Place.ARGUMENT || (span.first().kind != "動詞" && before?.kind != "名詞") }
             else -> adjective?.takeIf { place != Place.ARGUMENT }
         }
@@ -1499,9 +1508,13 @@ internal object Readings {
                     parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
                 }
             } else null
+            // A copula after なでなで, standard or Kansai: なでなでだ, なでなでやん, なでなでやろ.
+            val copulaNext = (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や", "やん")) || next?.base == "やる"
             // A sentence-final が can be labelled as a conjunction, though it follows the noun.
             val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
-            val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
+            // IPADIC takes the Kansai やろ for a form of やる: 花やろ has it as や.
+            val copula = (piece.kind == "助動詞" && piece.base in setOf("だ", "です")) || piece.base == "やる"
+            val nounCopula = if (nounBefore && copula) {
                 val afterNoun = pieces("花" + pieces.drop(index).joinToString("") { it.surface }).drop(1)
                 afterNoun.firstOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助動詞" }
             } else null
@@ -1566,13 +1579,13 @@ internal object Readings {
                     out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
                 }
                 // The passive される can instead leave な and で as particles.
-                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))) -> {
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞" || copulaNext) -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
                 }
                 // Before する or a particle, IPADIC can split these nouns into なでる pieces.
                 piece.surface == "なで" && last != null &&
-                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && (next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))))) -> {
+                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && (next?.kind == "助詞" || copulaNext))) -> {
                     val noun = last.surface + piece.surface
                     out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
                 }

@@ -6,7 +6,7 @@
 # propose.test.sh runs it on a local repository and a fake gh.
 set -euo pipefail
 : "${BRANCH:?}" "${TABLES:?}" "${NOTICE_MANIFEST:?}" "${SOURCE_COMMIT:?}" "${TAG:?}" "${RUN:?}"
-lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt" "$TABLES/shifted-nouns.txt")
+lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt" "$TABLES/shifted-words.txt")
 snapshot=("${lists[@]}" "$TABLES/notices/edrdg-licence.txt" "$TABLES/notices/jmdict-documentation.txt" "$NOTICE_MANIFEST")
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 

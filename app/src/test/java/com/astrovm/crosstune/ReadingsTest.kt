@@ -128,8 +128,8 @@ class ReadingsTest {
                 assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
             }
             assertFalse(Readings.words("ボタンをおせえ", Script.JAPANESE).any { it.lookup == "おそい" })
-            assertEquals("だせる", Readings.words("だせえ", Script.JAPANESE).first().lookup)
-            assertEquals("dase e", Readings.of(listOf("だせえ"), Script.JAPANESE).single().romanized)
+            assertEquals("ださい", Readings.words("だせえ", Script.JAPANESE).first().lookup)
+            assertEquals("dasee", Readings.of(listOf("だせえ"), Script.JAPANESE).single().romanized)
             assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
             assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
             val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
@@ -194,8 +194,9 @@ class ReadingsTest {
     @Test
     fun colloquialUzaDoesNotDependOnUniDicBeingDownloaded() {
         fun reading() = Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized
-        assertEquals("u ze e", reading())
-        assertEquals("u ze e", TestUniDic.reading(::reading))
+        // IPADIC has no うざい: JMdict's colloquial adjectives tell it.
+        assertEquals("uzee", reading())
+        assertEquals("uzee", TestUniDic.reading(::reading))
     }
 
     @Test
@@ -255,8 +256,19 @@ class ReadingsTest {
             Triple("体がいてえ", "いてえ", "いたい"), Triple("まじでいてえ", "いてえ", "いたい"),
             // の after an adjective ends its phrase.
             Triple("やべえのが来た", "やべえ", "やばい"), Triple("すげえの", "すげえ", "すごい"),
+            // A noun after a noun with nothing between can't be, so the adjective.
+            Triple("あいつきめえ", "きめえ", "きもい"), Triple("きめえ", "きめえ", "きもい"), Triple("きめー", "きめー", "きもい"),
+            // え said for わ, や or よ, and かっこいい's いい said as え.
+            Triple("こええ", "こええ", "こわい"), Triple("こえー", "こえー", "こわい"), Triple("こええ話", "こええ", "こわい"),
+            Triple("はええよ", "はええ", "はやい"), Triple("早え", "早え", "早い"), Triple("つええ", "つええ", "つよい"),
+            Triple("強え", "強え", "強い"), Triple("よええ", "よええ", "よわい"), Triple("弱え", "弱え", "弱い"),
+            Triple("かっけえ", "かっけえ", "かっこいい"), Triple("かっけー", "かっけー", "かっこいい"), Triple("かっけえ車", "かっけえ", "かっこいい"),
+            // Adjectives IPADIC lacks, from JMdict's colloquial ones.
+            Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
+            Triple("だせえ", "だせえ", "ださい"), Triple("だせえ服", "だせえ", "ださい"), Triple("ちょれえ", "ちょれえ", "ちょろい"),
             // Words that only look shifted.
-            Triple("ねえ", "ねえ", "ねえ"), Triple("このカレーかれー", "かれー", "カレー")
+            Triple("ねえ", "ねえ", "ねえ"), Triple("ねええ", "ねえ", "ねえ"), Triple("見てえ", "見て", "見る"),
+            Triple("このカレーかれー", "かれー", "カレー")
         )
         fun check() {
             for ((line, text, lookup) in cases) {
@@ -265,7 +277,8 @@ class ReadingsTest {
             }
             for ((line, romanized) in listOf(
                 "このジュースあめえ" to "kono juusu amee", "おめえさ、何してる" to "omee sa、 nani shiteru",
-                "お前をやべえと思った" to "omae o yabee to omotta"
+                "お前をやべえと思った" to "omae o yabee to omotta", "強え" to "tsuee", "かっけえな" to "kakkee na",
+                "うぜーな" to "uzee na"
             )) {
                 assertEquals(line, romanized, Readings.of(listOf(line), Script.JAPANESE).single().romanized)
             }
@@ -287,8 +300,8 @@ class ReadingsTest {
             "君といてえ" to "君=君|と=と|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
             "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
-            // A noun after a noun with nothing between, which can't be.
-            "あいつきめえ" to "あいつ=あいつ|きめ=きめる|え=え",
+            // Words that only end in え: a noun, a verb, and a verb after its object.
+            "声え" to "声=声|え=え", "こえを出して" to "こえ=こえる|を=を|出して=出す", "金をだせえ" to "金=金|を=を|だせ=だせる|え=え",
             // A word before a particle that no noun list has.
             "あけえの壺" to "あけえ=あける|の=の|壺=壺",
             "かれえを掛け軸にした" to "かれえ=かれる|を=を|掛け軸=掛け軸|に=に|した=する",
@@ -492,7 +505,7 @@ class ReadingsTest {
 
     @Test
     fun nadenadeBeforeCopulasReadsLikeAnotherNoun() {
-        fun read() = listOf("やけど", "やで", "や", "や犬", "だ", "だが", "だった", "です").map { ending ->
+        fun read() = listOf("やけど", "やで", "や", "や犬", "やん", "やんか", "やろ", "だ", "だが", "だった", "です").map { ending ->
             fun reading(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized to
                 Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
             val (romanized, words) = reading("花" + ending)

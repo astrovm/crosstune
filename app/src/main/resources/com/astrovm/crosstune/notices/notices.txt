@@ -34,7 +34,7 @@ note: Crosstune's word lists made from JMdict are changed. The readings: only wo
 translate: note
 covers: file app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt
 covers: file app/src/main/resources/com/astrovm/crosstune/old-kana.txt
-covers: file app/src/main/resources/com/astrovm/crosstune/shifted-nouns.txt
+covers: file app/src/main/resources/com/astrovm/crosstune/shifted-words.txt
 
 Kuromoji
 by: Atilika Inc. and contributors
