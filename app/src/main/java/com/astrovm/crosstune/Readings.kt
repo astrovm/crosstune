@@ -477,7 +477,6 @@ internal object Readings {
 
     /** Let the dictionary distinguish particles after an adjective from a word such as いろいろ. */
     private fun adjectiveParticles(suffix: String): List<com.atilika.kuromoji.ipadic.Token>? {
-        if (suffix.isEmpty()) return emptyList()
         val tokens = tokenizer.tokenize("高い" + suffix)
         return tokens.drop(1).takeIf { tokens.first().surface == "高い" && it.all { token -> token.partOfSpeechLevel1 == "助詞" } }
     }
@@ -1153,7 +1152,9 @@ internal object Readings {
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
+        var skip = -1
         for ((index, piece) in pieces.withIndex()) {
+            if (index == skip) continue
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             // 分 after a number after 寸 or 割 is a tenth of it, ぶ: 四寸四分, 五割五分. Elsewhere, minutes.
@@ -1181,8 +1182,10 @@ internal object Readings {
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
+            // IPADIC takes いって for いう + て, even when って quotes an adjective.
+            val quote = piece.surface == "いっ" && next?.surface == "て"
             val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
-                adjectiveParticles(piece.surface.drop(1))
+                adjectiveParticles(piece.surface.drop(1) + if (quote) "て" else "")
             } else null
             when {
                 // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
@@ -1191,12 +1194,11 @@ internal object Readings {
                         (it.kind == "助動詞" && it.surface == "で" && it.base == "だ") } != false &&
                     adjectiveEnd != null -> {
                     val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
-                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base,
-                        end = piece.end - piece.surface.length + 1, reader = Reader.RULES)
+                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, reader = Reader.RULES)
                     out += adjectiveEnd.map { token ->
-                        Piece(token.surface, hiragana(token.reading), "助詞", "終助詞",
-                            end = piece.end - piece.surface.length + token.position - 1 + token.surface.length, reader = Reader.RULES)
+                        Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
                     }
+                    if (quote) skip = index + 1
                 }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {

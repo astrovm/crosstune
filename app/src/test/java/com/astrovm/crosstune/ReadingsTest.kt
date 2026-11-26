@@ -100,7 +100,8 @@ class ReadingsTest {
         assertJapaneseBoundaries(listOf(
             Triple("だりい", "darii", listOf("だりい")),
             Triple("だりいよ", "darii yo", listOf("だりい", "よ")),
-            Triple("だりいし", "darii shi", listOf("だりい", "し")),
+            Triple("だりいって", "darii tte", listOf("だりい", "って")),
+            Triple("だりいし", "dariishi", listOf("だりいし")),
             Triple("だりいね", "darii ne", listOf("だりい", "ね")),
             Triple("だりいわ", "darii wa", listOf("だりい", "わ")),
             Triple("だりいぞ", "darii zo", listOf("だりい", "ぞ")),
@@ -117,6 +118,45 @@ class ReadingsTest {
         fun lookup() = Readings.words("だりい", Script.JAPANESE).single().lookup
         assertEquals("だるい", lookup())
         assertEquals("だるい", TestUniDic.reading(::lookup))
+    }
+
+    @Test
+    fun dariiParticlesFollowTheSameBoundariesAsOtherAdjectives() {
+        fun compare() {
+            for (ending in listOf("よ", "ね", "し", "けど", "から", "って")) {
+                val high = "高い$ending"
+                val tired = "だりい$ending"
+                val highReading = Readings.of(listOf(high), Script.JAPANESE).single().romanized
+                val tiredReading = Readings.of(listOf(tired), Script.JAPANESE).single().romanized
+                assertEquals(ending, highReading.replace("takai", "darii"), tiredReading)
+                assertEquals(ending, Readings.words(high, Script.JAPANESE).map { it.text.replace("高い", "だりい") },
+                    Readings.words(tired, Script.JAPANESE).map { it.text })
+                assertEquals(ending, "だるい", Readings.words(tired, Script.JAPANESE).first().lookup)
+            }
+            val verb = Readings.words("飲んだりいって", Script.JAPANESE)
+            assertEquals(listOf("飲んだり", "いって"), verb.map { it.text })
+            assertEquals(listOf("飲む", "いう"), verb.map { it.lookup })
+        }
+        compare()
+        TestUniDic.reading(::compare)
+    }
+
+    @Test
+    fun dariiParticlesKeepTheirPlaceBetweenReadings() {
+        fun check() {
+            for (line in listOf("今日はだりいよね本当", "今日はだりいしね本当", "今日はだりいって本当")) {
+                val original = Readings.of(listOf(line), Script.JAPANESE)
+                val corrected = Readings.corrected(original, listOf(ReadingFix(0, "本当", "ほんと", Reader.SUNG)))
+                for (reading in listOf(original.single(), corrected.single())) {
+                    assertEquals(line, reading.parts.joinToString("") { it.text })
+                    assertEquals("きょうは" + line.substringAfter("今日は").substringBefore("本当") +
+                        if (reading == corrected.single()) "ほんと" else "ほんとう", reading.reading)
+                }
+                assertEquals("ほんと", corrected.single().parts.first { it.text == "本当" }.reading)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
     }
 
     @Test
