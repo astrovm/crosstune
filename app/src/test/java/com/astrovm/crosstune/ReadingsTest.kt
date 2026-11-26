@@ -96,11 +96,68 @@ class ReadingsTest {
     ))
 
     @Test
-    fun dariiIsNotAJoiningEnding() {
-        fun read() = Readings.of(listOf("だりい"), Script.JAPANESE).single().romanized to
-            Readings.words("だりい", Script.JAPANESE).map { it.text }
-        assertEquals("dari i" to listOf("だり", "い"), read())
-        assertEquals("dari i" to listOf("だり", "い"), TestUniDic.reading(::read))
+    fun dariiIsOneAdjectiveButTariAfterVerbsStaysSeparate() {
+        assertJapaneseBoundaries(listOf(
+            Triple("だりい", "darii", listOf("だりい")),
+            Triple("だりいよ", "darii yo", listOf("だりい", "よ")),
+            Triple("だりいって", "darii tte", listOf("だりい", "って")),
+            Triple("だりいし", "dariishi", listOf("だりいし")),
+            Triple("だりいね", "darii ne", listOf("だりい", "ね")),
+            Triple("だりいわ", "darii wa", listOf("だりい", "わ")),
+            Triple("だりいぞ", "darii zo", listOf("だりい", "ぞ")),
+            Triple("だりいぜ", "darii ze", listOf("だりい", "ぜ")),
+            Triple("静かにだりい", "shizuka ni darii", listOf("静か", "に", "だりい")),
+            Triple("まじでだりい", "majide darii", listOf("まじで", "だりい")),
+            Triple("クソだりいな", "kuso darii na", listOf("クソ", "だりい", "な")),
+            Triple("飲んだりいろいろ", "nondari iroiro", listOf("飲んだり", "いろいろ")),
+            Triple("読んだりいたずら", "yondari itazura", listOf("読んだり", "いたずら")),
+            Triple("読んだりい", "yondari i", listOf("読んだり", "い")),
+            Triple("遊んだりいろいろ", "asondari iroiro", listOf("遊んだり", "いろいろ")),
+            Triple("だりいろいろ", "dari iroiro", listOf("だり", "いろいろ")),
+        ))
+        fun lookup() = Readings.words("だりい", Script.JAPANESE).single().lookup
+        assertEquals("だるい", lookup())
+        assertEquals("だるい", TestUniDic.reading(::lookup))
+    }
+
+    @Test
+    fun dariiParticlesFollowTheSameBoundariesAsOtherAdjectives() {
+        fun compare() {
+            for (ending in listOf("よ", "ね", "し", "けど", "から", "って", "ってば", "っていうか", "っていうか、本当")) {
+                val high = "高い$ending"
+                val tired = "だりい$ending"
+                val highReading = Readings.of(listOf(high), Script.JAPANESE).single().romanized
+                val tiredReading = Readings.of(listOf(tired), Script.JAPANESE).single().romanized
+                assertEquals(ending, highReading.replace("takai", "darii"), tiredReading)
+                assertEquals(ending, Readings.words(high, Script.JAPANESE).map { it.text.replace("高い", "だりい") },
+                    Readings.words(tired, Script.JAPANESE).map { it.text })
+                assertEquals(ending, "だるい", Readings.words(tired, Script.JAPANESE).first().lookup)
+            }
+            val verb = Readings.words("飲んだりいって", Script.JAPANESE)
+            assertEquals(listOf("飲んだり", "いって"), verb.map { it.text })
+            assertEquals(listOf("飲む", "いう"), verb.map { it.lookup })
+            assertEquals(listOf("遊んだり", "いって", "来た"), Readings.words("遊んだりいって来た", Script.JAPANESE).map { it.text })
+        }
+        compare()
+        TestUniDic.reading(::compare)
+    }
+
+    @Test
+    fun dariiParticlesKeepTheirPlaceBetweenReadings() {
+        fun check() {
+            for (line in listOf("今日はだりいよね本当", "今日はだりいしね本当", "今日はだりいって本当", "今日はだりいっていうか本当")) {
+                val original = Readings.of(listOf(line), Script.JAPANESE)
+                val corrected = Readings.corrected(original, listOf(ReadingFix(0, "本当", "ほんと", Reader.SUNG)))
+                for (reading in listOf(original.single(), corrected.single())) {
+                    assertEquals(line, reading.parts.joinToString("") { it.text })
+                    assertEquals("きょうは" + line.substringAfter("今日は").substringBefore("本当") +
+                        if (reading == corrected.single()) "ほんと" else "ほんとう", reading.reading)
+                }
+                assertEquals("ほんと", corrected.single().parts.first { it.text == "本当" }.reading)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
     }
 
     @Test

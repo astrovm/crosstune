@@ -111,9 +111,9 @@ internal object Readings {
      * 16 for a word before small っ that left the tokenizer with no way through.
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
-     * 24 to keep なでなで together before particles.
+     * 25 to keep なでなで together before particles and copulas.
      */
-    const val VERSION = 24
+    const val VERSION = 25
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1195,6 +1195,21 @@ internal object Readings {
         private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
+    /** Read whole pieces after だり as after 高い; a particle may span several original pieces. */
+    private fun adjectiveParticles(pieces: List<Piece>, start: Int): Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? {
+        val suffix = StringBuilder()
+        var found: Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? = null
+        val candidates = pieces.drop(start).take(8).takeWhile { it.surface.all(Char::isLetter) }
+        for ((index, piece) in candidates.withIndex()) {
+            suffix.append(if (index == 0) piece.surface.drop(1) else piece.surface)
+            val tokens = tokenizer.tokenize("高い" + suffix)
+            if (tokens.first().surface == "高い" && tokens.drop(1).all { it.partOfSpeechLevel1 == "助詞" }) {
+                found = index + 1 to tokens.drop(1)
+            }
+        }
+        return found
+    }
+
     /**
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん, also
      * written 2人. Kept to numbers of people, the ones lyrics are full of, and 一 before a counter,
@@ -1203,7 +1218,9 @@ internal object Readings {
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
+        var skipUntil = 0
         for ((index, piece) in pieces.withIndex()) {
+            if (index < skipUntil) continue
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             // 分 after a number after 寸 or 割 is a tenth of it, ぶ: 四寸四分, 五割五分. Elsewhere, minutes.
@@ -1252,6 +1269,9 @@ internal object Readings {
             val nounParticle = if (nounBefore && piece.kind == "助詞" && piece.subkind == "接続助詞") {
                 pieces("花" + piece.surface).drop(1).singleOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助詞" }
             } else null
+            val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
+                adjectiveParticles(pieces, index)
+            } else null
             when {
                 tailParticles != null -> {
                     out.removeAt(out.lastIndex)
@@ -1265,6 +1285,18 @@ internal object Readings {
                 }
                 nounParticle != null -> out += nounParticle
                 nounCopula != null -> out += nounCopula
+                // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
+                last?.surface == "だり" && piece.surface.startsWith("い") &&
+                    out.getOrNull(out.lastIndex - 1)?.let { it.kind !in setOf("動詞", "形容詞", "助動詞") ||
+                        (it.kind == "助動詞" && it.surface == "で" && it.base == "だ") } != false &&
+                    adjectiveEnd != null -> {
+                    val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
+                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, reader = Reader.RULES)
+                    out += adjectiveEnd.second.map { token ->
+                        Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
+                    }
+                    skipUntil = index + adjectiveEnd.first
+                }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {
                     val (surface, base) = splitTari
