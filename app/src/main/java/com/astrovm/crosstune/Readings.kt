@@ -1400,11 +1400,7 @@ internal object Readings {
      * noun stands, the dictionary's own one [drawn] out stays: あめーが is あめ, candy, as likely as 甘え.
      */
     private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, drawn: Boolean, alone: Boolean): Piece? = when {
-        noun != null && adjective != null -> when (place) {
-            Place.PREDICATE, Place.MODIFIES -> adjective
-            Place.ARGUMENT -> noun.takeUnless { drawn }
-            Place.OTHER -> null
-        }
+        noun != null && adjective != null -> adjective.takeIf { place == Place.PREDICATE || place == Place.MODIFIES }
         noun != null -> noun.takeIf { !drawn && (place == Place.ARGUMENT || alone) }
         else -> adjective?.takeIf { place != Place.ARGUMENT }
     }
