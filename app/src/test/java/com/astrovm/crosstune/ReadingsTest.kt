@@ -309,6 +309,14 @@ class ReadingsTest {
     }
 
     @Test
+    fun repeatedNadeAtEndKeepsItsText() {
+        fun read() = Readings.of(listOf("なでなで"), Script.JAPANESE).single().reading to
+            Readings.words("なでなで", Script.JAPANESE).joinToString("") { it.text }
+        val expected = "なでなで" to "なでなで"
+        assertEquals(listOf(expected, expected), listOf(read(), TestUniDic.reading(::read)))
+    }
+
+    @Test
     fun ordinaryParticlesKeepTheirReadings() = assertJapaneseBoundaries(listOf(
         Triple("彼は勝手", "kare wa katte", listOf("彼", "は", "勝手")),
         Triple("なでかって聞いた", "nade katte kiita", listOf("なで", "かって", "聞いた")),
