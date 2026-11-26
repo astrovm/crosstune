@@ -264,15 +264,15 @@ internal object Readings {
     }
 
     /** IPADIC can call 何だ an interjection after a topic; both dictionaries split an opening なんだ. */
-    private fun nanDa(pieces: List<Piece>): List<Piece> = buildList {
+    private fun nanDa(pieces: List<Piece>): List<Piece> = finalNanjaParticle(buildList {
         var skipUntil = 0
         for (at in pieces.indices) {
             if (at < skipUntil) continue
             val piece = pieces[at]
             val explanation = pieces.interrogativePiece(at)
             if (explanation != null) {
-                addAll(explanation)
-                skipUntil = pieces.size
+                addAll(explanation.first)
+                skipUntil = at + explanation.second
                 continue
             }
             val length = pieces.nanDaRewriteLength(at)
@@ -298,10 +298,21 @@ internal object Readings {
                 else -> add(piece)
             }
         }
+    })
+
+    private fun finalNanjaParticle(pieces: List<Piece>): List<Piece> = pieces.mapIndexed { at, piece ->
+        val head = pieces.getOrNull(at - 2)
+        val before = pieces.getOrNull(at - 1)
+        val after = pieces.getOrNull(at + 1)
+        val explanation = head?.surface == "なん" && head.base == "なんだ" && before?.surface == "じゃ"
+        val finalI = piece.surface == "い" && piece.base == "いる" && (after == null || after.kind == "記号")
+        if (explanation && finalI) {
+            Piece("い", "い", "助詞", "終助詞", reader = Reader.RULES)
+        } else piece
     }
 
     /** Read the copula after 何なん as it would be read after a noun, even if the dictionary joined its pieces. */
-    private fun List<Piece>.interrogativePiece(at: Int): List<Piece>? {
+    private fun List<Piece>.interrogativePiece(at: Int): Pair<List<Piece>, Int>? {
         if (getOrNull(at - 1)?.surface !in setOf("何", "なん")) return null
         val suffix = drop(at).joinToString("") { it.surface }
         if (!suffix.startsWith("なん")) return null
@@ -314,7 +325,15 @@ internal object Readings {
         val de = first.surface == "で" && first.kind == "助詞"
         if (!first.startsCopula && !first.surface.startsWith("じゃ") && !de) return null
         if (tail.joinToString("") { it.surface } != copula) return null
-        return listOf(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES)) + tail
+        val boundaries = drop(at).runningFold(0) { length, piece -> length + piece.surface.length }.drop(1)
+        var end = 2
+        val last = tail.indexOfFirst { piece ->
+            end += piece.surface.length
+            end in boundaries
+        }
+        if (last < 0) return null
+        val consumed = boundaries.indexOf(end) + 1
+        return (listOf(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES)) + tail.take(last + 1)) to consumed
     }
 
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
@@ -2047,9 +2066,7 @@ internal object Readings {
                 (previous.surface == "\"" && straightQuotes % 2 == 1) ||
                 (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
             val explanatoryJa = previous?.surface == "なん" && previous.base == "なんだ" && piece.surface == "じゃ"
-            val afterExplanatoryJa = previous?.surface == "じゃ" && piece.base == "ない" &&
-                words.lastOrNull()?.firstOrNull()?.let { it.surface == "なん" && it.base == "なんだ" } == true
-            val join = previous != null && (withPrevious || continuesWord || explanatoryJa) && !afterExplanatoryJa
+            val join = previous != null && (withPrevious || continuesWord || explanatoryJa)
             if (join) words.last() += piece else words += mutableListOf(piece)
             orphan = if (orphanEnding && join) true else piece.kana == "から" && piece.kind == "助詞" &&
                 (previous == null || previous.kind == "助詞" || phraseMark ||

@@ -715,10 +715,41 @@ class ReadingsTest {
         fun lookups() = listOf("何なんじゃろう", "何なんじゃい", "何なんじゃなくて", "何なんじゃない").map { line ->
             Readings.words(line, Script.JAPANESE).map { it.lookup }
         }
-        val expected = listOf(listOf("何", "なんだ"), listOf("何", "なんだ", "いる"),
+        val expected = listOf(listOf("何", "なんだ"), listOf("何", "なんだ", "い"),
             listOf("何", "なんだ", "ない"), listOf("何", "なんだ", "ない"))
         assertEquals(expected, lookups())
         assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
+    fun interrogativeCopulaKeepsTheRestOfTheLine() {
+        val tail = "よこの気持ちは君の名前を呼びながら帰る"
+        fun tailWords(line: String) = Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }.let { words ->
+            words.dropWhile { it.first != "よ" }
+        }
+        fun check() {
+            val expected = tailWords("本だ" + tail)
+            assertTrue(expected.isNotEmpty())
+            assertEquals(expected, tailWords("何なんだ" + tail))
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun interrogativeCandidatesKeepNonCopulasAndVerbs() {
+        fun read() = listOf("何なんの", "何なんだれ", "何なんでんしゃ", "何なんじゃいた", "何なんじゃい！").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("何な" to "何", "ん" to "ん", "の" to "の"),
+            listOf("何" to "何", "なん" to "なん", "だれ" to "だれ"),
+            listOf("何" to "何", "なん" to "なん", "でんしゃ" to "電車"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いた" to "いる"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "い"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
     }
 
     @Test
