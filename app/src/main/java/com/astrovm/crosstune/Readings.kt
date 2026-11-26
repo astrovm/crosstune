@@ -1443,10 +1443,11 @@ internal object Readings {
     ): Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? {
         val suffix = StringBuilder()
         var found: Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? = null
-        val candidates = pieces.drop(start).take(8).takeWhile { it.surface.all(Char::isLetter) }
+        val following = pieces.drop(start)
+        val candidates = following.take(8).takeWhile { it.surface.all(Char::isLetter) }
         for ((index, piece) in candidates.withIndex()) {
             suffix.append(if (index == 0) piece.surface.drop(1) else piece.surface)
-            val rest = if (inLine) pieces.drop(start + index + 1).take(4).joinToString("") { it.surface } else ""
+            val rest = if (inLine) following.drop(index + 1).take(4).joinToString("") { it.surface } else ""
             val all = tokenizer.tokenize(word + suffix + rest)
             // The tokens that end where the suffix does, if one does.
             val count = all.runningFold(0) { at, token -> at + token.surface.length }.indexOf(word.length + suffix.length)
@@ -1508,13 +1509,11 @@ internal object Readings {
                     parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
                 }
             } else null
-            // A copula after なでなで, standard or Kansai: なでなでだ, なでなでやん, なでなでやろ.
+            // A copula after なでなで, standard or Kansai: なでなでだ, なでなでやん, and なでなでやろ, which IPADIC takes for a form of やる.
             val copulaNext = (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や", "やん")) || next?.base == "やる"
             // A sentence-final が can be labelled as a conjunction, though it follows the noun.
             val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
-            // IPADIC takes the Kansai やろ for a form of やる: 花やろ has it as や.
-            val copula = (piece.kind == "助動詞" && piece.base in setOf("だ", "です")) || piece.base == "やる"
-            val nounCopula = if (nounBefore && copula) {
+            val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
                 val afterNoun = pieces("花" + pieces.drop(index).joinToString("") { it.surface }).drop(1)
                 afterNoun.firstOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助動詞" }
             } else null
