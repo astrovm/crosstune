@@ -241,6 +241,7 @@ class ReadingsTest {
             Triple("あめえのか", "あめえ", "あまい"),
             // Before a particle, the noun.
             Triple("あめえは", "あめえ", "甘え"), Triple("おせえを外す", "おせえ", "抑え"),
+            Triple("きめえのいいやつ", "きめえ", "気前"),
             Triple("なめえを教えて", "なめえ", "名前"), Triple("このなめえ", "なめえ", "名前"),
             Triple("犬のなめえ", "なめえ", "名前"), Triple("なめえ", "なめえ", "名前"),
             // No noun is spelled だりい, so it stays the adjective before a particle too.
@@ -311,7 +312,7 @@ class ReadingsTest {
             // A verb after its place, partner or object: いたい, to want to stay.
             "ずっとここにいてえ" to "ずっと=ずっと|ここ=ここ|に=に|いて=いる|え=え",
             "ここにいてえ奴" to "ここ=ここ|に=に|いて=いる|え=え|奴=奴",
-            "君といてえ" to "君=君|と=と|いて=いる|え=え",
+            "君といてえ" to "君=君|と=と|いて=いる|え=え", "ひとりでいてえ" to "ひとり=ひとり|で=で|いて=いる|え=え",
             "ボタンをおせえ" to "ボタン=ボタン|を=を|おせ=おせる|え=え",
             "ボタンをおせえよな" to "ボタン=ボタン|を=を|おせえよ=おせる|な=な",
             // A command said long, where nothing in the line marks an adjective: give me money, more, a dream; press it.
@@ -329,6 +330,8 @@ class ReadingsTest {
             // A particle after a noun, before a word: ええ, good.
             "母はええ人だ" to "母=母|は=は|え=え|え=え|人=人|だ=だ", "俺よええ" to "俺=俺|よ=よ|え=え|え=え",
             "犬やええ" to "犬=犬|や=や|え=え|え=え",
+            // An interjection drawn out: huh?
+            "あれえ？" to "あれ=あれ|え=え", "あれー" to "あれー=あれー",
             // A noun the dictionary read, drawn out: candy, not 甘え.
             "部屋にあめーがある" to "部屋=部屋|に=に|あめー=あめ|が=が|ある=ある", "なめーを教えて" to "なめー=なめ|を=を|教えて=教える",
             // Words that only end in え: a noun, a verb, and a verb after its object.
