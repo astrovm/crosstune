@@ -530,19 +530,19 @@ internal class MediaSessionPlayback(
         return false
     }
 
-    private fun MediaController.stateArrived() = synchronized(queueWatchers) {
+    private fun MediaController.stateArrived(reported: PlaybackState?) = synchronized(queueWatchers) {
         if (sessionToken !in queueWatchers) return@synchronized
         val state = playbackState
         if (state != null && state.state == PlaybackState.STATE_PLAYING && adEnding(state)) {
             adEnds.remove(sessionToken)
             restarts.merge(sessionToken, 1L, Long::plus)
         }
-        if (state == null || state.activeQueueItemId == MediaSession.QueueItem.UNKNOWN_ID.toLong()) {
+        if (reported == null || reported.activeQueueItemId == MediaSession.QueueItem.UNKNOWN_ID.toLong()) {
             queueMetadata.remove(sessionToken)
             return@synchronized
         }
         queueMetadata.computeIfPresent(sessionToken) { _, previous ->
-            val id = state.activeQueueItemId
+            val id = reported.activeQueueItemId
             val recentlyRenamed = previous.renamedAt?.let { SystemClock.uptimeMillis() - it <= queueGraceMs } == true
             if (recentlyRenamed && id != previous.id) previous.copy(id = id, renamedAt = null) else previous
         }
@@ -758,7 +758,7 @@ internal class MediaSessionPlayback(
                         scheduleQueueRefresh(watched, refreshQueue)
                     }
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
-                        controller.stateArrived()
+                        controller.stateArrived(state)
                         clockLog.note("media_report", now) {
                             put("observer", clockObserver)
                             put("app", controller.packageName)
@@ -821,18 +821,21 @@ internal class MediaSessionPlayback(
         private var restart = 0L
         private var ending = false
         private var startedAt: Long? = null
+        private var learningAllowed = true
+        private var beganInWindow = false
 
         fun switchTo(app: String?) {
             adEnded = false
             restart = 0L
             ending = false
             startedAt = null
+            beganInWindow = false
             begin(app)
         }
 
         /** From here on [app]'s clock, with nothing kept of the one before. */
         fun begin(app: String?) {
-            clocks = steadyClock(app)
+            clocks = steadyClock(app) { learningAllowed }
             movesSeen = moves
         }
 
@@ -846,7 +849,9 @@ internal class MediaSessionPlayback(
             val inWindow = adEnds.containsKey(controller.sessionToken)
             val origin = said.clock.atMs - (said.clock.positionMs / said.clock.speed).toLong()
             val starts = startsAgain(said, latest, inWindow, origin)
-            if (!inWindow) startedAt = origin
+            if (startedAt == null) beganInWindow = inWindow
+            if (!inWindow || startedAt == null) startedAt = origin
+            learningAllowed = !beganInWindow && !inWindow && !ending && latest == restart
             ending = inWindow
             restart = latest
             adEnded = said.ad
@@ -859,7 +864,9 @@ internal class MediaSessionPlayback(
     }
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
-    private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
+    private fun steadyClock(app: String?, mayLearn: () -> Boolean) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) {
+        if (app != null && mayLearn()) late[app] = it
+    }
 
     /**
      * The app playing [song], among all that have it: one playing it beats one paused on it. It's the
@@ -1297,7 +1304,7 @@ internal class MediaSessionPlayback(
                         scheduleQueueRefresh(watched.map { it.first }, refreshQueue)
                     }
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
-                        controller.stateArrived()
+                        controller.stateArrived(state)
                         update()
                         scheduleQueueRefresh(watched.map { it.first }, refreshQueue)
                     }

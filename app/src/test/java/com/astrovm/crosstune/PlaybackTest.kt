@@ -842,6 +842,25 @@ class PlaybackTest {
     }
 
     @Test
+    fun aLateQueueCallbackDoesNotGiveTheNextItemItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW - 100, 26, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW, 28, 0))
+        val late = recorded(PlaybackState.STATE_PLAYING, NOW, 27, 0)
+        shadowOf(music).callbacks.toList().forEach { it.onPlaybackStateChanged(late) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(42_100L, seen.last()?.offsetMs)
+    }
+
+    @Test
     fun metadataBeforeTheQueueChangeStillGetsTheNewClock() {
         allow()
         sounding()
@@ -1520,6 +1539,24 @@ class PlaybackTest {
         // From then on its clock is kept steady as any song's: said again a moment behind, it's where it was.
         music.isAt(PlaybackState.STATE_PLAYING, 1_641_941_086, 27, afterMs = 5_000)
         assertEquals(1_641_940_586, seen.now().clock.startedAt())
+    }
+
+    @Test
+    @Config(shadows = [AnsweredByNow::class])
+    fun aFollowerOpenedDuringAnAdEndDoesNotTeachALateClock() {
+        allow()
+        val music = youTubeMusic("Charmless Man", "Blur", 30_069, updated = 1_641_909_859, item = 27)
+        val song = MusicMetadata("Charmless Man", "Blur")
+        followed(song)
+        music.isAt(PlaybackState.STATE_PLAYING, 1_641_939_993, 27, afterMs = 30_134)
+        AnsweredByNow.phone = 1_641_940_028
+        music.says("Charmless Man", "Blur", 214_064, afterMs = 106)
+        val second = followed(song)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, 1_641_940_586, 27, 0))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS))
+        val third = followed(song)
+        assertEquals(1_641_940_586, second.now().clock.startedAt())
+        assertEquals(1_641_940_586, third.now().clock.startedAt())
     }
 
     @Test
