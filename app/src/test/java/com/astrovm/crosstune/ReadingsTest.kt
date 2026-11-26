@@ -154,6 +154,18 @@ class ReadingsTest {
     }
 
     @Test
+    fun colloquialAdjectiveDoesNotJoinTheFollowingNoun() {
+        fun check() {
+            val words = Readings.words("かったりい油汚れ", Script.JAPANESE)
+            assertEquals("かったりい", words.first().text)
+            assertEquals("かったるい", words.first().lookup)
+            assertTrue(words.drop(1).first().text.startsWith("油"))
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun colloquialUzaIsKnownWithUniDic() {
         assertEquals("u ze e", Readings.of(listOf("うぜえ"), Script.JAPANESE).single().romanized)
         TestUniDic.reading {
@@ -190,7 +202,7 @@ class ReadingsTest {
         Triple("行きてえ", "ikitee", listOf("行きてえ")), Triple("知らねえ", "shiranee", listOf("知らねえ")),
         Triple("いいねえ", "ii nee", listOf("いい", "ねえ")), Triple("そうですねえ", "soodesune e", listOf("そうですね", "え")),
         Triple("ええ", "ee", listOf("ええ")), Triple("手え", "te e", listOf("手", "え")),
-        Triple("花へ", "hana e", listOf("花", "へ")), Triple("高い", "takai", listOf("高い")),
+        Triple("花へ", "hana e", listOf("花", "へ")), Triple("花え", "hana e", listOf("花", "え")), Triple("高い", "takai", listOf("高い")),
         Triple("高いよ", "takai yo", listOf("高い", "よ"))
     ))
 

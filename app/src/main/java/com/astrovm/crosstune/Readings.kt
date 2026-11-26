@@ -1252,6 +1252,12 @@ internal object Readings {
             if (match == null) add(pieces[at++]) else {
                 add(match.second)
                 at = match.first
+                val next = pieces.getOrNull(at)?.takeIf { it.subkind == "接尾" }
+                val reading = next?.let { alone(it.surface) }
+                if (next != null && reading != null) {
+                    add(next.read(reading, "名詞", "一般"))
+                    at++
+                }
             }
         }
     }
