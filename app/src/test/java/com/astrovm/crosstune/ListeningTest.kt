@@ -271,6 +271,7 @@ class ListeningTest {
         File(app.cacheDir, "sung_readings.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_DEFAULT
         // Each song shown would look up its lyrics too, which tests counting what's asked don't expect.
         MainActivity.lookAheadLyrics = false
         shazamAnswers(MATCH)
@@ -308,6 +309,7 @@ class ListeningTest {
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.chordWikiFactory = { ChordWikiBrowser(it) }
         MainActivity.connectionFactory = ::AndroidConnection
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_DEFAULT
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -6098,7 +6100,9 @@ class ListeningTest {
     /** Opens the readings palette. Tapping its button again closes it, so a second call stays put. */
     private fun learnMenu() {
         if (composeRule.onAllNodesWithTag("lyrics-display-options").fetchSemanticsNodes().isEmpty()) {
-            click(string(R.string.lyrics_learn))
+            val label = string(R.string.lyrics_learn)
+            waitUntil(TIMEOUT_MS) { composeRule.onAllNodes((hasText(label) or hasContentDescription(label)) and isEnabled()).fetchSemanticsNodes().size == 1 }
+            click(label)
         }
     }
 
