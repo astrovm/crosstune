@@ -112,7 +112,7 @@ internal object Readings {
      * 17 to space the Japanese copula apart from the word it follows.
      * 19 to distinguish interrogative 何だ from the interjection.
      */
-    const val VERSION = 21
+    const val VERSION = 22
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1175,6 +1175,12 @@ internal object Readings {
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
             when {
+                // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
+                piece.surface == "い" && last?.surface == "だり" && out.getOrNull(out.lastIndex - 1)?.kind !in
+                    setOf("動詞", "形容詞", "助動詞") -> {
+                    val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
+                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, end = piece.end, reader = Reader.RULES)
+                }
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {
                     val (surface, base) = splitTari

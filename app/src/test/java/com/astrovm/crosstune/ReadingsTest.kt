@@ -96,11 +96,17 @@ class ReadingsTest {
     ))
 
     @Test
-    fun dariiIsNotAJoiningEnding() {
-        fun read() = Readings.of(listOf("だりい"), Script.JAPANESE).single().romanized to
-            Readings.words("だりい", Script.JAPANESE).map { it.text }
-        assertEquals("dari i" to listOf("だり", "い"), read())
-        assertEquals("dari i" to listOf("だり", "い"), TestUniDic.reading(::read))
+    fun dariiIsOneAdjectiveButTariAfterVerbsStaysSeparate() {
+        assertJapaneseBoundaries(listOf(
+            Triple("だりい", "darii", listOf("だりい")),
+            Triple("クソだりいな", "kuso darii na", listOf("クソ", "だりい", "な")),
+            Triple("飲んだりいろいろ", "nondari iroiro", listOf("飲んだり", "いろいろ")),
+            Triple("読んだりいたずら", "yondari itazura", listOf("読んだり", "いたずら")),
+            Triple("読んだりい", "yondari i", listOf("読んだり", "い")),
+        ))
+        fun lookup() = Readings.words("だりい", Script.JAPANESE).single().lookup
+        assertEquals("だるい", lookup())
+        assertEquals("だるい", TestUniDic.reading(::lookup))
     }
 
     @Test
