@@ -200,7 +200,7 @@ internal object Readings {
             val piece = pieces[at]
             val after = pieces.getOrNull(at + 1)
             val calls = katakanaCalls(piece.surface)
-            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls, after?.surface in NAN_DA_PARTICLES))
+            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
         }
     }
 
@@ -211,15 +211,10 @@ internal object Readings {
         return parts.takeIf { calls && parts.sumOf { it.length / 3 } >= 2 }
     }
 
-    private fun katakanaCallPieces(parts: List<String>, splitCopulas: Boolean): List<Piece> = buildList {
+    private fun katakanaCallPieces(parts: List<String>): List<Piece> = buildList {
         for (part in parts) {
             if (isNotEmpty()) add(Piece("・", "・", "記号", "一般", reader = Reader.RULES))
-            repeat(part.length / 3) {
-                if (splitCopulas) {
-                    add(Piece("ナン", "なん", "名詞", "代名詞", reader = Reader.RULES))
-                    add(Piece("ダ", "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
-                } else add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES))
-            }
+            repeat(part.length / 3) { add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES)) }
         }
     }
 

@@ -279,6 +279,18 @@ class ReadingsTest {
     ))
 
     @Test
+    fun repeatedKatakanaCallsKeepTheirPracticeLookups() {
+        val lines = listOf("ナンダナンダよ", "ナンダナンダ", "ナンダ・ナンダね", "ナンダナンダって")
+        fun lookups() = lines.map { line -> Readings.words(line, Script.JAPANESE).map { it.lookup } }
+        val expected = listOf(
+            listOf("ナン", "ダ", "ナン", "ダ", "よ"), listOf("ナンダ", "ナンダ"),
+            listOf("ナン", "ダ", "ナン", "ダ", "ね"), listOf("ナンダナンダ", "って"),
+        )
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+    }
+
+    @Test
     fun katakanaRepeatedCallsWithParticlesAndMiddleDots() = assertJapaneseBoundaries(listOf(
         Triple("なんだなんだよ", "nan da nan da yo", listOf("なん", "だ", "なん", "だ", "よ")),
         Triple("ナンダ・", "nanda", listOf("ナンダ")),
