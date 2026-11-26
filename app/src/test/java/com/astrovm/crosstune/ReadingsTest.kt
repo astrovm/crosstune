@@ -607,6 +607,8 @@ class ReadingsTest {
         Triple("「ナンナンダ」を聴いた", "「nannanda」 o kiita", listOf("ナンナンダ", "を", "聴いた")),
         Triple("何なんだっけ", "nan nandakke", listOf("何", "なんだっ", "け")),
         Triple("何なんだった", "nan nandatta", listOf("何", "なんだった")),
+        Triple("何なんじゃ", "nan nanja", listOf("何", "なんじゃ")),
+        Triple("なんなんじゃ", "nan nanja", listOf("なん", "なんじゃ")),
         Triple("なんなんだっけ", "nan nandakke", listOf("なん", "なんだっ", "け")),
         Triple("なんなんだった", "nan nandatta", listOf("なん", "なんだった")),
         Triple("静かなんだ", "shizuka nanda", listOf("静か", "なんだ")),
@@ -614,15 +616,16 @@ class ReadingsTest {
     ))
 
     @Test
-    fun interrogativeExplanationUsesTheSameLookupAsAfterANoun() {
-        fun lookups() = listOf("なんだ", "なんだろう", "なんだっけ", "なんだった").map { ending ->
-            listOf("本" + ending, "何" + ending, "なん" + ending).map { line ->
-                Readings.words(line, Script.JAPANESE).drop(1).map { it.lookup }
-            }
+    fun interrogativeExplanationLooksUpTheExplanatoryForm() {
+        fun lookups() = listOf("何なんだ", "何なんだろう", "何なんだった", "何なんじゃ", "なんなんじゃ", "何なんですか").map { line ->
+            Readings.words(line, Script.JAPANESE)[1].lookup
         }
-        fun check() = lookups().forEach { assertEquals(listOf(it.first(), it.first(), it.first()), it) }
-        check()
-        TestUniDic.reading(::check)
+        val expected = List(6) { "なんだ" }
+        assertEquals(expected, lookups())
+        assertEquals(expected, TestUniDic.reading(::lookups))
+        fun dakke() = Readings.words("何なんだっけ", Script.JAPANESE).map { it.lookup }
+        assertEquals(listOf("何", "なんだ", "け"), dakke())
+        assertEquals(listOf("何", "なんだ", "け"), TestUniDic.reading(::dakke))
         fun name() = Readings.words("ナンナンダよ", Script.JAPANESE).map { it.lookup }
         assertEquals(listOf("ナンナンダ", "よ"), name())
         assertEquals(listOf("ナンナンダ", "よ"), TestUniDic.reading(::name))

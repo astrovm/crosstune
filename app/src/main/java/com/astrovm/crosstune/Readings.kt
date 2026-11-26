@@ -269,9 +269,12 @@ internal object Readings {
             if (at < skipUntil) continue
             val piece = pieces[at]
             if (pieces.interrogativeExplanation(at)) {
-                val copula = pieces[at + 2]
-                val lookup = if (copula.surface == "だ") "なんだ" else pieces[at + 1].base
-                add(Piece("なん", "なん", "名詞", "代名詞", lookup, reader = Reader.RULES))
+                add(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES))
+                skipUntil = at + 2
+                continue
+            }
+            if (pieces.interrogativeNanja(at)) {
+                add(Piece("なんじゃ", "なんじゃ", "名詞", "代名詞", "なんだ", reader = Reader.RULES))
                 skipUntil = at + 2
                 continue
             }
@@ -303,6 +306,9 @@ internal object Readings {
     private fun List<Piece>.interrogativeExplanation(at: Int) =
         getOrNull(at - 1)?.surface in setOf("何", "なん") && get(at).surface == "な" &&
             getOrNull(at + 1)?.surface == "ん" && getOrNull(at + 2)?.startsCopula == true
+
+    private fun List<Piece>.interrogativeNanja(at: Int) =
+        getOrNull(at - 1)?.surface in setOf("何", "なん") && get(at).surface == "な" && getOrNull(at + 1)?.surface == "んじゃ"
 
     private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
         val nameBeforeParticle = piece.surface == "ナンダ" && nameParticle(after)
