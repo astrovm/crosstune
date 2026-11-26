@@ -1178,21 +1178,30 @@ internal object Readings {
             val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
                 piece.surface.startsWith("で")) piece.surface.drop(1) else ""
             val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
-            val repeatedParticle = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで") {
-                (pieces(piece.surface) + pieces("花" + piece.surface).drop(1))
-                    .firstOrNull { it.surface == piece.surface && it.kind == "助詞" }
+            // A negative ending belongs to the verb, even if it is a particle in another context.
+            val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || (piece.surface.length == 1 && piece.base != "ない")
+            val repeatedParticles = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && canBeParticle) {
+                listOf(pieces(piece.surface), pieces("花" + piece.surface).drop(1)).firstOrNull { parts ->
+                    parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
+                }
+            } else null
+            // A sentence-final が can be labelled as a conjunction, though it follows the noun.
+            val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
+            val nounParticle = if (nounBefore && piece.kind == "助詞" && piece.subkind == "接続助詞") {
+                pieces("花" + piece.surface).drop(1).singleOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助詞" }
             } else null
             when {
                 tailParticles != null -> {
-                    if (last?.surface == "な") out.removeAt(out.lastIndex)
+                    out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
                     out += tailParticles
                 }
-                repeatedParticle != null -> {
+                repeatedParticles != null -> {
                     out.removeAt(out.lastIndex)
                     out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
-                    out += repeatedParticle
+                    out += repeatedParticles
                 }
+                nounParticle != null -> out += nounParticle
                 verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
                 splitTari != null -> {
                     val (surface, base) = splitTari

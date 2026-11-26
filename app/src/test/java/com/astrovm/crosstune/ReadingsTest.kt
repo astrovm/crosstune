@@ -221,6 +221,11 @@ class ReadingsTest {
             Triple("なでなでや", "nadenade ya", listOf("なでなで" to "なでなで", "や" to "や")),
             Triple("なでなでって", "nadenade tte", listOf("なでなで" to "なでなで", "って" to "って")),
             Triple("なでなでを", "nadenade o", listOf("なでなで" to "なでなで", "を" to "を")),
+            Triple("なでなでが", "nadenade ga", listOf("なでなで" to "なでなで", "が" to "が")),
+            Triple("なでなでかって聞いた", "nadenade ka tte kiita", listOf("なでなで" to "なでなで", "か" to "か", "って" to "って", "聞いた" to "聞く")),
+            Triple("なでなでとか", "nadenade toka", listOf("なでなで" to "なでなで", "とか" to "とか")),
+            Triple("なでなでには", "nadenade ni wa", listOf("なでなで" to "なでなで", "に" to "に", "は" to "は")),
+            Triple("なでなでねえといけない", "nade nadenee to ikenai", listOf("なで" to "なでる", "なでねえ" to "なでる", "と" to "と", "いけない" to "いける")),
             Triple("なでなでが好き", "nadenade ga suki", listOf("なでなで" to "なでなで", "が" to "が", "好き" to "好き"))
         )
         fun read() = cases.map { (line, _, _) ->
@@ -232,6 +237,7 @@ class ReadingsTest {
 
     @Test
     fun ordinaryParticlesKeepTheirReadings() = assertJapaneseBoundaries(listOf(
+        Triple("彼は勝手", "kare wa katte", listOf("彼", "は", "勝手")),
         Triple("花では", "hana de wa", listOf("花", "で", "は")),
         Triple("静かでは", "shizukade wa", listOf("静かで", "は")),
         Triple("君と", "kimi to", listOf("君", "と")),
