@@ -753,6 +753,21 @@ class ReadingsTest {
     }
 
     @Test
+    fun iAfterOtherWordsKeepsItsVerbLookup() {
+        fun read() = listOf("猫がここにい", "花じゃい", "何なんじゃい猫", "何なんじゃいと叫ぶ").map { line ->
+            Readings.words(line, Script.JAPANESE).map { it.text to it.lookup }
+        }
+        val expected = listOf(
+            listOf("猫" to "猫", "が" to "が", "ここ" to "ここ", "に" to "に", "い" to "いる"),
+            listOf("花" to "花", "じゃ" to "じゃ", "い" to "いる"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "い" to "いる", "猫" to "猫"),
+            listOf("何" to "何", "なんじゃ" to "なんだ", "いと" to "いと", "叫ぶ" to "叫ぶ"),
+        )
+        assertEquals(expected, read())
+        assertEquals(expected, TestUniDic.reading(::read))
+    }
+
+    @Test
     fun correctedInterrogativeNanjaKeepsTheWordBoundaries() {
         fun corrected(): LineReading {
             val read = Readings.of(listOf("これは何なんじゃろう本当"), Script.JAPANESE)
