@@ -121,6 +121,55 @@ class ReadingsTest {
     }
 
     @Test
+    fun colloquialAdjectivesKeepTheirWordsAndLookups() {
+        val cases = listOf(
+            Triple("うぜえ", "uzee", "うざい"), Triple("すげえ", "sugee", "すごい"),
+            Triple("やべえ", "yabee", "やばい"), Triple("いてえ", "itee", "いたい"),
+            Triple("うめえ", "umee", "うまい"), Triple("ねみい", "nemii", "ねむい"),
+            Triple("さみい", "samii", "さむい")
+        )
+        fun check() {
+            for ((surface, romanized, base) in cases) {
+                assertEquals(surface, romanized, Readings.of(listOf(surface), Script.JAPANESE).single().romanized)
+                val word = Readings.words(surface, Script.JAPANESE).single()
+                assertEquals(surface, surface, word.text)
+                assertEquals(surface, base, word.lookup)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun colloquialAdjectivesIncludeKanjiAndParticles() {
+        fun check() {
+            for ((text, romanized, base) in listOf(
+                Triple("痛え", "itee", "痛い"), Triple("寒みい", "samii", "寒い"),
+                Triple("眠みい", "nemii", "眠い"), Triple("凄え", "sugee", "凄い"),
+                Triple("すげー", "sugee", "すごい"), Triple("やべー", "yabee", "やばい"),
+                Triple("うぜー", "uzee", "うざい")
+            )) {
+                assertEquals(text, romanized, Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+                assertEquals(text, base, Readings.words(text, Script.JAPANESE).single().lookup)
+            }
+            for ((text, base) in listOf("すげえよ" to "すごい", "やべえって" to "やばい", "うめえな" to "うまい")) {
+                assertEquals(text, base, Readings.words(text, Script.JAPANESE).first().lookup)
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun colloquialAdjectivesDoNotJoinOtherWords() = assertJapaneseBoundaries(listOf(
+        Triple("ねえ", "nee", listOf("ねえ")), Triple("見てえ", "mite e", listOf("見て", "え")),
+        Triple("行きてえ", "ikitee", listOf("行きてえ")), Triple("知らねえ", "shiranee", listOf("知らねえ")),
+        Triple("いいねえ", "ii nee", listOf("いい", "ねえ")), Triple("そうですねえ", "soodesune e", listOf("そうですね", "え")),
+        Triple("ええ", "ee", listOf("ええ")), Triple("手え", "te e", listOf("手", "え")),
+        Triple("花へ", "hana e", listOf("花", "へ"))
+    ))
+
+    @Test
     fun dariiParticlesFollowTheSameBoundariesAsOtherAdjectives() {
         fun compare() {
             for (ending in listOf("よ", "ね", "し", "けど", "から", "って", "ってば", "っていうか", "っていうか、本当")) {
