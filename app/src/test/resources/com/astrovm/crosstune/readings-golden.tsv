@@ -17,7 +17,7 @@
 # A row the app now reads otherwise is a regression, and the command exits 1.
 # A change you mean drops that lock: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA
 # audit: 3549 lines, 14930 right readings, sha256 532d1ad0061f0cf5
-# rows: 7559
+# rows: 7561
    何にもならな	何		なん	何=なん		何=なん	unidic
    夜の孤独	夜		よる	夜=よる	yoru|yoru	夜=よる	both
    恋人達ね	恋人		こいびと	恋人=こいびと		恋人=こいびと	both
@@ -769,6 +769,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 かせて居ますか?	居		い	居=い		居=い	both
 かせの恋におち	恋		こい	恋=こい	koi|koi	恋=こい	both
 かその胸に秘め	胸		むね	胸=むね	mune|mune	胸=むね	both
+かったりい油汚れもこれ	油汚		あぶらよご	油=あぶら|汚=よご		油汚=あぶらよご	ipadic
 かった僕らの肖	僕		ぼく	僕=ぼく		僕=ぼく	both
 かった夢も	夢		ゆめ	夢=ゆめ	yume|yume	夢=ゆめ	both
 かった日々を	日々		ひび	日々=ひび	hibi|hibi	日々=ひび	both
@@ -1835,7 +1836,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 て朝の陽が射す	陽		ひ	陽=ひ	hi|hi	陽=ひ	both
 て朝を描く様な	描		えが	描=えが		描=えが	both
 て泣き喚いたんだ	喚		わめ	喚=わめ		喚=わめ	both
-て溺れ死にそう	死		し	死=し		死=し	unidic
+て溺れ死にそう	死		し	死=し		死=し	both
 て無ゐ似た者同	似		に	似=に		似=に	both
 て白い帆を揚げ	帆		ほ	帆=ほ	ho|ho	帆=ほ	both
 て空を見る	見		み	見=み		見=み	both
@@ -4691,7 +4692,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 奇跡であふ	奇跡		きせき	奇跡=きせき	kiseki|kiseki	奇跡=きせき	both
 奇跡は起こ	奇跡		きせき	奇跡=きせき	kiseki|kiseki	奇跡=きせき	both
 奇跡は起こるよ 	起		お	起=お		起=お	both
-奔る奴隷に	奔		はし	奔=はし		奔=はし	unidic
+奔る奴隷に	奔		はし	奔=はし		奔=はし	both
 奔る奴隷に勝利	奴隷		どれい	奴隷=どれい	doree|dorei	奴隷=どれい	both
 奪い取って	奪		うば	奪=うば		奪=うば	both
 奪い取って掴	取		と	取=と		取=と	both
@@ -5985,6 +5986,7 @@ w' 怯（おび）えてる	怯		おび	怯=おび		怯=おび	both
 満開の花が	満開		まんかい	満開=まんかい	mankai|mankai	満開=まんかい	both
 満開の花が 似	花		はな	花=はな	hana|hana	花=はな	both
 溜息はつか	溜息		ためいき	溜息=ためいき	tameeki|tameiki	溜息=ためいき	both
+溢るる涙の	溢		あふ	溢=あふ		溢=あふ	both
 溢るる涙の蕾か	涙		なみだ	涙=なみだ	namida|namida	涙=なみだ	both
 溢れてやま	溢		あふ	溢=あふ		溢=あふ	both
 溢れ出した	溢		あふ	溢=あふ		溢=あふ	both
