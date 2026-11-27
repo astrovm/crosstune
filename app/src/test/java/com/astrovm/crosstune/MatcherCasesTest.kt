@@ -932,7 +932,12 @@ class MatcherCasesTest {
     )
 
     /** A row or video of the matrix: its name, the version it is ([OTHER] for another song), its album, length and channel. */
-    private class Kind(val key: String, val name: String, val version: String, val album: String = "Fake Album", val length: String = "1:30", val channel: String = "Fake Band")
+    private class Kind(val key: String, val name: String, val version: String, val album: String = "Fake Album", val length: String = LENGTH, val channel: String = "Fake Band") {
+        companion object {
+            /** How long a row or video is, unless it says otherwise, as the song's own recording is. */
+            const val LENGTH = "1:30"
+        }
+    }
 
     private val songsOfTheMatrix = listOf(
         Song("plain", "Fake Song", null, "", "偽の歌", "にせのうた"),
@@ -1051,9 +1056,11 @@ class MatcherCasesTest {
             fun shownRow(kind: Kind) = row(kind.name, kind.album, song.artist, length(kind))
             fun shownVideo(kind: Kind) = video(kind.name, length(kind), song.artist)
             val right = rows.filter { isIt(it, song) }.map(::shownRow) + listOfNotNull(video).filter { isIt(it, song) }.map(::shownVideo)
+            // The link says how long the song's own recording is, as one from Spotify or Apple Music does, so what the
+            // matcher does with a length, and with rows of other lengths, is held to main too.
             val case = Case(
                 "", null, title = song.title, japan = song.japan?.let { it to song.artist }, editions = song.editions, songs = rows.map(::shownRow),
-                videos = listOfNotNull(video).map(::shownVideo)
+                videos = listOfNotNull(video).map(::shownVideo), linkMs = lengthMs(if (song.version == "live") song.liveLength else Kind.LENGTH)
             )
             val modes = listOf(
                 case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
@@ -1269,15 +1276,16 @@ class MatcherCasesTest {
     /** How long "1:30" is. */
     private fun lengthMs(length: String): Long = length.split(":").let { (minutes, seconds) -> (minutes.toLong() * 60 + seconds.toLong()) * MS }
 
+    /**
+     * Whether the link's length rules out what main opened: a row or a video more than [ExactMatcher.SAME_LENGTH_MS] off it,
+     * as the matcher keeps every row within that of the link, so a loss of one closer is no loss the length explains.
+     */
     private fun sourceRulesOut(case: Case, id: String?): Boolean {
         val source = case.linkMs ?: return false
         val video = id?.startsWith("video") ?: return false
         val index = id.removePrefix(if (video) "video" else "song").toInt()
         val shown = (if (video) case.videos else case.songs)[index]
-        val duration = shown.substringAfterLast(" • ")
-        val comparison = if (video) source else ((source + 500) / MS) * MS
-        val tolerance = if (video) ExactMatcher.SAME_LENGTH_MS else ExactMatcher.SAME_SONG_LENGTH_MS
-        return kotlin.math.abs(lengthMs(duration) - comparison) > tolerance
+        return kotlin.math.abs(lengthMs(shown.substringAfterLast(" • ")) - source) > ExactMatcher.SAME_LENGTH_MS
     }
 
     /** The versions [said] by a name, a tag and an album, each null or "" where it says none. */

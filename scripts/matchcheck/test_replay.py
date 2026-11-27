@@ -36,6 +36,20 @@ class RightIdsTest(unittest.TestCase):
         long_song = dict(song, title="After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best")
         self.assertEqual(["long"], replay.right_ids(long_song, [short, long], []))
 
+    def test_a_result_far_from_the_recordings_length_is_not_it(self):
+        song = {"title": "Long Hope Philia", "artist": "Masaki Suda", "native": [], "lengthMs": 296_000}
+        edit = {"id": "edit", "name": "Long Hope Philia", "details": ["Masaki Suda", "Long Hope Philia (TV Size)", "1:35"], "lengthMs": 95_000}
+        full = {"id": "full", "name": "Long Hope Philia", "details": ["Masaki Suda", "Long Hope Philia", "4:58"], "lengthMs": 298_000}
+        late = dict(full, id="late", lengthMs=305_000)
+        self.assertEqual(["full"], replay.right_ids(song, [edit, full, late], []))
+        # A video may open with more, but not a minute more; one that says no length may be it.
+        video = {"id": "video", "name": "Long Hope Philia", "details": ["Masaki Suda", "1M views", "5:40"], "lengthMs": 340_000}
+        long_video = dict(video, id="long", lengthMs=342_000)
+        untimed = dict(video, id="untimed", lengthMs=None)
+        self.assertEqual(["untimed", "video"], replay.right_ids(song, [], [video, long_video, untimed]))
+        # A song collected without its length is judged by its name, as before.
+        self.assertEqual(["edit", "full", "late"], replay.right_ids(dict(song, lengthMs=None), [edit, full, late], []))
+
     def test_the_checked_fairuz_alias_names_only_her_rows(self):
         song = {"title": "Kifak Inta", "artist": "Fairouz", "native": []}
         own = {"id": "own", "name": "Kifak Inta", "details": ["Fairuz", "Kifak Inta", "3:32"]}

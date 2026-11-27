@@ -90,8 +90,21 @@ def own_channel(uploader, credits):
     return any(channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 
 
+# How far a result may be from the collected recording's length and still be it: ExactMatcher's SAME_LENGTH_MS for a song
+# result, and its PICKED_VIDEO_LENGTH_MS for a video, which may open or end with more.
+SONG_LENGTH_MS = 8_000
+VIDEO_LENGTH_MS = 45_000
+
+
+def as_long(row, song, tolerance):
+    """Whether a result is as long as the song's recording, give or take [tolerance]; one that says no length may be."""
+    wanted, length = song.get("lengthMs"), row.get("lengthMs")
+    return not wanted or length is None or abs(length - wanted) <= tolerance
+
+
 def right_ids(song, results, videos):
-    """The videoIds of the song results and videos that are the song."""
+    """The videoIds of the song results and videos that are the song: named so, and as long as its recording, as a
+    1:35 TV edit is no 4:56 recording, whatever its name."""
     native = {analyze.bare(n["title"]) for n in song["native"]} | {analyze.normalize(n["title"]) for n in song["native"]}
     wanted = analyze.artists(song["artist"]) | {a for n in song["native"] for a in analyze.artists(n["artist"])}
     wanted |= {alias for artist in wanted for alias in ARTIST_ALIASES.get(artist, set())}
@@ -113,10 +126,11 @@ def right_ids(song, results, videos):
         return analyze.says_another_version_of(row["name"], titles, song["artist"])
 
     # Checked by eye, it's the song, whatever its name says: "(Directors Edit Version)" for "(Director's Edit Version)".
-    ids = {r["id"] for r in results if r["id"] and (by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
+    ids = {r["id"] for r in results if r["id"] and as_long(r, song, SONG_LENGTH_MS) and (
+        by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
     named_only = set()
     for v in videos:
-        if not v["id"] or not named(v) or says_another(v):
+        if not v["id"] or not named(v) or says_another(v) or not as_long(v, song, VIDEO_LENGTH_MS):
             continue
         if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]] + list(wanted)):
             ids.add(v["id"])

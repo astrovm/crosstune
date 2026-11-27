@@ -77,13 +77,18 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun directlyNamedRowsWithDifferentExplicitBadgesStayAmbiguous() = runBlocking {
+    fun directlyNamedRowsWithDifferentExplicitBadgesOpenTheEditionAppleNames() = runBlocking {
         val first = youTubeMusicRow("Song", "Artist • Studio • 4:00", videoId = "first000000")
         val explicit = JSONObject(youTubeMusicRow("Song", "Artist • Best • 4:00", videoId = "second00000"))
         explicit.getJSONObject("musicResponsiveListItemRenderer").put("badges", JSONArray().put(JSONObject().put("musicInlineBadgeRenderer",
             JSONObject().put("icon", JSONObject().put("iconType", "MUSIC_EXPLICIT_BADGE")))))
+        val song = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        // Apple has no word on it, as main did: the first.
         namesAndTabs(songs = listOf(first, explicit.toString()))
-        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Artist", lengthMs = 240_000)))
+        assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        val explicitAtApple = appleSong("Song", "Artist", 240_000).removeSuffix("}") + ""","trackExplicitness":"explicit"}"""
+        namesAndTabs(songs = listOf(first, explicit.toString()), apple = mapOf("US" to explicitAtApple))
+        assertEquals("https://music.youtube.com/watch?v=second00000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
@@ -199,14 +204,14 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun anIncompatibleSongCannotBeOpenedDirectlyOrByThePicker() = runBlocking {
+    fun theOnlyListedEditionOfTheSongsNameOpensAsMainDidButNoOtherName() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val editions = appleSong("Song", "アーティスト", 240_000) + "," + appleSong("Song", "アーティスト", 90_000, id = 8)
-        for (title in listOf("Song", "別名")) {
+        for ((title, expected) in listOf("Song" to "https://music.youtube.com/watch?v=short000000", "別名" to null)) {
             val short = youTubeMusicRow(title, "アーティスト • Studio • 1:30", videoId = "short000000")
             namesAndTabs(songs = listOf(short), apple = mapOf("US" to editions))
             val matcher = ExactMatcher(fake.client(), "US", pick = { _, _, _ -> 0 })
-            assertNull(title, matcher.find(MusicService.YOUTUBE_MUSIC, song))
+            assertEquals(title, expected, matcher.find(MusicService.YOUTUBE_MUSIC, song))
         }
     }
 
@@ -2350,14 +2355,18 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun anExplicitBadgeMakesOtherwiseIdenticalRowsDifferent() = runBlocking {
+    fun anExplicitBadgeAloneIsTheSameRecording() = runBlocking {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val first = youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "first000000")
         val second = JSONObject(youTubeMusicRow("別名", "アーティスト • Studio • 4:00", videoId = "second00000"))
         second.getJSONObject("musicResponsiveListItemRenderer").put("badges", JSONArray().put(JSONObject().put("musicInlineBadgeRenderer",
             JSONObject().put("icon", JSONObject().put("iconType", "MUSIC_EXPLICIT_BADGE")))))
         namesAndTabs(songs = listOf(first, second.toString()), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000, album = "Studio")))
-        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        // Apple's one edition is explicit: the explicit row.
+        val explicitAtApple = appleSong("Song", "アーティスト", 240_000, album = "Studio").removeSuffix("}") + ""","trackExplicitness":"explicit"}"""
+        namesAndTabs(songs = listOf(first, second.toString()), apple = mapOf("US" to explicitAtApple))
+        assertEquals("https://music.youtube.com/watch?v=second00000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
     }
 
     @Test
