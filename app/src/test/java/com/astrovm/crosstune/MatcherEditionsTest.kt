@@ -45,8 +45,8 @@ class MatcherEditionsTest {
             {"musicShelfRenderer":{"contents":[${rows.joinToString(",")}]}}]}}}}]}}}"""
 
     private fun apple(title: String, artist: String, length: Long, id: Long, album: String, explicitness: String? = null) =
-        """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$length,"collectionName":"$album"""" +
-            explicitness?.let { ""","trackExplicitness":"$it"""" }.orEmpty() + "}"
+        JSONObject().put("trackId", id).put("trackName", title).put("artistName", artist).put("trackTimeMillis", length)
+            .put("collectionName", album).apply { explicitness?.let { put("trackExplicitness", it) } }.toString()
 
     /** YouTube Music finds [songs] and [videos]; Apple's search [appleResults], or fails with null; Deezer [deezer]. */
     private fun serve(songs: List<String>, videos: List<String>, appleResults: String?, deezer: String = "[]", artist: String = "Artist") {

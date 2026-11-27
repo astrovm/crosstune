@@ -20,13 +20,16 @@ import org.robolectric.shadows.ShadowCloseGuard
  *
  * A change to the matcher that changes what opens has to make those again on its own code, with [onMain], and
  * show in its PR the counts the matrix and the searches print, main against it, as the judge here only guesses
- * which row is right.
+ * which row is right; and write a few of them again from its own code, with [writeSnapshot], for PIT's runs.
  */
 @RunWith(RobolectricTestRunner::class)
 class MatcherCasesTest {
 
     /** Set on main, where the matrix and the made-up searches write what main opens, to be kept as [MATRIX] and [FUZZ]. */
     private val onMain = false
+
+    /** Set where the matcher changed what opens, to write [SNAPSHOT] again from this branch (see [aFewSearchesOpenWhatThisBranchOpened]). */
+    private val writeSnapshot = false
 
     /**
      * Each how many cells of the matrix and made-up searches run: one in [SAMPLED], as all of them take minutes, but all
@@ -690,6 +693,15 @@ class MatcherCasesTest {
         assertEquals(null, find(search.copy(what = "link has another length", linkMs = 300_000)))
     }
 
+    /** A link that says it's 0:00 long says no length: what opens is what opens for one that gives none. */
+    @Test
+    fun aLinkOfNoLengthOpensWhatALinkWithoutOneDoes() {
+        val cases = (tenth + ninth + plain + eighth + seventh + sixth + fifth + fourth + third + second + first + before).filter { it.linkMs == null }
+        assertTrue(cases.size > 100)
+        val withoutLength = cases.map(::find)
+        assertEquals(withoutLength, cases.map { find(it.copy(linkMs = 0)) })
+    }
+
     @Test
     fun everyInputTheReviewsTriedOpensWhatMainDid() {
         val cases = tenth + ninth + plain + eighth + seventh + sixth + fifth + fourth + third + second + first + before
@@ -1040,40 +1052,15 @@ class MatcherCasesTest {
         val worse = mutableListOf<String>()
         val counts = sortedMapOf<String, Int>()
         val rightLosses = mutableListOf<String>()
-        var cells = 0
-        val drawn = songsOfTheMatrix.flatMap { song ->
-            val kinds = rowsOf(song)
-            (kinds + null).flatMap { first -> (kinds + null).flatMap { second -> videosOf(song).map { video -> Triple(first, second, video) } } }
-                .filter { (first, second) -> (first != null || second == null) && cells++ % every == 0 && (only.isEmpty() || song.key in only) }
-                .map { song to it }
-        }
+        val drawn = matrixCells().filterIndexed { index, (song) -> index % every == 0 && (only.isEmpty() || song.key in only) }
         assertEquals("Songs -PmatcherSongs names that the matrix doesn't have", emptySet<String>(), only - songsOfTheMatrix.map { it.key }.toSet())
         assertTrue("No cell of the matrix drawn", drawn.isNotEmpty())
-        val searched = drawn.inParallel { (song, cell) ->
-            val (first, second, video) = cell
-            val rows = listOfNotNull(first, second)
-            fun length(kind: Kind) = if (kind.version == "live") song.liveLength else kind.length
-            fun shownRow(kind: Kind) = row(kind.name, kind.album, song.artist, length(kind))
-            fun shownVideo(kind: Kind) = video(kind.name, length(kind), song.artist)
-            val right = rows.filter { isIt(it, song) }.map(::shownRow) + listOfNotNull(video).filter { isIt(it, song) }.map(::shownVideo)
-            // The link says how long the song's own recording is, as one from Spotify or Apple Music does, so what the
-            // matcher does with a length, and with rows of other lengths, is held to main too.
-            val case = Case(
-                "", null, title = song.title, japan = song.japan?.let { it to song.artist }, editions = song.editions, songs = rows.map(::shownRow),
-                videos = listOfNotNull(video).map(::shownVideo), linkMs = lengthMs(if (song.version == "live") song.liveLength else Kind.LENGTH)
-            )
-            val modes = listOf(
-                case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
-                case.copy(chooses = { shown -> shown.indexOfFirst { it !in right } }), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true),
-                alone(case)
-            )
-            modes.map(::found)
-        }
+        val searched = drawn.inParallel { (song, cell) -> matrixModes(song, cell).map(::found) }
         for ((at, results) in drawn.zip(searched)) {
             val (song, cell) = at
             val (first, second, video) = cell
             val rows = listOfNotNull(first, second)
-            val key = listOf(song.key, first?.key ?: "-", second?.key ?: "-", video?.key ?: "-").joinToString(" ")
+            val key = cellKey(song, cell)
             opened += "$key\t${results.joinToString(" ") { it.id ?: "-" }}"
             if (onMain) continue
             val was = requireNotNull(main[key]) { key }.map { it.takeIf { id -> id != "-" } }
@@ -1096,6 +1083,63 @@ class MatcherCasesTest {
         written("matcher-right-losses", rightLosses)
         println("Main -> now, cells:\n" + counts.entries.joinToString("\n"))
         assertEquals("${worse.size} worse: " + worse.take(WORSE_SHOWN).joinToString("\n"), 0, worse.size)
+    }
+
+    /** Every cell of the matrix: a song, with no rows, one or two, each of every kind, and one video of each kind or none. */
+    private fun matrixCells(): List<Pair<Song, Triple<Kind?, Kind?, Kind?>>> = songsOfTheMatrix.flatMap { song ->
+        val kinds = rowsOf(song)
+        (kinds + null).flatMap { first -> (kinds + null).flatMap { second -> videosOf(song).map { video -> Triple(first, second, video) } } }
+            .filter { (first, second) -> first != null || second == null }
+            .map { song to it }
+    }
+
+    private fun cellKey(song: Song, cell: Triple<Kind?, Kind?, Kind?>) =
+        listOf(song.key, cell.first?.key ?: "-", cell.second?.key ?: "-", cell.third?.key ?: "-").joinToString(" ")
+
+    /** A cell's search in each of [MODES]. */
+    private fun matrixModes(song: Song, cell: Triple<Kind?, Kind?, Kind?>): List<Case> {
+        val (first, second, video) = cell
+        val rows = listOfNotNull(first, second)
+        fun length(kind: Kind) = if (kind.version == "live") song.liveLength else kind.length
+        fun shownRow(kind: Kind) = row(kind.name, kind.album, song.artist, length(kind))
+        fun shownVideo(kind: Kind) = video(kind.name, length(kind), song.artist)
+        val right = rows.filter { isIt(it, song) }.map(::shownRow) + listOfNotNull(video).filter { isIt(it, song) }.map(::shownVideo)
+        // The link says how long the song's own recording is, as one from Spotify or Apple Music does, so what the
+        // matcher does with a length, and with rows of other lengths, is held to main too.
+        val case = Case(
+            "", null, title = song.title, japan = song.japan?.let { it to song.artist }, editions = song.editions, songs = rows.map(::shownRow),
+            videos = listOfNotNull(video).map(::shownVideo), linkMs = lengthMs(if (song.version == "live") song.liveLength else Kind.LENGTH)
+        )
+        return listOf(
+            case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
+            case.copy(chooses = { shown -> shown.indexOfFirst { it !in right } }), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true),
+            alone(case)
+        )
+    }
+
+    /**
+     * A few of the matrix's cells and of the made-up searches, in every one of [MODES], open what this branch opened,
+     * [SNAPSHOT]: the matrix and the searches above judge a change against main, but skip PIT's runs, so here a change
+     * PIT makes to what opens is caught. A change to the matcher that changes what opens writes it again, with
+     * [writeSnapshot], into app/build/, to be kept in the test's resources; what changed shows in its diff.
+     */
+    @Test
+    fun aFewSearchesOpenWhatThisBranchOpened() {
+        val cells = matrixCells().filterIndexed { index, _ -> index % SNAPSHOT_EVERY == 0 }
+        val searches = fuzzed().withIndex().filter { it.index % SNAPSHOT_EVERY == 0 }
+        val opened = cells.inParallel { (song, cell) -> matrixModes(song, cell).map(::found) }
+            .zip(cells) { found, (song, cell) -> "${cellKey(song, cell)}\t${found.joinToString(" ") { it.id ?: "-" }}" } +
+            searches.inParallel { it.value.modes.map(::found) }
+                .zip(searches) { found, (index) -> "search $index\t${found.joinToString(" ") { it.id ?: "-" }}" }
+        val text = opened.joinToString("\n", postfix = "\n")
+        if (writeSnapshot) {
+            java.util.zip.GZIPOutputStream(java.io.File("build/$SNAPSHOT.tsv.gz").outputStream()).use { it.write(text.toByteArray()) }
+            return
+        }
+        val kept = requireNotNull(javaClass.getResourceAsStream("/$SNAPSHOT.tsv.gz")) { SNAPSHOT }.use { stream ->
+            java.util.zip.GZIPInputStream(stream).bufferedReader().readText()
+        }
+        assertEquals(kept, text)
     }
 
     /**
@@ -1473,6 +1517,9 @@ class MatcherCasesTest {
         const val SLOW_PICK_MS = 1L
         const val MATRIX = "matcher-matrix"
         const val FUZZ = "matcher-fuzz"
+        const val SNAPSHOT = "matcher-snapshot"
+        /** One in this many of the matrix's cells and of the made-up searches is in [SNAPSHOT]: some seconds, for each change PIT makes. */
+        const val SNAPSHOT_EVERY = 211
         const val SAYS_NONE = -1
         const val MS = 1_000L
         const val FUZZ_SEED = 947
