@@ -1,8 +1,8 @@
 package com.astrovm.crosstune
 
-import android.net.Uri
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import androidx.core.net.toUri
 import com.google.android.gms.cast.RequestData
 import com.google.android.gms.cast.tv.media.MediaCommandCallback
 import com.google.android.gms.cast.tv.media.MediaLoadCommandCallback
@@ -77,7 +77,7 @@ internal fun castLoadRequest(song: CastSong): MediaLoadRequestData {
     val meta = MediaMetadata(MediaMetadata.MEDIA_TYPE_MUSIC_TRACK).apply {
         putString(MediaMetadata.KEY_TITLE, song.title)
         putString(MediaMetadata.KEY_ARTIST, song.artist)
-        song.artworkUrl?.let { addImage(WebImage(Uri.parse(it))) }
+        song.artworkUrl?.let { addImage(WebImage(it.toUri())) }
     }
     val info = MediaInfo.Builder(song.link ?: song.title)
         .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
