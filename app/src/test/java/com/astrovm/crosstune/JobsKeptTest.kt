@@ -18,7 +18,8 @@ import org.junit.Test
 class JobsKeptTest {
     @Test
     fun noJobIsKeptAfterItRuns() {
-        val found = AppPatterns.sources("src/main/java").flatMap { file ->
+        val sources = listOf("src/main/java", "src/play/java", "src/foss/java").flatMap(AppPatterns::sources)
+        val found = sources.flatMap { file ->
             val lines = file.readLines()
             lines.indices.filter { keptAfter(lines, it) }.map { "${file.path}:${it + 1}" }
         }

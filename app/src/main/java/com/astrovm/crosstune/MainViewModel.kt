@@ -211,8 +211,8 @@ internal class MainViewModel(
                 leftJob?.cancel()
                 resumeJob?.cancel()
                 if (!play) return source.playPause(song, false, app, session)
-                resumeJob = viewModelScope.launch {
-                    if (source.resume(song, app, session)) return@launch
+                viewModelScope.launchKept({ resumeJob = it }) {
+                    if (source.resume(song, app, session)) return@launchKept
                     ensureActive()
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
                     if (!source.bringToFront(song, app, session)) uncover()
@@ -2396,10 +2396,10 @@ internal class MainViewModel(
         val tv = cast.target.value?.name ?: return
         val link = uiState.linkToCast(song)
         castJob?.cancel()
-        castJob = viewModelScope.launch {
+        viewModelScope.launchKept({ castJob = it }) {
             val source = phonePlayback?.takeIf { it.hasAccess() }
             val local = withTimeoutOrNull(APP_ASKED_MS) { source?.follow(song)?.firstOrNull() }
-            if (cast.target.value?.name != tv) return@launch
+            if (cast.target.value?.name != tv) return@launchKept
             if (local?.clock?.playing == true) source?.playPause(song, false)
             casting?.casting(song)
             cast.load(CastSong(song.title, song.artist, link, song.artworkUrl, song.lengthMs))
