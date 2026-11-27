@@ -39,6 +39,7 @@ class ReadingsTest {
             assertTrue(Readings.words("山を越えた すげえ", Script.JAPANESE).any { it.lookup == "すごい" })
             assertTrue(Readings.words("鼻緒を結ぶ、すげえ", Script.JAPANESE).any { it.lookup == "すごい" })
             assertTrue(Readings.words("鼻緒を結んですげえ", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertEquals("すごい", Readings.words("ステージを独り占めだ、すげえ！", Script.JAPANESE).last().lookup)
             assertTrue(Readings.words("腹がいてえ", Script.JAPANESE).any { it.lookup == "いたい" })
             assertTrue(Readings.words("部屋がくれえ", Script.JAPANESE).any { it.lookup == "くらい" })
             assertEquals("なでなで", Readings.words("なでなでやん", Script.JAPANESE).single().lookup)
