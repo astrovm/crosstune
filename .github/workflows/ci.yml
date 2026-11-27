@@ -231,7 +231,7 @@ jobs:
       # every job starts from their dependencies too; a dry run would not download them.
       - name: Resolve the other jobs' dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
-        run: ./gradlew :app:lintDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        run: ./gradlew :app:lintPlayDebug :app:lintFossDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundlePlayRelease :app:cachePitestDependencies --build-cache --configuration-cache
 
       # The cache is immutable. An exact hit needs no save; a new build-file hash gets a new key.
       - name: Save Gradle dependencies
@@ -382,7 +382,7 @@ jobs:
       - uses: ./.github/actions/jdk
 
       - name: Lint
-        run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
+        run: ./gradlew :app:lintPlayDebug :app:lintFossDebug :app:detekt --build-cache --configuration-cache
 
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
@@ -495,7 +495,7 @@ jobs:
       # The release runs the full checks and bundle; save their Central dependencies for it on main.
       - name: Resolve release dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
-        run: ./gradlew :app:ci :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        run: ./gradlew :app:ci :app:bundlePlayRelease :app:cachePitestDependencies --build-cache --configuration-cache
         env:
           CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
           CMAKE_CXX_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
