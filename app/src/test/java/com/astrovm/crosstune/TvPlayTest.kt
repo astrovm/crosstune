@@ -1063,6 +1063,42 @@ class TvPlayTest {
         assertTrue(playButton.left > microphone.right)
     }
 
+    /**
+     * Issue #1288: on a phone, YouTube Music without Premium is covered by Crosstune's screen in a service's window,
+     * from which a sheet's window of its own crashed Crosstune, with "token null is not valid".
+     */
+    @Test
+    fun onAPhoneASheetOverTheCoverIsDrawnInItRatherThanInAWindowItCantOpen() {
+        playInFront()
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val started = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
+        waitUntil { shown("Demo one") }
+        // Any window beside the cover would be one with no token, which Android refuses.
+        val windows = { Shadow.extract<ShadowWindowManagerImpl>(floating.get().getSystemService(WindowManager::class.java)).views.size }
+        val before = windows()
+
+        click(string(R.string.lyrics_about_song))
+        val report = hasContentDescription(string(R.string.report_problem)) and hasAnyAncestor(isDialog())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(before, windows())
+        // A dialog over the sheet, the report, stays in the cover too.
+        composeRule.onNode(report).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { shown(string(R.string.report_send)) }
+        assertEquals(before, windows())
+
+        // Back puts each away, as it does a window's.
+        pressBack(floating.get())
+        waitUntil { !shown(string(R.string.report_send)) }
+        pressBack(floating.get())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isEmpty() }
+        assertTrue(shown("Demo one"))
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+    }
+
     /** Whether the remote is on something in a dialog or a sheet. */
     private fun inDialog() = composeRule.onAllNodes(hasAnyAncestor(isDialog())).fetchSemanticsNodes().any { it.config.getOrElseNullable(SemanticsProperties.Focused) { null } == true }
 

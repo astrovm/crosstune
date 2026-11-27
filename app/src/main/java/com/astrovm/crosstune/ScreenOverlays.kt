@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -49,6 +52,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.dialog
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -56,10 +60,10 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ProvideTextStyle
 
 /*
- * A dialog or a sheet is a window of its own, which Crosstune can only open from an activity. On a
- * TV the cover over another app is a window of a service's, with none, so there they're drawn
- * inside the screen instead, over what's under them: where the remote can reach them, and where
- * Back puts them away.
+ * A dialog or a sheet is a window of its own, which Crosstune can only open from an activity. The
+ * cover over another app, on a TV or over a phone's app that only plays in front, is a window of a
+ * service's, with none: there, and on a TV anywhere, they're drawn inside the screen instead, over
+ * what's under them, where the remote can reach them, and where Back puts them away.
  */
 
 /** What's drawn over the screen, the last on top; null where dialogs and sheets are windows. */
@@ -92,6 +96,12 @@ internal fun rememberOverlays(putAway: (own: Boolean) -> Boolean) = remember { O
 internal class Overlay(val content: State<@Composable () -> Unit>, val opener: FocusRequester) {
     val focus = FocusRequester()
 }
+
+/** Whether this is drawn in an activity's window, over which a dialog or sheet can open a window of its own. */
+@Composable
+internal fun inAnActivity(): Boolean = LocalContext.current.activity() != null
+
+private tailrec fun Context.activity(): Activity? = if (this is Activity) this else if (this is ContextWrapper) baseContext.activity() else null
 
 /** Draws [content], the screen, with room over it in [overlays] for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
 @Composable
