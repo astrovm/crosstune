@@ -215,6 +215,10 @@ class ReadingsTest {
             assertEquals("だせる", Readings.words("だせえ服", Script.JAPANESE).first().lookup)
             assertEquals("dase e fuku", Readings.of(listOf("だせえ服"), Script.JAPANESE).single().romanized)
             assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
+            // まじ before うぜえ is its own word, and まじう, the dictionary's form of まじ, stays one where it is one.
+            assertEquals(listOf("まじ", "うぜえ"), Readings.words("まじうぜえ", Script.JAPANESE).map { it.text })
+            assertEquals("maji uzee", Readings.of(listOf("まじうぜえ"), Script.JAPANESE).single().romanized)
+            assertEquals("majiu", Readings.of(listOf("まじう"), Script.JAPANESE).single().romanized)
             assertEquals("すごい", Readings.words("すごくすげえ", Script.JAPANESE).last().lookup)
             assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
             val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
@@ -351,6 +355,10 @@ class ReadingsTest {
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
             Triple("ちょれえ", "ちょれえ", "ちょろい"),
+            // A noun after a word that is a noun or an adjective, 甘え or 甘い, takes the adjective.
+            Triple("君はあめえこと", "あめえ", "あまい"), Triple("金をあめえ奴", "あめえ", "あまい"),
+            // A particle that starts the line joins the word: ね and みい.
+            Triple("ねみい", "ねみい", "ねむい"),
             // A particle after a noun joins the word when what follows it is no word: お前 か っけ え.
             Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("疲れてねみい", "ねみい", "ねむい"),
             // A verb split from a word, after て, is no helper verb.
@@ -380,6 +388,52 @@ class ReadingsTest {
         }
         check()
         TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun eeSaidForIiLooksUpTheAdjectiveWithIi() {
+        // Kansai's ええ for いい: かわええ is かわいい, not JMdict's slang かわよい. え said for わ, や or よ stays.
+        val cases = listOf(
+            "かわええ" to "かわええ=かわいい", "かわええな" to "かわええ=かわいい|な=な", "かわええ子" to "かわええ=かわいい|子=子",
+            "かわえー" to "かわえー=かわいい", "かっこええ" to "かっこええ=かっこいい",
+            "こええ" to "こええ=こわい", "はええ" to "は=は|え=え|え=え", "つええ" to "つええ=つよい", "よええ" to "よ=よ|え=え|え=え",
+            "かええ" to "か=か|え=え|え=え"
+        )
+        fun check() {
+            for ((line, words) in cases) {
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" })
+            }
+            assertEquals("kawaee", Readings.of(listOf("かわええ"), Script.JAPANESE).single().romanized)
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun aNounBeforeWhatOnlyAVerbTakesIsSplitAsIpadicSplitsIt() {
+        // UniDic's 頭がい, the skull, can't take て or たい, which follow a verb: 頭がいてえ is 頭 が いてえ, my head hurts.
+        val cases = listOf(
+            "頭がいてえ" to ("atama ga itee" to "頭=頭|が=が|いてえ=いたい"),
+            "頭がいてえよ" to ("atama ga itee yo" to "頭=頭|が=が|いてえ=いたい|よ=よ"),
+            "頭がいたい" to ("atama ga itai" to "頭=頭|が=が|いたい=いる"),
+            // The skull, before what a noun takes, and the word in kanji.
+            "頭がい骨" to ("zugaikotsu" to "頭がい骨=頭がい骨"),
+            "頭蓋骨" to ("zugaikotsu" to "頭蓋骨=頭蓋骨")
+        )
+        fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized to
+            Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" }
+        for ((line, expected) in cases) {
+            assertEquals(line, listOf(expected, expected), listOf(read(line), TestUniDic.reading { read(line) }))
+        }
+        assertEquals("あたま", Readings.words("頭がいてえ", Script.JAPANESE).first().reading)
+        assertEquals("あたま", TestUniDic.reading { Readings.words("頭がいてえ", Script.JAPANESE).first().reading })
+        for (line in listOf("頭がいを割る", "頭がいの中", "頭がい。")) {
+            assertEquals(line, "zugai", TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().romanized }.take(5))
+        }
+        // A noun made of a noun and a verb's stem, with no particle in it, stays the word it is, whatever comes after.
+        for ((line, start) in listOf("雨宿りたい" to "amayadori", "手探ります" to "tesaguri", "泣き笑いました" to "nakiwarai")) {
+            assertEquals(line, start, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().romanized }.take(start.length))
+        }
     }
 
     @Test
