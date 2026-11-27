@@ -430,6 +430,10 @@ class ReadingsTest {
         for (line in listOf("頭がいを割る", "頭がいの中", "頭がい。")) {
             assertEquals(line, "zugai", TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().romanized }.take(5))
         }
+        // A noun made of a noun and a verb's stem, with no particle in it, stays the word it is, whatever comes after.
+        for ((line, start) in listOf("雨宿りたい" to "amayadori", "手探ります" to "tesaguri", "泣き笑いました" to "nakiwarai")) {
+            assertEquals(line, start, TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().romanized }.take(start.length))
+        }
     }
 
     @Test

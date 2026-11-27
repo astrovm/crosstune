@@ -1041,8 +1041,10 @@ internal object Readings {
     private val NOT_PLAIN_NOUNS = setOf("副詞可能", "代名詞", "固有名詞")
 
     /**
-     * Whether UniDic's noun [b] takes in a verb IPADIC reads in [a], with its ending after, [next]: 頭がいてえ is 頭 が
-     * いてえ, my head hurts, not 頭がい, the skull, as IPADIC's い goes on with て, and 頭がいたい goes on with たい.
+     * Whether UniDic's noun [b] takes in a particle and a verb IPADIC reads in [a], with the verb's ending after, [next]:
+     * 頭がいてえ is 頭 が いてえ, my head hurts, not 頭がい, the skull, as IPADIC's い goes on with て, and 頭がいたい goes
+     * on with たい. A noun made of words alone stays whole, 雨宿り あまやどり, whatever follows. [b] is one word here,
+     * as [keptWhole] has said so first.
      */
     private fun verbInNoun(a: List<Piece>, b: List<Piece>, next: Piece?): Boolean {
         val afterVerb = next != null && when (next.kind) {
@@ -1050,7 +1052,7 @@ internal object Readings {
             "助動詞" -> next.base in setOf("たい", "ます", "た")
             else -> false
         }
-        return afterVerb && a.last().kind == "動詞" && b.single().kind == "名詞"
+        return afterVerb && a.last().kind == "動詞" && a.any { it.kind == "助詞" } && b.single().kind == "名詞"
     }
 
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
