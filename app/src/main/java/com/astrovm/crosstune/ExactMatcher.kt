@@ -296,7 +296,7 @@ internal class ExactMatcher(
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata): String {
         val edition = if (metadata.requestsDisco()) "/disco" else ""
         return (listOf("$kind@$MATCH_VERSION$edition", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) +
-            listOfNotNull(metadata.lengthMs)).joinToString("|")
+            listOfNotNull(metadata.linkLengthMs)).joinToString("|")
     }
 
     /**
@@ -538,7 +538,7 @@ internal class ExactMatcher(
      * the first.
      */
     private fun <T> asLongAs(metadata: MusicMetadata, named: List<T>, lengthMs: (T) -> Long?): T? {
-        val wanted = metadata.lengthMs ?: return named.firstOrNull()
+        val wanted = metadata.linkLengthMs ?: return named.firstOrNull()
         return named.firstOrNull { found -> lengthMs(found)?.let { kotlin.math.abs(it - wanted) <= SAME_LENGTH_MS } == true } ?: named.firstOrNull()
     }
 
@@ -883,7 +883,7 @@ internal class ExactMatcher(
             // A song's album may say what version it is, "Song" on "… Remix".
             val album = if (isSong) details.getOrNull(1).orEmpty() else ""
             if (isSong && !keepsRequestedRecording(recording, name, album)) return null
-            val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(name) else name
+            val named = if (isSong && metadata.linkLengthMs != null) keepNotesAfterGuests(name) else name
             val same = if (loose) looselyMatches(metadata, named, artist) else matches(metadata, named, artist.ifEmpty { named }, album)
             if (!same) return null
             return when (metadata.type) {
@@ -1423,15 +1423,11 @@ internal class ExactMatcher(
         } else sameArtist
         val ambiguous = indistinguishableCandidates(ambiguityRows, sourceLength)
         val eligible = eligibleUntranslatedRows(plausible, rows, names, sourceLength)
-        val known = eligible.filter { knownUntranslatedTitle(it, names) }
-        val byAlbum = albumVerifiedRows(known, names, metadata, recording)
-        val byVersion = versionSeparatedRows(rows, known, names, recording)
         val byRelease = equivalentAlbumReleases(eligible, names, wantsLive)
         val byRequestedLive = if (wantsLive) uniqueLiveRows(eligible) else emptySet()
         return eligible.filter { row ->
             val name = candidateName(row)
-            name !in ambiguous || byAlbum[name] == row.id || byVersion[name] == row.id ||
-                row in byRelease || row in byRequestedLive
+            name !in ambiguous || row in byRelease || row in byRequestedLive
         }
     }
 
@@ -1442,19 +1438,6 @@ internal class ExactMatcher(
             fitsUntranslatedSong(it, names, sourceLength) && candidateName(it) !in markedAliases &&
                 !unprovedSubstitution(it, plausible, rows, names, sourceLength)
         }
-    }
-
-    private fun knownUntranslatedTitle(row: Row, names: Names): Boolean = names.titles.any { title ->
-        SongNames.same(title, row.name) || samePart(numberedPartBeforeNotes(title), numberedPartBeforeNotes(row.name))
-    }
-
-    private fun albumVerifiedRows(
-        known: List<Row>, names: Names, metadata: MusicMetadata, recording: RequestedRecording
-    ): Map<Pair<String, String>, String?> {
-        val album = names.corroboratingAlbum.takeIf { plainLinkedTitle(metadata) || recording.part != null } ?: return emptyMap()
-        return known.filter { SongNames.normalize(it.details.getOrNull(1).orEmpty()) == album &&
-            (names.takeOnAlbum || !isAnotherVideoVersion(it.name, names)) }
-            .groupBy(::candidateName).mapNotNull { (name, group) -> group.singleOrNull()?.let { name to it.id } }.toMap()
     }
 
     private fun plausibleInAnotherScript(row: Row, names: Names, recording: RequestedRecording): Boolean =
@@ -1529,13 +1512,6 @@ internal class ExactMatcher(
         return SongNames.same(Readings.of(listOf(native.second), Script.JAPANESE).single().typed, reading.second)
     }
 
-    private fun versionSeparatedRows(rows: List<Row>, eligible: List<Row>, names: Names, recording: RequestedRecording): Map<Pair<String, String>, String?> {
-        if (names.corroboratingAlbum == null || names.takeOnAlbum) return emptyMap()
-        val live = recording.live || names.titles.any(::saysLive)
-        return eligible.filter { row -> rowIsLive(row) == live && (live || !isAnotherVideoVersion(row.name, names)) }.groupBy(::candidateName)
-            .filter { (name, _) -> rows.any { candidateName(it) == name && rowIsLive(it) != live } }
-            .mapNotNull { (name, group) -> group.singleOrNull()?.let { name to it.id } }.toMap()
-    }
 
     private fun indistinguishableCandidates(rows: List<Row>, sourceLength: Long?): Set<Pair<String, String>> = rows.filter { row ->
         row.id != null && fitsSource(row, sourceLength)
@@ -1610,7 +1586,7 @@ internal class ExactMatcher(
 
     /** The link's length can tell which recording it plays when a plain title left its recording off. */
     private fun namedLinkedEdition(metadata: MusicMetadata, items: List<JSONObject>, firstLength: Long?): Row? {
-        val link = metadata.lengthMs ?: return null
+        val link = metadata.linkLengthMs ?: return null
         if (firstLength == null || kotlin.math.abs(firstLength - link) <= SAME_LENGTH_MS || !plainLinkedTitle(metadata)) return null
         val recording = requestedRecording(metadata.title)
         return playable(items).singleOrNull {
@@ -1852,7 +1828,7 @@ internal class ExactMatcher(
         val take = pickedVideoTake(row.name, search.names)
         if (take != null && search.names.titles.none { namesTake(it, take) }) return false
         if (search.conflictingLengths.isNotEmpty()) {
-            return knownVideoFitsSource(row, search.names, search.metadata.lengthMs, search.conflictingLengths)
+            return knownVideoFitsSource(row, search.names, search.metadata.linkLengthMs, search.conflictingLengths)
         }
         if (requestedRerecordingVideo(row, search.metadata)) return true
         return videoTitleMatches(row.name, search.names, allowAlias = true) || explicitlyNamedVideo(row, search.names) ||
@@ -1913,7 +1889,7 @@ internal class ExactMatcher(
     }
 
     private fun videoReadingMatches(title: String, names: Names): Boolean =
-        title.isNotEmpty() && title.all { it in '\u3041'..'\u3096' || it in '\u30a1'..'\u30fa' } &&
+        title.isNotEmpty() && title.all { Character.UnicodeBlock.of(it) in KANA } &&
             names.romanizedJapanese?.let { SongNames.same(it, Readings.of(listOf(title), Script.JAPANESE).single().typed) } == true
 
     private fun namesThePickedPart(part: NumberedPart, row: Row, video: Boolean): Boolean {
@@ -2048,7 +2024,7 @@ internal class ExactMatcher(
         val album = found?.editions?.singleOrNull()?.takeIf {
             (matches(metadata, it.optString("trackName"), it.optString("artistName")) ||
                 linkedArtist && SongNames.sameVersion(metadata.title, it.optString("trackName"), "")) &&
-                metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
+                metadata.linkLengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
         }?.optString("collectionName")?.let(SongNames::normalize)?.takeIf(String::isNotEmpty)
         val takeOnAlbum = found?.editions.orEmpty().any {
             val collection = it.optString("collectionName")
@@ -2199,7 +2175,7 @@ internal class ExactMatcher(
     private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
 
     private fun linkedAppleEdition(metadata: MusicMetadata, editions: List<JSONObject>): LinkedEdition? {
-        val length = metadata.lengthMs ?: return null
+        val length = metadata.linkLengthMs ?: return null
         if (editions.size < 2 || !plainLinkedTitle(metadata)) return null
         val timed = editions.filter { it.optLong("trackTimeMillis") > 0 && matches(metadata, it.optString("trackName"), it.optString("artistName")) }
         if (timed.size < 2) return null
@@ -2226,7 +2202,7 @@ internal class ExactMatcher(
                     !SongNames.saysAnotherVersion(it.optString("trackName"), metadata.title, metadata.artist)
             }
             ?: results.firstOrNull { inLatinLetters(metadata, it) }
-            ?: results.firstOrNull { song -> metadata.lengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
+            ?: results.firstOrNull { song -> metadata.linkLengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
                 ?.takeIf { namedAtHome(metadata, it, searched) }
         song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }) }
     }
@@ -2247,7 +2223,7 @@ internal class ExactMatcher(
      * Korea's store names ILLIT 아일릿: the same title, by an artist the store writes otherwise, and as long.
      */
     private fun inLatinLetters(metadata: MusicMetadata, song: JSONObject): Boolean {
-        val lengthMs = metadata.lengthMs ?: return false
+        val lengthMs = metadata.linkLengthMs ?: return false
         return !metadata.artist.hasLatin() && SongNames.sameVersion(metadata.title, song.optString("trackName"), "") &&
             kotlin.math.abs(song.optLong("trackTimeMillis") - lengthMs) <= SAME_RECORDING_LENGTH_MS
     }
@@ -2669,6 +2645,9 @@ internal class ExactMatcher(
         /** The scripts the stores in [NAMING_STORES] write names in. */
         private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
         private val NO_OTHER_SCRIPT = setOf(Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON, Character.UnicodeScript.INHERITED, Character.UnicodeScript.UNKNOWN)
+
+        /** Kana, the long vowel mark ー too, which a title written as it reads is all of. */
+        private val KANA = setOf(Character.UnicodeBlock.HIRAGANA, Character.UnicodeBlock.KATAKANA)
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
