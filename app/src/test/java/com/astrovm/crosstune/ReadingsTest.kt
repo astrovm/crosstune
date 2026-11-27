@@ -383,6 +383,48 @@ class ReadingsTest {
     }
 
     @Test
+    fun eeSaidForIiLooksUpTheAdjectiveWithIi() {
+        // Kansai's ええ for いい: かわええ is かわいい, not JMdict's slang かわよい. え said for わ, や or よ stays.
+        val cases = listOf(
+            "かわええ" to "かわええ=かわいい", "かわええな" to "かわええ=かわいい|な=な", "かわええ子" to "かわええ=かわいい|子=子",
+            "かわえー" to "かわえー=かわいい", "かっこええ" to "かっこええ=かっこいい",
+            "こええ" to "こええ=こわい", "はええ" to "は=は|え=え|え=え", "つええ" to "つええ=つよい", "よええ" to "よ=よ|え=え|え=え",
+            "かええ" to "か=か|え=え|え=え"
+        )
+        fun check() {
+            for ((line, words) in cases) {
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" })
+            }
+            assertEquals("kawaee", Readings.of(listOf("かわええ"), Script.JAPANESE).single().romanized)
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
+    fun aNounBeforeWhatOnlyAVerbTakesIsSplitAsIpadicSplitsIt() {
+        // UniDic's 頭がい, the skull, can't take て or たい, which follow a verb: 頭がいてえ is 頭 が いてえ, my head hurts.
+        val cases = listOf(
+            "頭がいてえ" to ("atama ga itee" to "頭=頭|が=が|いてえ=いたい"),
+            "頭がいてえよ" to ("atama ga itee yo" to "頭=頭|が=が|いてえ=いたい|よ=よ"),
+            "頭がいたい" to ("atama ga itai" to "頭=頭|が=が|いたい=いる"),
+            // The skull, before what a noun takes, and the word in kanji.
+            "頭がい骨" to ("zugaikotsu" to "頭がい骨=頭がい骨"),
+            "頭蓋骨" to ("zugaikotsu" to "頭蓋骨=頭蓋骨")
+        )
+        fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized to
+            Readings.words(line, Script.JAPANESE).joinToString("|") { "${it.text}=${it.lookup}" }
+        for ((line, expected) in cases) {
+            assertEquals(line, listOf(expected, expected), listOf(read(line), TestUniDic.reading { read(line) }))
+        }
+        assertEquals("あたま", Readings.words("頭がいてえ", Script.JAPANESE).first().reading)
+        assertEquals("あたま", TestUniDic.reading { Readings.words("頭がいてえ", Script.JAPANESE).first().reading })
+        for (line in listOf("頭がいを割る", "頭がいの中", "頭がい。")) {
+            assertEquals(line, "zugai", TestUniDic.reading { Readings.of(listOf(line), Script.JAPANESE).single().romanized }.take(5))
+        }
+    }
+
+    @Test
     fun revisedColloquialBoundariesMatchMain() {
         val cases = listOf(
             "はええ" to "は=は|え=え|え=え",
