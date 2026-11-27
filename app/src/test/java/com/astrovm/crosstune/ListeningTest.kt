@@ -303,6 +303,7 @@ class ListeningTest {
         Readings.uniDic = null
         File(app.noBackupFilesDir, "unidic").deleteRecursively()
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.chordWikiFactory = { ChordWikiBrowser(it) }
@@ -367,6 +368,9 @@ class ListeningTest {
     ).fetchSemanticsNodes().isNotEmpty()
 
     private fun recognize() = click(string(R.string.recognize_button))
+
+    /** Recent can already show the song's name before recognition opens its card. */
+    private fun waitForSongCardLyrics() = waitForText(string(R.string.lyrics_button))
 
     @Test
     fun aSongPlayingOnThePhoneIsNamedByItsAppWithoutListening() {
@@ -5934,6 +5938,7 @@ class ListeningTest {
     @Test
     fun withoutAnythingToFloatOutOfOrAllowedTheWindowStopsAtOnce() {
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         val alone = Robolectric.buildService(FloatingLyricsService::class.java).create().startCommand(0, 1)
         assertTrue(shadowOf(alone.get()).isStoppedBySelf)
         // Nothing binds to it: it's only started.
@@ -6415,7 +6420,7 @@ class ListeningTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.destroyAndSettle()
         launch()
         recognize()
-        waitForText("Demo")
+        waitForSongCardLyrics()
         click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { readingShown("とかい") }
         settle()
@@ -7634,7 +7639,7 @@ class ListeningTest {
 
         launch()
         recognize()
-        waitForText("Demo")
+        waitForSongCardLyrics()
         // Opened again, they're all there before anything else gets a turn, and nothing's asked again.
         composeRule.runOnUiThread {
             controllerModel().showLyrics()
@@ -7672,8 +7677,8 @@ class ListeningTest {
 
         launch()
         recognize()
-        waitForText("Demo")
-        composeRule.runOnIdle { controllerModel().showLyrics() }
+        waitForSongCardLyrics()
+        click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" }
         // Left out of what was kept, with no need to look them up again.
         assertTrue(fake.requestedUrls.drop(asked).none { "lrclib" in it })
@@ -7710,8 +7715,8 @@ class ListeningTest {
 
         launch()
         recognize()
-        waitForText("Demo")
-        composeRule.runOnIdle { controllerModel().showLyrics() }
+        waitForSongCardLyrics()
+        click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" && !controllerModel().uiState.isLoadingLyrics }
         // Worked out again, they say where they're from, kept as the app's left.
         composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop() }

@@ -13,6 +13,7 @@
     <string name="open_in_spotify">In Spotify öffnen</string>
     <string name="open_in_audiomack">In Audiomack öffnen</string>
     <string name="open_in_qobuz">In Qobuz öffnen</string>
+    <string name="open_in_presto_music">In Presto Music öffnen</string>
     <string name="open_in_bandcamp">In Bandcamp öffnen</string>
     <string name="open_in_amazon_music">In Amazon Music öffnen</string>
     <string name="from_service">von %1$s</string>
@@ -128,7 +129,7 @@
     <string name="tile_lyrics_label">Text zum laufenden Song</string>
     <string name="widget_recognize_label">Erkennen</string>
     <string name="widget_recognize_description">Erkennt den Song in der Nähe mit einem Tippen</string>
-    <string name="widget_lyrics_label">Liedtext</string>
+    <string name="widget_lyrics_label">Songtext</string>
     <string name="widget_lyrics_description">Erkennt den Song in der Nähe und zeigt seinen Text, im Takt</string>
     <string name="error_clipboard_empty">Kopiere zuerst einen Musik-Link.</string>
     <string name="copy_search_action">Suchtext kopieren</string>
@@ -194,7 +195,7 @@
     <string name="lyrics_loading">Songtext wird gesucht…</string>
     <string name="lyrics_none">Für diesen Song wurde kein Songtext gefunden.</string>
     <string name="lyrics_instrumental">Dieser Song hat keinen Text.</string>
-    <string name="lyrics_sync_service">Crosstune-Liedtext-Sync</string>
+    <string name="lyrics_sync_service">Crosstune-Songtext-Sync</string>
     <string name="lyrics_follow_allow">Lass den Text dem Song folgen, der in deiner Musik-App läuft.</string>
     <string name="lyrics_following_app">Folgt %1$s</string>
     <string name="lyrics_play">Abspielen</string>
@@ -277,7 +278,7 @@
     <string name="setting_off">Aus</string>
     <string name="follow_help_title">Lass den Text deiner Musik folgen</string>
     <string name="follow_turn_on">Aktivieren</string>
-    <string name="setting_lyrics_follow">Liedtext folgt deiner Musik-App</string>
+    <string name="setting_lyrics_follow">Songtext folgt deiner Musik-App</string>
     <string name="setting_lyrics_follow_description">Braucht Benachrichtigungszugriff.</string>
     <string name="follow_help_app_info">App-Info</string>
     <string name="song_search_title">Songs</string>
@@ -324,7 +325,7 @@
     <string name="auto_report_offer_words_off">Der Text dieses Songs war versetzt. Solche Fälle automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
     <string name="auto_report_not_now">Nicht jetzt</string>
-    <string name="singing_model_offer">Damit sich der Liedtext nach dem Gesang richtet, ist ein Download von 32 MB nötig.</string>
+    <string name="singing_model_offer">Damit sich der Songtext nach dem Gesang richtet, ist ein Download von 32 MB nötig.</string>
     <string name="singing_model_failed">Der Download von 32 MB wurde nicht fertig.</string>
     <string name="singing_model_download">Herunterladen</string>
     <string name="singing_model_close">Jetzt nicht</string>
@@ -438,7 +439,7 @@
     <string name="card_words_as_lyrics">Wie im Songtext</string>
     <string name="practice_front">Vorderseite</string>
     <string name="practice_back">Rückseite</string>
-    <string name="floating_shared">Mit dem Liedtext geteilt</string>
+    <string name="floating_shared">Mit dem Songtext geteilt</string>
     <string name="floating_overlay_size">Größe des schwebenden Fensters</string>
 
     <!-- What's broken, in one place, and the steps to fix each in Android's settings. -->
@@ -449,7 +450,7 @@
     <string name="fix_with_root">Per Root mit einem Tipp</string>
     <string name="fix_failed">Ein Tipp konnte nicht alles beheben. Den Rest machst du von Hand.</string>
     <string name="fix_shizuku_stopped">Shizuku ist gestoppt. Starte Shizuku, um alles mit einem Tipp zu beheben.</string>
-    <string name="fix_mic_title">Lass den Liedtext die Musik hören</string>
+    <string name="fix_mic_title">Lass den Songtext die Musik hören</string>
     <string name="fix_open_settings">Android-Einstellungen öffnen</string>
     <string name="fix_try_link">Link testen</string>
     <string name="fix_step_tap">Tippe auf %1$s.</string>

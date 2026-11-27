@@ -100,6 +100,17 @@ def word(kanji, kana, senses):
 
 class OldKana(unittest.TestCase):
 
+    def test_kana_adjectives_keep_each_applicable_spelling_for_the_tokenizer(self):
+        words = [
+            word([("在り来たり", [], False), ("在り来り", ["sK"], False)],
+                 [("ありきたり", [], False, ["*"])], [(["adj-na"], ["uk"])]),
+            word([("静か", [], True)], [("しずか", [], True, ["*"])], [(["adj-na"], [])]),
+            word([("例", [], True)], [("れい", [], True, ["*"])], [(["n"], ["uk"])]),
+            word([("別", [], False)], [("", [], False, ["*"]), ("abc", [], False, ["*"])], [(["adj-na"], ["uk"])]),
+            word([("別", [], False)], [("べつ", ["rk"], False, ["*"]), ("ほか", [], False, ["違う"])], [(["adj-na"], ["uk"])]),
+        ]
+        self.assertEqual({"ありきたり": ["在り来たり", "在り来り"]}, readingsaudit.kana_adjectives(words))
+
     def test_lists_common_small_kana_words_for_search_without_changing_old_kana(self):
         words = [
             word([("電車", [], True)], [("でんしゃ", [], True, ["*"])], [(["n"], [])]),

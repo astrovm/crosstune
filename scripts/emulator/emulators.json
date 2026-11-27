@@ -21,6 +21,7 @@
       "Audiomack": "com.audiomack",
       "Amazon Music": "com.amazon.mp3",
       "Qobuz": "com.qobuz.music",
+      "Presto Music": "com.prestomusic.app",
       "Shizuku": "moe.shizuku.privileged.api"
     },
     "optional_apps": {

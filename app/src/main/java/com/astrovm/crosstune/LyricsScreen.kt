@@ -1053,7 +1053,7 @@ private fun LayerChip(@StringRes label: Int, @StringRes name: Int, on: Boolean, 
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.heightIn(min = 56.dp).clip(shape)
             .then(if (on) Modifier.background(colors.secondaryContainer) else Modifier.border(1.dp, colors.outlineVariant, shape))
-            .toggleable(on, role = Role.Switch, onValueChange = onChange)
+            .toggleable(on, interactionSource = null, indication = focusRing(shape), role = Role.Switch, onValueChange = onChange)
             .semantics { contentDescription = description }
             .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
@@ -1173,6 +1173,7 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
  * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
  * those worth it are checked to start with. Each says how many times it's sung, and whether it has
  * words worth knowing. Saved, or practised when [practise], what changed is given to [onSave].
+ * Put away, it gives the remote back to [opener], what opened it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1184,7 +1185,8 @@ internal fun ChooseLinesSheet(
     loadArtwork: suspend (String) -> ImageBitmap?,
     practise: Boolean,
     onSave: (add: List<Int>, remove: List<SavedLine>) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    opener: FocusRequester? = null
 ) {
     val lines = remember(texts, words) { songLines(texts, words) }
     val keptLines = kept.filter { it.line == null }
@@ -1193,7 +1195,7 @@ internal fun ChooseLinesSheet(
     val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
     val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
     val dropped = remember(song) { mutableStateListOf<SavedLine>() }
-    ScreenSheet(onDismiss) {
+    ScreenSheet(onDismiss, opener) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
@@ -1233,17 +1235,19 @@ internal fun ChooseLinesSheet(
             }
             // Practised, it needs a line to practise; saved, something to change.
             val left = kept.size - dropped.size + picked.size
-            Button(
-                onClick = {
-                    onSave(picked.toList(), dropped.toList())
-                    onDismiss()
-                },
-                enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-            ) {
-                Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
+            ChooseLinesButton(practise, enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty()) {
+                onSave(picked.toList(), dropped.toList())
+                onDismiss()
             }
         }
+    }
+}
+
+/** What puts [ChooseLinesSheet] away with the lines chosen: practise them when [practise], else save them. */
+@Composable
+private fun ChooseLinesButton(practise: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
     }
 }
 
@@ -1404,10 +1408,6 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
             enabled = !state.playingResult,
             onClick = actions.onPlayResult
         )
-    } else if (state.canOpenFromLyrics) {
-        IconButton(onClick = actions.onOpen) {
-            AppIcon(R.drawable.ic_open_in_new, contentDescription = state.resultDestination.openLabel())
-        }
     }
 }
 
@@ -1427,7 +1427,7 @@ private fun AppSource(description: String, packageName: String?, playing: Boolea
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRing(CircleShape), enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
     ) {
         // The badge sits on the icon's corner, inside the button.
@@ -1688,17 +1688,23 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?, byE
         // back and forth: the line lit stays lit till its new time comes, as it's that close. Moved by
         // the player, as a line tapped, it's lit at once.
         val lit = value
-        val moved = followed[0] == following
+        val sameClock = followed[0] == following
         followed[0] = following
-        value = sung().takeUnless { moved && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position()?.let { line.timeMs - it < MainViewModel.WORDS_OFF_MS } == true } } ?: lit
+        value = keepCloseLine(lines, lit, sung(), position(), sameClock)
         val changes = SyncedLyrics.changes(lines, byEar)
         while (following?.timingKnown == true) {
             delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(changes, it) } ?: break)
-            value = sung()
+            // A delay can wake before the playback clock reaches its next line.
+            value = keepCloseLine(lines, value, sung(), position(), sameClock = true)
         }
     }
     return active
 }
+
+private fun keepCloseLine(lines: List<LyricLine>, lit: Int, next: Int, position: Long?, sameClock: Boolean): Int =
+    next.takeUnless {
+        sameClock && it >= 0 && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position?.let { at -> line.timeMs - at < MainViewModel.WORDS_OFF_MS } == true }
+    } ?: lit
 
 /**
  * Timed words, one line at a time. While the song is followed the line being sung is lit, those

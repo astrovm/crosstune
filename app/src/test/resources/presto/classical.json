@@ -1,0 +1,185 @@
+{
+  "status": "ok",
+  "code": 0,
+  "payload": {
+    "hasComposers": false,
+    "hasArtists": false,
+    "hasWorks": false,
+    "hasLabels": false,
+    "hasAlbums": true,
+    "totalCount": 34,
+    "results": [
+      {
+        "prestoCode": 9590596,
+        "title": "Glenn Gould, piano: Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8079068,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7953381,
+        "title": "Bach - Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8020008,
+        "title": "The Best of Glenn Gould's Bach",
+        "artists": "Glenn Gould (piano), Glenn Gould (organ)\r\nColumbia Symphony Orchestra, Vladimir Golschmann"
+      },
+      {
+        "prestoCode": 8079005,
+        "title": "JS Bach: Goldberg Variations",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7996997,
+        "title": "Glenn Gould in Concert 1951-1960",
+        "artists": "Glenn Gould (piano), Kerstin Meyer (mezzo-soprano)\r\nSwedish RSO, CBC SO, Detroit SO, NYPSO, Buffalo PO, Toronto SO, Winnipeg SO, Cleveland Orchestra, G.L. Jochum, Goldschmidt, Paul Paray, Leonard Bernstein, J. Krips, Ernest MacMillan, Victor Feldbrill, Louis Lane"
+      },
+      {
+        "prestoCode": 8084870,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7971133,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8023246,
+        "title": "Glenn Gould in Concert: Live in Salzburg 1959",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7971102,
+        "title": "J. S. Bach: Goldberg Variations etc.",
+        "artists": "Martin Beaver (violin), David Harding (viola), Bryan Epperson (cello), Glenn Gould (piano)\r\nTriskelion"
+      },
+      {
+        "prestoCode": 8003299,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7938158,
+        "title": "The 1955 Goldberg Variations - Birth of a Legend",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8028640,
+        "title": "Glenn Gould Plays Bach Vol. 3",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8079030,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8059645,
+        "title": "JS Bach: Piano Concerto BWV1052 & Goldberg Variations BWV988",
+        "artists": "Glenn Gould (piano)\r\nConcertgebouw Orchestra, Dimitri Mitropoulos"
+      },
+      {
+        "prestoCode": 8066290,
+        "title": "Glenn Gould Plays Bach",
+        "artists": "Glenn Gould\r\nToronto Symphony Orchestra, Ernest MacMillan"
+      },
+      {
+        "prestoCode": 8079226,
+        "title": "Glenn Gould at the Cinema (International Version)",
+        "artists": "Glenn Gould (piano), Charles Libove (violin)\r\nColumbia Symphony Orchestra, Marlboro Festival Orchestra, Vladimir Golschmann, Pablo Casals"
+      },
+      {
+        "prestoCode": 8077305,
+        "title": "The Sound Of Glenn Gould",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7990968,
+        "title": "Glenn Gould plays Bach",
+        "artists": "Glenn Gould (piano)\r\nConcertgebouw, Toronto Symphony Orchestra, Dmitri Mitropoulos, Ernest Macmillan"
+      },
+      {
+        "prestoCode": 7947824,
+        "title": "Gould & Lipatti play Bach",
+        "artists": "Glenn Gould & Dinu Lipatti"
+      },
+      {
+        "prestoCode": 8117251,
+        "title": "Bach, J S: Goldberg Variations, BWV988",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8084842,
+        "title": "Bach: Greatest Hits",
+        "artists": "The Mormon Tabernacle Choir, Nicholas Danby (organ), Columbia Symphony Chorus, Rosalyn Tureck (piano), Glenn Gould (piano), Isaac Stern (violin), Pinchas Zukerman (violin), E. Power Biggs (organ), Lutz Kirchhof (lute), Igor Kipnis (harpsichord)\r\nThe Philadelphia Orchestra, English Chamber Orchestra, Columbia Symphony Orchestra, Gächinger Kantorei Stuttgart, Philharmonia Virtuosi, Kammerorchester Carl Philipp Emanuel Bach, London Strings, Columbia Chamber Symphony, Eugene Ormandy, Raymond Leppard, Pablo Casals, Helmuth Rilling, Richard Kapp, Hartmut Haenchen, Sir Neville Marriner, Zoltán Rozsnyai"
+      },
+      {
+        "prestoCode": 8346003,
+        "title": "Glenn Gould in Russia",
+        "artists": "Glenn Gound (piano)\r\nSt. Petersburg Philharmonic, Ladislav Slovak"
+      },
+      {
+        "prestoCode": 8278404,
+        "title": "Greatest Hits - Piano - 'The Baroque Era'",
+        "artists": "Glenn Gould (piano), Rosalyn Tureck (piano), Philippe Entremont (piano), Katia Labeque (piano), Marielle Labeque (piano), Columbia Symphony Orchestra, Hiroko Nakamura (piano), Ivan Davis (piano), André Watts (piano), Etsuko Terada (piano), Charles Rosen (piano)\r\nVladimir Golschmann"
+      },
+      {
+        "prestoCode": 8787072,
+        "title": "Piano relaxant : Le meilleur du piano classique",
+        "artists": "Eric Le Sage (piano), Olga Scheps (piano), Thomas Enhco (piano), Khatia Buniatishvili (piano), Alexis Ffrench (piano), Piano Novel, Patricia Petibon (soprano), Susan Manoff (piano), Philippe Cassard (piano), Lang Lang (piano), Daniel Varsano (piano), Baptiste Trotignon (piano), Arcadi Volodos (piano), Michel Dalberto (piano), Philippe N' Guyen (drum programmer), Florian Christl (piano), Lucas Debargue (piano), Glenn Gould (piano), Igor Levit (piano), Michael Forster (piano), Jean-François Zygel (piano), Yiruma, The Piano Guys, Jon Schmidt (piano), Martin Stadtfeld (piano), Dirk Maassen (piano), Alma Deutscher (piano), Dardust, Carmelo Emanuele Patti (violin), Isabel Gallego (violin), Andrea Anzalone (cello), Fabio Longo (bass), Andrea Baroldi (trumpet), Alessio Nava (trombone), Leif Ove Andsnes (piano), Pieter de Graaf (piano), Jonas Pap (cello, contrabass), See Siang Wong (piano), Nelly Kokinos (piano), Chloe Flower (piano), Flying Steps, Jean-Marc Luisada (piano), Hauschka (piano), Tim Allhoff (piano), Francesco Tristano (piano), Hungarian Studio Orchestra, Péter Illényi"
+      },
+      {
+        "prestoCode": 8003003,
+        "title": "Glenn Gould plays Bach: Variations, Toccatas and French Suites",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8278497,
+        "title": "I Love Piano",
+        "artists": "Philippe Entremont (piano), Arthur Rubinstein (piano), Murray Perahia (piano), Tal & Groethuysen, Rudolf Serkin (piano), Jorge Bolet (piano), Philip Glass (organ), Philip Glass Ensemble, Glenn Gould (piano), Alicia De Larrocha (piano), Vladimir Horowitz (piano), Van Cliburn (piano), Yaara Tal (piano), Andreas Groethuysen (piano), Evgeny Kissin (piano), Robert Casadesus (piano), Katia Labeque (piano), Marielle Labeque (piano), Gary Graffman (piano)\r\nMichael Riesman"
+      },
+      {
+        "prestoCode": 8064554,
+        "title": "The Essential Piano Album",
+        "artists": "Glenn Gould, Artur Rubinstein, Sviatoslav Richter, Dinu Lipatti, Maria Garzón, Walter Gieseking, Alfred Brendel, Nadia Boulanger"
+      },
+      {
+        "prestoCode": 8278503,
+        "title": "Les 50 Trésors du Piano - Les Trésors de la Musique Classique",
+        "artists": "Philippe Entremont (piano), Arthur Rubinstein (piano), Murray Perahia (piano), Tal & Groethuysen, Rudolf Serkin (piano), Jorge Bolet (piano), Philip Glass (organ), Philip Glass Ensemble, Glenn Gould (piano), Alicia De Larrocha (piano), Vladimir Horowitz (piano), Van Cliburn (piano), Yaara Tal (piano), Andreas Groethuysen (piano), Evgeny Kissin (piano), Robert Casadesus (piano), Katia Labeque (piano), Marielle Labeque (piano), Gary Graffman (piano), Elizabeth Sombart (piano), Martin Stadtfeld (piano), Sonia Wieder Atherton (cello), Imogen Cooper (piano), Nikolai Tokarev (piano), Daniel Varsano (piano), Jean-Marc Luisada (piano)\r\nMichael Riesman"
+      },
+      {
+        "prestoCode": 7928028,
+        "title": "A State of Wonder",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8770356,
+        "title": "J S Bach: Goldberg Variations, Partitas Nos. 5 & 6",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 8424960,
+        "title": "For Glenn Gould",
+        "artists": "Stewart Goodyear (piano)"
+      },
+      {
+        "prestoCode": 8034674,
+        "title": "Glenn Gould plays Bach Vol.2",
+        "artists": "Glenn Gould (piano)"
+      },
+      {
+        "prestoCode": 7996314,
+        "title": "Glenn Gould plays Bach",
+        "artists": "Glenn Gould (piano)"
+      }
+    ]
+  },
+  "message": "Success"
+}

@@ -4,7 +4,7 @@ Krijg je een link van een muziekdienst, dan opent hetzelfde nummer in je favorie
 
 <b>Functies</b>
 <ul>
-<li>Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack en opent ze in een van die apps of in Amazon Music en Qobuz.</li>
+<li>Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack en Presto Music en opent ze in een van die apps of in Amazon Music en Qobuz.</li>
 <li>Afspeellijsten en albums tonen hun nummers: open er een in de app die je koos, kopieer of deel de lijst, of speel alles af, op volgorde of geshuffeld, in YouTube Music, YouTube, TIDAL of Spotify.</li>
 <li>Stuur elke service ergens anders heen, bijvoorbeeld YouTube-links naar YouTube Music en al het andere naar Apple Music.</li>
 <li>Eerst in Crosstune tonen: het nummer speelt af in de app die je koos terwijl je blijft.</li>
@@ -22,4 +22,4 @@ Krijg je een link van een muziekdienst, dan opent hetzelfde nummer in je favorie
 </ul>
 
 <b>Privacy</b>
-Geen accounts, analyse of advertenties. De geschiedenis blijft op je apparaat. Voor het herkennen van een nummer krijgt Shazam alleen een vingerafdruk van het geluid, nooit de audio, en teksten worden op je apparaat op de zang afgestemd. De titel en artiest van een nummer gaan naar de muziekservices die het vinden en openen, en naar tekst-, akkoorden- en vertaalsites. Ingelogd met ChatGPT sturen de AI-functies het nummer, de tekst en wat je vraagt naar OpenAI. De enige server van Crosstune krijgt de probleemmeldingen die je stuurt, en automatische als je die aanzet. Hij bewaart geen IP-adres en wist elke melding na 180 dagen. Alle services, en wat elke melding bevat: https://crosstune.cc/nl/privacy/
+Geen accounts, analyse of advertenties. De geschiedenis blijft op je apparaat. Voor het herkennen van een nummer krijgt Shazam alleen een vingerafdruk van het geluid, nooit de audio, en teksten worden op je apparaat op de zang afgestemd. De titel en artiest van een nummer gaan naar de muziekservices die het vinden en openen, en naar tekst-, akkoorden- en vertaalsites. Apple, Deezer en MusicBrainz kunnen titels of artiestennamen controleren om dezelfde opname te vinden. Ingelogd met ChatGPT sturen de AI-functies het nummer, de tekst en wat je vraagt naar OpenAI. De enige server van Crosstune krijgt de probleemmeldingen die je stuurt, en automatische als je die aanzet. Hij bewaart geen IP-adres en wist elke melding na 180 dagen. Alle services, en wat elke melding bevat: https://crosstune.cc/nl/privacy/

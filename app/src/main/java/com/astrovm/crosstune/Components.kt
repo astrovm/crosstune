@@ -1,5 +1,10 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Shape
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.annotation.DrawableRes
@@ -15,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -53,7 +60,10 @@ import androidx.compose.foundation.border
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -152,40 +162,44 @@ internal fun SectionHeader(
  */
 @Composable
 internal fun Group(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val shape = MaterialTheme.shapes.large
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(Motion.size),
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-        // Where each hairline goes, from the last time the rows were placed, for drawing them there.
-        val between = remember { mutableListOf<Int>() }
-        Layout(
-            content = content,
-            modifier = Modifier.drawWithContent {
-                drawContent()
-                val inset = GROUP_INSET.toPx()
-                val thickness = DividerDefaults.Thickness.toPx()
-                between.forEach { top ->
-                    val y = top + thickness / 2
-                    drawLine(color, Offset(inset, y), Offset(size.width - inset, y), thickness)
-                }
-            }
-        ) { measurables, constraints ->
-            val thickness = DividerDefaults.Thickness.roundToPx()
-            val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
-            val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
-            // As wide as the group, which fills its width.
-            layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
-                between.clear()
-                var y = 0
-                rows.forEachIndexed { index, row ->
-                    if (index > 0) {
-                        between += y
-                        y += thickness
+        // Its rows' focus rings take its rounded shape, so the first and the last aren't cut off at its corners.
+        CompositionLocalProvider(LocalIndication provides focusRing(shape)) {
+            val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            // Where each hairline goes, from the last time the rows were placed, for drawing them there.
+            val between = remember { mutableListOf<Int>() }
+            Layout(
+                content = content,
+                modifier = Modifier.drawWithContent {
+                    drawContent()
+                    val inset = GROUP_INSET.toPx()
+                    val thickness = DividerDefaults.Thickness.toPx()
+                    between.forEach { top ->
+                        val y = top + thickness / 2
+                        drawLine(color, Offset(inset, y), Offset(size.width - inset, y), thickness)
                     }
-                    row.placeRelative(0, y)
-                    y += row.height
+                }
+            ) { measurables, constraints ->
+                val thickness = DividerDefaults.Thickness.roundToPx()
+                val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
+                val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
+                // As wide as the group, which fills its width.
+                layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+                    between.clear()
+                    var y = 0
+                    rows.forEachIndexed { index, row ->
+                        if (index > 0) {
+                            between += y
+                            y += thickness
+                        }
+                        row.placeRelative(0, y)
+                        y += row.height
+                    }
                 }
             }
         }
@@ -351,16 +365,16 @@ internal fun AppSlider(
     val dragged by held.collectIsDraggedAsState()
     val knob by animateDpAsState(if (pressed || dragged) 20.dp else 14.dp, label = "knob")
     val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f))
+    val state = remember(steps, valueRange) { SliderState(value, steps, valueRange) }
+    state.value = value
     Slider(
-        value = value,
+        state = state,
         onValueChange = onValueChange,
         modifier = modifier,
         enabled = enabled,
         onValueChangeFinished = onValueChangeFinished,
         colors = colors,
         interactionSource = held,
-        steps = steps,
-        valueRange = valueRange,
         thumb = { Box(Modifier.size(knob).background(if (enabled) colors.thumbColor else colors.disabledThumbColor, CircleShape)) },
         track = { slider ->
             SliderDefaults.Track(
@@ -419,3 +433,51 @@ internal fun PickedChoice(text: String, picked: Boolean, onClick: () -> Unit, ic
         onClick = onClick
     )
 }
+
+/**
+ * A row with a button inside it, as Recent's ▶ or Practice's pencil. Looking right of the row never finds the
+ * button, nor looking left of the button the row, so a remote or keyboard is sent between them here.
+ */
+internal class RowButtonFocus {
+    private val row = FocusRequester()
+    /** The button's, to give the remote back to it once what it opened is put away. */
+    val button = FocusRequester()
+    private var onButton = false
+
+    /** On the row, before what makes it clickable. */
+    val rowModifier: Modifier = Modifier
+        .onKeyEvent { event ->
+            val to = when {
+                event.type != KeyEventType.KeyDown -> null
+                event.key == Key.DirectionRight && !onButton -> button
+                event.key == Key.DirectionLeft && onButton -> row
+                else -> null
+            }
+            // Only a move made is the key's: a row with no button, as All songs, lets it go on.
+            to?.requestFocus() == true
+        }
+        .focusRequester(row)
+
+    /** On the button inside it. */
+    val buttonModifier: Modifier = Modifier.focusRequester(button).onFocusChanged { onButton = it.isFocused }
+
+    /** Gives the remote to the row, as when the song it opened is put away; false while the row isn't placed yet. */
+    private fun focusRow(): Boolean = row.requestFocus()
+
+    /** Recent can come back a few frames before its row is ready to take the remote. */
+    suspend fun focusOncePlaced() {
+        var frames = 0
+        while (!focusRow() && frames++ < FOCUS_FRAMES) withFrameNanos {}
+    }
+}
+
+private const val FOCUS_FRAMES = 5
+
+@Composable
+internal fun rememberRowButtonFocus(): RowButtonFocus = remember { RowButtonFocus() }
+
+/**
+ * Press and focus for a control clipped to [shape], so a remote's focus ring follows that shape. With the default
+ * ripple the ring is square, and the clip cuts its corners off.
+ */
+internal fun focusRing(shape: Shape): IndicationNodeFactory = ripple(focusRingShape = shape)

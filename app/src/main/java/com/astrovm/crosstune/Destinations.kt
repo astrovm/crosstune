@@ -35,13 +35,6 @@ internal sealed class Destination {
         override fun searchUrl(query: String) = service.searchUrl(query)
         override val matchService: MusicService get() = service
         override val packageName: String get() = build ?: service.packageName
-
-        /** Starting a song here can take over the screen or leave it silent. A TV can cover its YouTube player. */
-        fun opensAppToStartSong(phone: Phone): Boolean = when (service) {
-            MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.AUDIOMACK -> true
-            MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE -> build == null && phone != Phone.TV
-            else -> false
-        }
     }
 
     /** [instance] is the site a web frontend opens on, e.g. "https://yewtu.be"; null for apps. */
@@ -165,6 +158,17 @@ internal class DestinationStore(
      */
     fun defaultDestination(all: List<Destination> = allDestinations()): Destination =
         find(preferences.getString(KEY_DEFAULT, null), all) ?: find(MusicService.YOUTUBE_MUSIC.name, all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
+
+    /**
+     * With none picked, the first music app on the phone, YouTube, mostly videos, last. Android is asked here, which
+     * is quick, rather than after its slow look at links, so it's the same however soon after starting it's asked.
+     * So a build known only by the links it opens, which that look finds, is never offered.
+     */
+    fun offered(all: List<Destination> = allDestinations()): Destination.Service? {
+        val onPhone = all.asSequence().filterIsInstance<Destination.Service>()
+            .filter { it.build?.let { build -> build in it.service.appPackages } ?: it.service.appPackages.any(isInstalled) }
+        return onPhone.firstOrNull { it.service != MusicService.YOUTUBE } ?: onPhone.firstOrNull()
+    }
 
     /** False until the user picks a default, e.g. during first-run setup. */
     fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null

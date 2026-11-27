@@ -112,7 +112,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         workMs = asked.optLong("work", WORK_MS)
         workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
         whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
-        val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
+        val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList()) +
+            (if (asked.has("thirdFrom")) listOf(asked.getLong("behindAgain")) else emptyList())
         // The words as the app really found them, when kept, over those prep was given.
         val kept = listOf(dir, inputs).map { File(it, "$song.found.json") }.firstOrNull { it.exists() }?.let { JSONObject(it.readText()) }
         val lyrics = kept?.getJSONArray("lines")?.takeIf { it.length() > 0 }?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
@@ -154,6 +155,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             )
         }
         val intent = if (fingerprints == null) {
+            if (asked.optBoolean("identifiedPlayer")) {
+                playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:$song"), null)
+            }
             Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         } else {
             replayFingerprints(fingerprints, fromMs, lengthMs)
@@ -170,9 +174,26 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
         behind.forEachIndexed { time, behindMs ->
-            if (time > 0) composeRule.runOnIdle { model().resumeFollowingNext() }
-            val played = play(fromMs, lengthMs, behindMs)
-            File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
+            if (time > 0) {
+                if (asked.optBoolean("reopenAgain")) {
+                    composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+                    composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } && lyricsLookupFinished() }
+                }
+                composeRule.runOnIdle { model().resumeFollowingNext() }
+            }
+            val until = when {
+                time == 0 && behind.size > 1 -> asked.optLong("firstUntil", lengthMs).coerceAtMost(lengthMs)
+                time == 1 && behind.size > 2 -> asked.optLong("secondUntil", lengthMs).coerceAtMost(lengthMs)
+                else -> lengthMs
+            }
+            val playFrom = when (time) {
+                0 -> fromMs
+                1 -> asked.optLong("againFrom", fromMs)
+                else -> asked.optLong("thirdFrom", fromMs)
+            }
+            val played = play(playFrom, lengthMs, behindMs, until)
+            val suffix = if (time == behind.lastIndex) "" else if (time == 0) ".first" else ".second"
+            File(dir, "$song.from$fromMs$suffix.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
@@ -223,7 +244,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
      * The song played from [fromMs] to [lengthMs], the app's clock [behindMs] behind what it plays:
      * each line shown, where the lines were put, and when they were known, all where the song really is.
      */
-    private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
+    private fun play(fromMs: Long, lengthMs: Long, behindMs: Long, untilMs: Long): JSONObject {
         this.behindMs = behindMs
         heardLog = JSONArray()
         val startedAt = fingerprintStartedAt ?: composeRule.runOnIdle {
@@ -247,7 +268,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val noted = HashSet<String>()
         var last = -1
         var atMs = fromMs
-        while (atMs < lengthMs) {
+        while (atMs < untilMs) {
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(STEP_MS))
             atMs = fromMs + ((SystemClock.elapsedRealtime() - startedAt) * playerSpeed).toLong()
             for (note in TimingLog.lastMinute().lines()) {
@@ -355,7 +376,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
     companion object {
         /** Where scripts/syncreplay leaves what to replay, run from the app's own folder or the project's. */
-        private fun replays() = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull { File(it, "replay.json").exists() }
+        private fun replays() = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull {
+            System.getenv("SYNCREPLAY_ACTIVE") == "1" && File(it, "replay.json").exists()
+        }
 
         /**
          * Each song asked for: several named in replay.songs, one line each, in replay.json's "songs" in

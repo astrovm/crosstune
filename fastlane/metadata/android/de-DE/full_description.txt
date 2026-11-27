@@ -4,7 +4,7 @@ Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in dein
 
 <b>Funktionen</b>
 <ul>
-<li>Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack und öffnet sie in einem dieser Dienste oder in Amazon Music und Qobuz.</li>
+<li>Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack und Presto Music und öffnet sie in einem dieser Dienste oder in Amazon Music und Qobuz.</li>
 <li>Playlists und Alben zeigen ihre Songs: Öffne jeden davon in der App deiner Wahl, kopiere oder teile die Liste oder spiele alles der Reihe nach oder gemischt in YouTube Music, YouTube, TIDAL oder Spotify ab.</li>
 <li>Schicke jeden Dienst woandershin, z. B. YouTube-Links an YouTube Music und alles andere an Apple Music.</li>
 <li>Zuerst in Crosstune zeigen: Der Song läuft in der App deiner Wahl, während du bleibst.</li>
@@ -22,4 +22,4 @@ Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in dein
 </ul>
 
 <b>Datenschutz</b>
-Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Zum Erkennen eines Songs bekommt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme, und Songtexte werden auf deinem Gerät am Gesang ausgerichtet. Titel und Künstler eines Songs gehen an die Musikdienste, die ihn finden und öffnen, und an Songtext-, Akkord- und Übersetzungsseiten. Mit ChatGPT angemeldet, senden KI-Funktionen den Song, seinen Text und deine Fragen an OpenAI. Der einzige Server von Crosstune bekommt die Problemmeldungen, die du schickst, und automatische, wenn du sie einschaltest. Er speichert keine IP-Adresse und löscht jede Meldung nach 180 Tagen. Alle Dienste und was jede Meldung enthält: https://crosstune.cc/de/privacy/
+Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Zum Erkennen eines Songs bekommt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme, und Songtexte werden auf deinem Gerät am Gesang ausgerichtet. Titel und Künstler eines Songs gehen an die Musikdienste, die ihn finden und öffnen, und an Songtext-, Akkord- und Übersetzungsseiten. Apple, Deezer und MusicBrainz können Namen abgleichen, um dieselbe Aufnahme zu finden. Mit ChatGPT angemeldet, senden KI-Funktionen den Song, seinen Text und deine Fragen an OpenAI. Der einzige Server von Crosstune bekommt die Problemmeldungen, die du schickst, und automatische, wenn du sie einschaltest. Er speichert keine IP-Adresse und löscht jede Meldung nach 180 Tagen. Alle Dienste und was jede Meldung enthält: https://crosstune.cc/de/privacy/

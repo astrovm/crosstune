@@ -9,6 +9,38 @@ import org.junit.Test
 class TakesTest {
 
     @Test
+    fun discoNotesUseCompatibilitySpellingWithoutTreatingSongNamesAsNotes() {
+        val notes = listOf(
+            "Song (Disco Version)", "Song - Disco Ver.", "Song （Ｄｉｓｃｏ　Ｍｉｘ）", "Song (DISCOバージョン)",
+            "Song (ディスコ版)", "Song (ﾃﾞｨｽｺ･ﾊﾞｰｼﾞｮﾝ)", "Song (テ\u3099ィスコ・ハ\u3099ーシ\u3099ョン)",
+            "Song (ディスコ・ヴァージョン)", "Song (プロモーション用ディスコバージョン)", "Song (プロモーション用DISCOバージョン)",
+            "Song - Disco Version (2024 Remaster)", "Song (Disco Version [2024 Remaster])"
+        )
+        for (name in notes) {
+            assertTrue(name, Takes.namesDisco(name))
+            assertTrue(name, Takes.requestsDisco(name))
+        }
+        val names = listOf(
+            "Disco", "Disco Nights", "Disco Inferno", "ディスコ・クイーン", "Disco Mix", "Disco Version", "ディスコ版",
+            "Song (Deluxe Edition)", "Song (Disco)", "Song (Extended Remix)", "Song (Mix Tape)", "Song (Mixed Emotions)",
+            "Song (ミックス)", "Song (Disco Queen)", "Song - Club Mix", "Song (feat. DJ Mix)", "Song (prod. DJ Mix)"
+        )
+        for (name in names) assertFalse(name, Takes.namesDisco(name))
+    }
+
+    @Test
+    fun theSourceCanNameDiscoAnywhereButTheCandidateStillNeedsANote() {
+        for (name in listOf("Disco Mix", "Song: Disco Version", "Song—ＤＩＳＣＯ・Ｖｅｒ．", "曲名：ﾃﾞｨｽｺ･ｳﾞｧｰｼﾞｮﾝ", "DiscoVersion", "DiscoMix")) {
+            assertTrue(name, Takes.requestsDisco(name))
+            assertFalse(name, Takes.namesDisco(name))
+        }
+        val other = listOf(
+            "Disco", "Disco Nights", "Discover", "Disco Vertical", "Disco Mixer", "Undisco Version", "Disco 別 Version", "Song (2024 Stereo Mix)"
+        )
+        for (name in other) assertFalse(name, Takes.requestsDisco(name))
+    }
+
+    @Test
     fun aTagThatStartsAsAnotherTakeSaysSo() {
         val live = listOf(
             "偽の歌 (ライブ)", "偽の歌 (ライヴ)", "偽の歌 (2019 ライブ)", "偽の歌 (Live from Budokan)", "偽の歌 - Live", "偽の歌 [Live]",
@@ -39,6 +71,24 @@ class TakesTest {
         assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 (Live Crew)"))
         assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 (Live)", listOf("Fake Band & Live Crew")))
         assertEquals(Takes.Take.LIVE, Takes.saysAnotherTake("偽の歌 (Live Crew Live)", listOf("Fake Band & Live Crew")))
+    }
+
+    @Test
+    fun thePickerCanInvestigateCreditsButNotExplicitLiveNotes() {
+        assertNull(Takes.saysAnotherTake("Song (Live Crew)", includeUnclearLive = false))
+        for (name in listOf("Song (Live)", "Song (Live from Budokan)", "Song (Live 2023)", "Song (ライブ)")) {
+            assertEquals(name, Takes.Take.LIVE, Takes.saysAnotherTake(name, includeUnclearLive = false))
+        }
+    }
+
+    @Test
+    fun videoNotesDistinguishEditionsFromSubtitlesAndRemasters() {
+        assertEquals(setOf("englishversion", "reprise"), Takes.videoRecordingNotes("Song (English Version) - Reprise (Remastered)"))
+        assertEquals(emptySet<String>(), Takes.videoRecordingNotes("Song (English Subtitles) (Remastered)"))
+        assertEquals(setOf("thefirsttake"), Takes.videoRecordingNotes("Song (THE FIRST TAKE) - From THE FIRST TAKE"))
+        for ((english, japanese) in listOf("Christmas Version" to "クリスマス・バージョン", "Ballad Version" to "バラードバージョン")) {
+            assertEquals(setOf(SongNames.normalize(english), SongNames.normalize(japanese)), Takes.videoRecordingNotes("Song ($english) - $japanese"))
+        }
     }
 
     @Test

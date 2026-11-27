@@ -19,8 +19,10 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +112,8 @@ class MainViewModelTest {
         reminders: PracticeReminders? = null,
         sungReadings: SungReadings? = null,
         mayCalibrate: () -> Boolean = { false },
-        mayCapture: () -> Boolean = { false }
+        mayCapture: () -> Boolean = { false },
+        systemDispatcher: CoroutineDispatcher = Dispatchers.Unconfined
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -123,7 +126,7 @@ class MainViewModelTest {
             interception = LinkInterception(app),
             artwork = ArtworkLoader(client, Dispatchers.Unconfined),
             listener = listener,
-            systemDispatcher = Dispatchers.Unconfined,
+            systemDispatcher = systemDispatcher,
             chatGpt = chatGpt,
             tutor = tutor,
             oneTap = oneTap,
@@ -143,6 +146,25 @@ class MainViewModelTest {
             mayCalibrate = mayCalibrate,
             mayCapture = mayCapture
         ).also { made += it }
+    }
+
+    @Test
+    fun withNoAppPickedTheOneOfferedIsTheSameBeforeAndAfterAndroidsLookAtLinks() {
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music"))
+        // Android's look at apps and links held, as it is for a while on a phone.
+        val held = model(systemDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
+        })
+        assertFalse(held.uiState.systemStateKnown)
+        assertEquals(Destination.Service(MusicService.SPOTIFY), held.uiState.defaultDestination)
+        assertFalse(held.uiState.hasDefault)
+        val looked = model()
+        looked.refreshSystemState()
+        idle()
+        until("Android said which apps there are") { looked.uiState.systemStateKnown }
+        assertEquals(Destination.Service(MusicService.SPOTIFY), looked.uiState.defaultDestination)
+        assertFalse(looked.uiState.hasDefault)
     }
 
     @Test
@@ -4368,11 +4390,11 @@ class MainViewModelTest {
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
-    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic): MainViewModel {
+    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null, playQueue: PlayQueue? = null): MainViewModel {
         shadowOf(app.packageManager).installPackage(installedApp(packageName, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
-        val model = model(playback = playback, phone = phone, oneTap = oneTap)
+        val model = model(playback = playback, phone = phone, oneTap = oneTap, lyricsFinder = lyricsFinder, playQueue = playQueue)
         model.refreshSystemState()
         idle()
         model.onUrlChange(ytLink)
@@ -4431,6 +4453,37 @@ class MainViewModelTest {
     }
 
     @Test
+    fun searchingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.searchResult()
+        until("the old open stopped") { answers.subscriptionCount.value == 0 }
+        // Only the search opens: the song it was waiting to open doesn't follow it.
+        assertTrue(answers.tryEmit(null))
+        idle()
+        assertEquals(1, effects.size)
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("/search"))
+    }
+
+    @Test
+    fun searchingBeforeAndroidSaysWhatsOnThePhoneStillMakesTheLinkToShare() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        // Android's look at apps held, so a song from Recent waits on it to know whether it can play.
+        val model = model(systemDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
+        })
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        val link = MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "1", "https://open.spotify.com/track/1")
+        model.showHistoryEntry(HistoryEntry(link, MusicMetadata("Track", "Band")), play = true)
+        idle()
+        assertNull(model.destinationUrl())
+        model.searchResult()
+        idle()
+        assertTrue(effects.filterIsInstance<Effect.Open>().single().url.contains("search"))
+        // Copy and Share still have the song's link, though the wait that was to make it is over.
+        until("the link made") { model.destinationUrl() != null }
+    }
+
+    @Test
     fun cancellingAHandoffStopsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
         model.cancelHandoff()
         until("the old open stopped") { answers.subscriptionCount.value == 0 }
@@ -4468,16 +4521,86 @@ class MainViewModelTest {
         until("opened there") { playback.opened.isNotEmpty() }
         assertEquals(morpheMusic to ytLink, playback.opened.single())
         // And it waits again for the app to play it there, before leaving it.
-        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        assertEquals(0, playback.cameBack)
+        appPlays(playback, packageName = morpheMusic)
         until("came back") { playback.cameBack == 1 }
         // Its app gone, there is no player: the app is opened by the system.
         model.closePlayer()
+        playback.playing.value = null
         playback.opens = false
         model.playResult()
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         until("opened by the system") { effects.isNotEmpty() }
         assertNull(model.uiState.player)
         assertTrue(effects.single() is Effect.Open)
+    }
+
+    @Test
+    fun aPlayTapOpensSpotifyOnTheSongAndComesBackOnceItPlays() {
+        val spotify = MusicService.SPOTIFY.packageName
+        val link = "https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8"
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        prefs().edit().putString("default_target", MusicService.SPOTIFY.name).commit()
+        fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Never Gonna Give You Up", "Rick Astley · Song · 1987")) }
+        val playback = FakePlayback().apply { access = true }
+        val model = model(playback = playback)
+        model.refreshSystemState()
+        idle()
+        model.onUrlChange(link)
+        model.resolveTypedInput()
+        until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+        until("Play offered, with the song's own link") { model.uiState.canPlayResult }
+        model.playResult()
+        // Spotify plays no song another app asks for, so it's opened on the song's own link.
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertEquals(spotify to link, playback.opened.single())
+        assertTrue(playback.songsAsked.isEmpty())
+        assertEquals(0, playback.cameBack)
+        // Left once it plays the song.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = spotify)
+        until("came back") { playback.cameBack == 1 }
+        assertEquals("Never Gonna Give You Up", model.uiState.player?.song?.title)
+        // Never playing there, as an app signed out, it's left in front, where it says why, with no player.
+        model.closePlayer()
+        playback.playing.value = null
+        playback.opened.clear()
+        model.playResult()
+        until("opened there again") { playback.opened.isNotEmpty() }
+        assertNotNull(model.uiState.player)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun theOfficialYouTubeAppsOpenedOnTheSongAreLeftOnceTheyPlayAsAnyOtherIs() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        appPlays(playback)
+        until("done playing it") { !model.uiState.playingResult }
+        // With Premium it plays on behind Crosstune, as Morphe does; without, it's brought back in front once it stops.
+        assertEquals(1, playback.cameBack)
+        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun closingThePlayerDoesNotBringBackAnAppThatStopsOnceLeft() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        appPlays(playback)
+        until("left the playing app") { playback.cameBack == 1 && !model.uiState.playingResult }
+        model.closePlayer()
+        // Still within the wait to see if it stops now that Crosstune is in front.
+        appPlays(playback, playing = false)
+        pass(START_MS)
+        assertTrue(playback.plays.isEmpty())
+        assertNull(model.uiState.player)
     }
 
     @Test
@@ -4500,18 +4623,361 @@ class MainViewModelTest {
     }
 
     @Test
-    fun aPlayTapOpensTheOfficialAppIfItNoLongerHasTheSong() {
-        val playback = FakePlayback().apply { access = true }
+    fun aCoveredAppThatPlaysNothingComesOutFromUnderTheCoverAndOneThatPlaysHasTheWordsOverIt() {
+        // YouTube Music without Premium: asked from behind, it doesn't start, so it's covered as it's opened.
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = ytMusicModel(playback, lyricsFinder = finder)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertTrue(model.uiState.coveringApp)
+        // Never playing, as signed out, it comes out from under the cover, where it says why.
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.coveringApp)
+        // Playing under the cover, it isn't left in front bare: the words show over it.
+        playback.opened.clear()
+        model.playResult()
+        until("opened there again") { playback.opened.isNotEmpty() }
+        appPlays(playback)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
+    }
+
+    @Test
+    fun anAppPlayingAnAdFirstStaysCoveredWithThePlayerOnAndTheWordsShowOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = ytMusicModel(playback, lyricsFinder = finder)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Without Premium, an ad plays first, by the ad's name, for longer than Crosstune waits for the song.
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertNotNull(model.uiState.player)
+        assertNull(model.uiState.lyricsFor)
+        appPlays(playback)
+        until("the words over it") { model.uiState.lyricsFor != null }
+        assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
+        assertTrue(model.uiState.coveringApp)
+    }
+
+    @Test
+    fun anAppStillOnAnAdIsLeftInFrontAsLeftItMightStopAndLeftOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
         val model = ytMusicModel(playback)
         val effects = mutableListOf<Effect>()
         model.viewModelScope.launch { model.effects.collect { effects += it } }
         model.playResult()
-        until("the song opens in the official app") { effects.isNotEmpty() }
-        val opened = effects.single() as Effect.Open
-        assertEquals(ytMusic, opened.packageName)
-        assertEquals(ytLink, opened.url)
-        assertTrue(playback.songsAsked.isEmpty())
+        until("opened there") { playback.opened.isNotEmpty() }
+        // The initial Play must complete normally, separate from the wait for the ad to end.
+        val playFailure = CompletableDeferred<Throwable>()
+        checkNotNull(model.viewModelScope.coroutineContext[Job]).children.forEach { child ->
+            child.invokeOnCompletion { cause ->
+                if (cause != null && cause !is CancellationException) playFailure.complete(cause)
+            }
+        }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        assertFalse("Play failed while starting the ad wait", playFailure.isCompleted)
+        // Left during the ad, YouTube without Premium would stop, with no song to see stop and bring it back for.
+        assertEquals(0, playback.cameBack)
+        assertNotNull(model.uiState.player)
+        // Two ads, each as long as YouTube Music's longest.
+        pass(2 * LONGEST_AD_MS - MainViewModel.LOAD_SONG_MS - 2_000)
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack == 1 }
+        assertTrue(effects.isEmpty())
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+    }
+
+    @Test
+    fun aSingleSongThatStaysOnAnAdLeavesAnExistingListAlone() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val file = File(app.noBackupFilesDir, "play_queue_while_ad.json")
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val queue = PlayQueue(playback, { _, songs -> YouTubeQueue(ytLink, songs) }, { _, _ -> null }, file, scope, Dispatchers.Unconfined)
+        try {
+            runBlocking { queue.play(listOf(song, song.copy(title = "Next")), MusicService.YOUTUBE_MUSIC, ytMusic, 1, listOf(song)) }
+            assertTrue(file.exists())
+            val model = ytMusicModel(playback, playQueue = queue)
+            model.playResult()
+            until("opened on the single song") { playback.opened.isNotEmpty() }
+            playback.inApp(ytMusic).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+            pass(MainViewModel.LOAD_SONG_MS + 1_000)
+            until("waiting out the ad") { !model.uiState.playingResult }
+            assertNotNull(model.uiState.player)
+
+            pass(MainViewModel.ADS_MS)
+            until("given up on the song") { model.uiState.player == null }
+            assertTrue(file.exists())
+        } finally {
+            scope.cancel()
+            file.delete()
+        }
+    }
+
+    @Test
+    fun anAppOnSomethingElseLongerThanAnyAdsIsTakenAsNotGettingToTheSong() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        pass(MainViewModel.ADS_MS - 2_000)
+        assertNotNull(model.uiState.player)
+        assertTrue(model.uiState.coveringApp)
+        // Out from under the cover, which would hide why, as an app that plays nothing is.
+        pass(3_000)
+        until("given up on it") { model.uiState.player == null }
+        assertFalse(model.uiState.coveringApp)
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun aTapOnThePlayerDuringTheAdStillComesBackOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        // YouTube Music says the ad is the song, not playing yet, so the player shows it paused.
+        appPlays(playback, playing = false)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.playerPlayPause()
+        pass(1_000)
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack == 1 }
+    }
+
+    @Test
+    fun playAgainDuringTheAdComesBackOnceTheSongPlays() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.playResult()
+        until("opened there again") { playback.opened.size == 2 }
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it again") { !model.uiState.playingResult }
+        appPlays(playback)
+        until("back once the song's on") { playback.cameBack >= 1 }
+        pass(1_000)
+        // The first wait went with the second Play.
+        assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun theSongPlayingOnceThePlayerIsClosedDuringTheAdBringsNothingBack() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Calidad garantizada", "PedidosYa"), null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        model.closePlayer()
+        appPlays(playback)
+        pass(1_000)
+        assertEquals(0, playback.cameBack)
         assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun anAdUnderTheSongsOwnNameIsntTakenForTheSong() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Free YouTube Music plays its ad as the song itself, playing, which Crosstune can follow only by what it's called.
+        val asked = MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")
+        playback.inApp(ytMusic).value = AppPlays(asked, null)
+        playback.onThePhone = Heard.Song(asked, null, app = ytMusic, ad = true)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        // Left during it, YouTube Music would stop.
+        assertEquals(0, playback.cameBack)
+        playback.onThePhone = Heard.Song(asked, null, app = ytMusic)
+        until("back once the song's on") { playback.cameBack == 1 }
+    }
+
+    @Test
+    fun theSongNamedOtherwiseOnceTheAdsOverStillComesBack() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        val asked = MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")
+        playback.inApp(ytMusic).value = AppPlays(asked, null)
+        playback.onThePhone = Heard.Song(asked, null, app = ytMusic, ad = true)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done playing it") { !model.uiState.playingResult }
+        // The app names the song its own way once it's on, and the player follows it by that name, with no link.
+        val named = MusicMetadata("抱かれにきた女", "浜田省吾")
+        playback.onThePhone = Heard.Song(named, null, app = ytMusic)
+        until("back once the song's on") { playback.cameBack == 1 }
+        assertEquals(named, model.uiState.player?.song)
+        // Never seen by the name it was asked for, it isn't taken for an app that let go of the song once left.
+        pass(START_MS + 1_000)
+        assertTrue(playback.plays.isEmpty())
+    }
+
+    @Test
+    fun anAppPausedOnAnotherSongIsntTakenAsGettingToIt() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Left paused on a song before, the app says so until it plays another; this one it never does, as signed out.
+        playback.inApp(playback.opened.single().first).value = AppPlays(MusicMetadata("Old song", "Someone"), null, playing = false)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.coveringApp)
+    }
+
+    @Test
+    fun anAppStillPlayingTheSongItWasOnIsntTakenAsGettingToIt() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        val before = MusicMetadata("Old song", "Someone")
+        playback.onThePhone = Heard.Song(before, null, app = ytMusic)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // Asked for a link it doesn't go to, it plays on what it was on, which is no ad before the song.
+        playback.inApp(ytMusic).value = AppPlays(before, null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertFalse(model.uiState.coveringApp)
+    }
+
+    @Test
+    fun anAppPlayingAnAdItNamesNotAtAllStaysCoveredToo() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val model = ytMusicModel(playback)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        // YouTube on a TV plays its ad with no name at all, then has nothing to say a moment before the song.
+        playback.unnamed.value = Unnamed(playback.opened.single().first, label = null, name = null)
+        pass(1_000)
+        playback.unnamed.value = null
+        pass(MainViewModel.LOAD_SONG_MS)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertNotNull(model.uiState.player)
+    }
+
+    @Test
+    fun anUnnamedAdFromTheTvAppOnlyCountsWhenTheMusicAppIsAbsent() {
+        val tv = MusicService.YOUTUBE_TV
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback, packageName = tv)
+        model.playResult()
+        until("opened through YouTube Music") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        playback.unnamed.value = Unnamed(tv, label = null, name = null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("waiting out the TV ad") { !model.uiState.playingResult }
+        assertNotNull(model.uiState.player)
+
+        model.closePlayer()
+        playback.unnamed.value = null
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        model.playResult()
+        until("opened through YouTube Music again") { playback.opened.size == 2 }
+        assertEquals(ytMusic to ytLink, playback.opened.last())
+        playback.unnamed.value = Unnamed(tv, label = null, name = null)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done waiting for the music app") { !model.uiState.playingResult }
+        assertNull(model.uiState.player)
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun aSongNamedByTheTvAppOnlyCountsWhenTheMusicAppIsAbsent() {
+        val tv = MusicService.YOUTUBE_TV
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val model = ytMusicModel(playback, packageName = tv)
+        model.playResult()
+        until("opened through YouTube Music") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        val named = MusicMetadata("抱かれにきた女", "浜田省吾")
+        playback.onThePhone = Heard.Song(named, null, app = tv)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("accepted the song named by the TV app") { !model.uiState.playingResult }
+        assertEquals(1, playback.cameBack)
+        assertEquals(named, model.uiState.player?.song)
+
+        model.closePlayer()
+        playback.onThePhone = null
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        model.playResult()
+        until("opened through YouTube Music again") { playback.opened.size == 2 }
+        assertEquals(ytMusic to ytLink, playback.opened.last())
+        playback.onThePhone = Heard.Song(named, null, app = tv)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("done waiting for the music app") { !model.uiState.playingResult }
+        assertEquals(1, playback.cameBack)
+        assertNull(model.uiState.player)
+    }
+
+    @Test
+    fun aListWhoseAppPlaysNothingIsNotPlayedOn() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val file = File(app.noBackupFilesDir, "play_queue_nothing.json")
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined)
+        val queue = PlayQueue(playback, { _, songs -> YouTubeQueue("https://music.youtube.com/watch?v=x&list=TL", songs) }, { _, _ -> null }, file, scope, Dispatchers.Unconfined)
+        try {
+            val model = playlistModel(playback, MusicService.YOUTUBE_MUSIC, playQueue = queue)
+            model.playAll()
+            until("opened on the list") { playback.opened.isNotEmpty() }
+            assertNotNull(model.uiState.player)
+            assertTrue(file.exists())
+            pass(MainViewModel.LOAD_SONG_MS + 1_000)
+            until("given up on it") { model.uiState.player == null }
+            // Nothing's kept to play on from, now or once Crosstune starts again.
+            until("the list let go") { !file.exists() }
+            // A song of its own that plays nothing leaves a list playing elsewhere alone.
+            runBlocking { queue.play(listOf(song, song.copy(title = "Next")), MusicService.YOUTUBE_MUSIC, ytMusic, 1, listOf(song)) }
+            assertTrue(file.exists())
+            val single = ytMusicModel(playback, playQueue = queue)
+            single.playResult()
+            until("opened on the song") { playback.opened.size == 2 }
+            pass(MainViewModel.LOAD_SONG_MS + 1_000)
+            until("given up on it") { !single.uiState.playingResult }
+            assertTrue(file.exists())
+        } finally {
+            scope.cancel()
+            file.delete()
+        }
+    }
+
+    @Test
+    fun aPlayTapAsksTheOfficialAppForTheSongByItsLink() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        model.playResult()
+        until("the official app is asked") { playback.songsAsked.isNotEmpty() }
+        assertEquals(ytMusic, playback.songsAsked.single().second)
+        assertEquals(ytLink, playback.linksAsked.single())
     }
 
     @Test
@@ -4537,7 +5003,6 @@ class MainViewModelTest {
         model.viewModelScope.launch { model.effects.collect { effects += it } }
         try {
             idle()
-            assertFalse(model.uiState.canPlayResult)
             morphe.value = Following(PlaybackClock(60_000, 0, playing = false), "YT Music Morphe", canSeek = true,
                 appPackage = morpheMusic, session = sessionNumber)
             until("the build's paused song can play") { model.uiState.canPlayResult }
@@ -4550,6 +5015,38 @@ class MainViewModelTest {
             assertTrue(playback.songsAsked.isEmpty())
         } finally {
             watching.cancel()
+        }
+    }
+
+    @Test
+    fun aQueueChangeDoesNotMakeWatchLeftResumeAPlayingSong() {
+        val requested = MusicMetadata("Track", "Band")
+        val receiver = MediaSession(app, "queue-test")
+        val controller = MediaController(app, receiver.sessionToken)
+        shadowOf(controller).setPackageName(MusicService.SPOTIFY.packageName)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, requested.title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, requested.artist).build())
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1f)
+            .setActiveQueueItemId(id).build()
+        shadowOf(controller).setPlaybackState(state(5))
+        val sessions = shadowOf(app.getSystemService(MediaSessionManager::class.java))
+        sessions.addController(controller)
+        val media = MediaSessionPlayback(app)
+        val fakePlayback = FakePlayback().apply { access = true }
+        val playback = object : PlaybackSource by fakePlayback {
+            override fun follow(song: MusicMetadata, app: String?, session: Int?) = media.follow(song, app, session)
+        }
+        val model = model(playback)
+        try {
+            MainViewModel::class.java.getDeclaredMethod("watchLeft", MusicMetadata::class.java).apply { isAccessible = true }.invoke(model, requested)
+            idle()
+            assertTrue(shadowOf(controller).getCallbacks().isNotEmpty())
+            shadowOf(controller).executeOnPlaybackStateChanged(state(4))
+            idle()
+            assertTrue(fakePlayback.plays.isEmpty())
+        } finally {
+            sessions.clearControllers()
+            receiver.release()
         }
     }
 
@@ -4644,42 +5141,6 @@ class MainViewModelTest {
             until("the paused session resumes") { playback.plays.isNotEmpty() }
             assertEquals(listOf(true), playback.plays)
             assertEquals(listOf(ytMusic), playback.playedApps)
-        } finally {
-            watching.cancel()
-        }
-    }
-
-    @Test
-    fun aPlayingSongInItsFinalSecondStaysEligibleWhileAPausedSongOpensItsLink() {
-        val playback = FakePlayback().apply { access = true }
-        val model = ytMusicModel(playback)
-        val watching = model.viewModelScope.launch { model.watchPlayingNow() }
-        val effects = mutableListOf<Effect>()
-        model.viewModelScope.launch { model.effects.collect { effects += it } }
-        try {
-            val beforeEnd = Following(PlaybackClock(198_999, 0, playing = false), "YouTube Music", canSeek = true,
-                appPackage = ytMusic, durationMs = 200_000)
-            playback.playing.value = beforeEnd
-            until("a song that can still resume") { model.uiState.canPlayResult }
-
-            val atEnd = beforeEnd.copy(clock = beforeEnd.clock.copy(positionMs = 199_000))
-            playback.playing.value = atEnd.copy(clock = atEnd.clock.copy(playing = true))
-            idle()
-            assertTrue(model.uiState.canPlayResult)
-            playback.playing.value = atEnd
-            idle()
-            assertFalse(model.uiState.canPlayResult)
-            model.playResult()
-            until("the asked recording opens") { effects.isNotEmpty() }
-            val opened = effects.single() as Effect.Open
-            assertEquals(ytMusic, opened.packageName)
-            assertEquals(ytLink, opened.url)
-            assertTrue(playback.plays.isEmpty())
-            assertNull(model.uiState.player)
-            effects.clear()
-            model.openResult()
-            until("Open also starts from the asked link") { effects.isNotEmpty() }
-            assertEquals(ytLink, (effects.single() as Effect.Open).url)
         } finally {
             watching.cancel()
         }
@@ -4867,7 +5328,7 @@ class MainViewModelTest {
     private val queueLink = "https://music.youtube.com/watch?v=first000000&list=TLGGqueue"
 
     /** A model whose songs go to [service], on the phone, with a playlist of two songs looked up and shown, YouTube finding the first. */
-    private fun playlistModel(playback: FakePlayback, service: MusicService, found: Boolean = true): MainViewModel {
+    private fun playlistModel(playback: FakePlayback, service: MusicService, found: Boolean = true, playQueue: PlayQueue? = null): MainViewModel {
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
             {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
         fake.handler = { request ->
@@ -4885,7 +5346,7 @@ class MainViewModelTest {
         }
         shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "Music"))
         prefs().edit().putString("default_target", service.name).commit()
-        val model = model(playback = playback)
+        val model = model(playback = playback, playQueue = playQueue)
         model.refreshSystemState()
         idle()
         model.onUrlChange(playlistLink)
@@ -5168,7 +5629,7 @@ class MainViewModelTest {
             assertEquals(1, opened(MusicService.QOBUZ))
             // Any other app's left alone, and a search has no number to swap.
             assertEquals(0, opened(MusicService.DEEZER))
-            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchResult() }))
             assertEquals(0, opened(MusicService.DEEZER, action = { it.openOriginal() }))
             assertEquals(0, opened(MusicService.DEEZER, action = {
                 it.openTrack(MusicMetadata("Next", "Artist", url = "https://www.deezer.com/track/42"))
@@ -5176,7 +5637,7 @@ class MainViewModelTest {
             // Another song, as one looked up before is opened on the number kept with it.
             found = false
             assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=aaaaaaaaaaa"))
-            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchResult() }))
         } finally {
             scope.cancel()
         }

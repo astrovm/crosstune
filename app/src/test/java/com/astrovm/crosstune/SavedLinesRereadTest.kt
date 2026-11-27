@@ -310,11 +310,30 @@ class SavedLinesRereadTest {
     }
 
     @Test
-    fun aLineReadWithVersion15IsReadAgain() {
-        val line = SavedLine("三本", reading = "さんほん", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 15)
-        val again = checkNotNull(readAgain(listOf(line)))
-        assertEquals("さんぼん", again.single().reading)
-        assertEquals(16, again.single().readWith)
+    fun aSavedLineReadWithVersion16GetsTheCopulaSpace() {
+        val line = SavedLine("無駄だから", reading = "むだだから", romanized = "mudada kara", title = "Demo", artist = "Band", readWith = 16)
+        val again = checkNotNull(readAgain(listOf(line))).single()
+        assertEquals("むだだから", again.reading)
+        assertEquals("muda da kara", again.romanized)
+        assertEquals(Readings.VERSION, again.readWith)
+    }
+
+    @Test
+    fun aSavedLineReadWithVersion18SeparatesNanDa() {
+        val line = SavedLine("これは何だ", reading = "これはなんだ", romanized = "kore wa nanda", title = "Demo", artist = "Band", readWith = 18)
+        val again = checkNotNull(readAgain(listOf(line))).single()
+        assertEquals("これはなんだ", again.reading)
+        assertEquals("kore wa nan da", again.romanized)
+        assertEquals(Readings.VERSION, again.readWith)
+    }
+
+    @Test
+    fun aSavedLineReadWithVersion17JoinsTari() {
+        val line = SavedLine("読んだり", reading = "よんだり", romanized = "yon dari", title = "Demo", artist = "Band", readWith = 17)
+        val again = checkNotNull(readAgain(listOf(line))).single()
+        assertEquals("よんだり", again.reading)
+        assertEquals("yondari", again.romanized)
+        assertEquals(Readings.VERSION, again.readWith)
     }
 
     @Test

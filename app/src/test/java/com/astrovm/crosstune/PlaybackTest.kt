@@ -42,6 +42,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -82,7 +85,7 @@ class PlaybackTest {
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
     private val radioNotices = MutableStateFlow<Set<MediaSession.Token>>(emptySet())
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes,
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, playsOnMs = 200, modes = modes,
         queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
@@ -141,6 +144,796 @@ class PlaybackTest {
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
+    }
+
+    @Test
+    fun aNewItemWithoutAnEarlierClockIsFollowedImmediately() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, state = PlaybackState.STATE_STOPPED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(3, PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        val followed = followed(MusicMetadata("Next Song", song.artist))
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, seen.last()?.offsetMs)
+        assertEquals(0L, followed.last()?.clock?.positionMs)
+        val seek = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 5_000, 1f, PLAYED_AT).setActiveQueueItemId(4).build()
+        shadowOf(music).executeOnPlaybackStateChanged(seek)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(5_000L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun theFirstReportedClockClearsItsPendingQueueWait() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, state = PlaybackState.STATE_STOPPED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(3, PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(music)
+        offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entry = checkNotNull((field.get(playback) as Map<*, *>)[music.sessionToken])
+        val waitingId = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        assertNull(waitingId.get(entry))
+    }
+
+    @Test
+    fun aPauseDuringTheQueueWindowDoesNotMoveAfterItStopped() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        var time = PLAYED_AT
+        val source = MediaSessionPlayback(app, now = { time }, modes = modes)
+        fun state(id: Long, mode: Int, at: Long) = PlaybackState.Builder().setState(mode, 0, 1f, at).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, PlaybackState.STATE_PLAYING, PLAYED_AT))
+        shadowOf(sessions).addController(music)
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        time += 300
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PAUSED, time))
+        shadowOf(Looper.getMainLooper()).idle()
+        val paused = seen.last()?.clock
+        time += 700
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PAUSED, time - 700))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(paused, seen.last()?.clock)
+        assertEquals(false, paused?.playing)
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING, time))
+        shadowOf(Looper.getMainLooper()).idle()
+        time += 300
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING, time))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(600L, seen.last()?.clock?.positionAt(time))
+    }
+
+    @Test
+    fun followingAloneAcceptsMetadataBeforeTheNewState() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val nextSong = MusicMetadata("Next Song", song.artist)
+        val seen = followed(nextSong)
+        assertEquals(42_000L, playback.matching(song).single().following?.clock?.positionMs)
+        val metadata = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, nextSong.title).build()
+        shadowOf(music).executeOnMetadataChanged(metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, seen.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun fastSkipsShareTheFirstMismatchDeadline() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 10_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 120_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
+        shadowOf(music).executeOnPlaybackStateChanged(state(3, 20_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entry = checkNotNull((field.get(playback) as Map<*, *>)[music.sessionToken])
+        val pendingId = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        assertEquals(3L, pendingId.get(entry))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(99))
+        assertEquals(142_000L, seen.last()?.offsetMs)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(20_000L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun thePlayerShowsTheLatestQueueItemAtTheFirstDeadline() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 10_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_400))
+        shadowOf(music).executeOnPlaybackStateChanged(state(3, 20_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(99))
+        assertEquals(142_000L, seen.last()?.clock?.positionAt(NOW))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(20_000L, seen.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun aRefreshExpiresAnUnselectedSessionsPendingQueueId() {
+        allow()
+        val first = player("com.spotify.music", "Spotify", song.title, song.artist)
+        val second = player("com.example.music", "Other", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 42_000, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(first).setPlaybackState(state(5, PlaybackState.STATE_PLAYING))
+        shadowOf(second).setPlaybackState(state(7, PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(first)
+        shadowOf(sessions).addController(second)
+        followed()
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(second).setPlaybackState(state(8, PlaybackState.STATE_PAUSED))
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(first).executeOnPlaybackStateChanged(state(5, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entries = field.get(playback) as Map<*, *>
+        val entry = checkNotNull(entries[second.sessionToken])
+        val waiting = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        val id = entry.javaClass.getDeclaredField("id").apply { isAccessible = true }
+        assertNull(waiting.get(entry))
+        assertEquals(8L, id.get(entry))
+    }
+
+    @Test
+    fun aRefreshSchedulesTheNextSessionsLaterDeadline() {
+        allow()
+        val first = player("com.spotify.music", "Spotify", song.title, song.artist)
+        val second = player("com.example.music", "Other", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        fun state(id: Long, mode: Int, position: Long) = PlaybackState.Builder().setState(mode, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(first).setPlaybackState(state(5, PlaybackState.STATE_PLAYING, 42_000))
+        shadowOf(second).setPlaybackState(state(7, PlaybackState.STATE_PAUSED, 42_000))
+        shadowOf(sessions).addController(first)
+        shadowOf(sessions).addController(second)
+        val seen = followed()
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(second).setPlaybackState(state(8, PlaybackState.STATE_PAUSED, 0))
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(first).executeOnPlaybackStateChanged(state(5, PlaybackState.STATE_PLAYING, 42_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        shadowOf(first).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING, 10_000))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertEquals(142_000L, seen.last()?.clock?.positionAt(NOW))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        assertEquals(10_000L, seen.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun homeRefreshExpiresAnUnselectedSessionsPendingQueueId() {
+        allow()
+        sounding()
+        val first = player("com.spotify.music", "Spotify", song.title, song.artist)
+        val second = player("com.example.music", "Other", song.title, song.artist, state = PlaybackState.STATE_PAUSED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 42_000, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(first).setPlaybackState(state(5, PlaybackState.STATE_PLAYING))
+        shadowOf(second).setPlaybackState(state(7, PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(first)
+        shadowOf(sessions).addController(second)
+        offered()
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(second).setPlaybackState(state(8, PlaybackState.STATE_PAUSED))
+        assertEquals(2, playback.matching(song).size)
+        shadowOf(first).executeOnPlaybackStateChanged(state(5, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        val entries = field.get(playback) as Map<*, *>
+        val entry = checkNotNull(entries[second.sessionToken])
+        val waiting = entry.javaClass.getDeclaredField("waitingId").apply { isAccessible = true }
+        val id = entry.javaClass.getDeclaredField("id").apply { isAccessible = true }
+        assertNull(waiting.get(entry))
+        assertEquals(8L, id.get(entry))
+    }
+
+    @Test
+    fun repeatedStatesScheduleOnlyOneNeededRefresh() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5))
+        shadowOf(sessions).addController(music)
+        var reads = 0
+        val counted = object : AppModes by modes {
+            override fun shuffles(app: MediaController): Boolean? { reads++; return modes.shuffles(app) }
+        }
+        val source = MediaSessionPlayback(app, now = { NOW }, modes = counted)
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect {} }
+        shadowOf(Looper.getMainLooper()).idle()
+        repeat(9) { shadowOf(music).executeOnPlaybackStateChanged(state(5)) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val unchanged = reads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        assertEquals(unchanged, reads)
+        repeat(9) { shadowOf(music).executeOnPlaybackStateChanged(state(4)) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val pending = reads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        assertEquals(pending + 1, reads)
+        shadowOf(music).executeOnPlaybackStateChanged(state(3))
+        shadowOf(Looper.getMainLooper()).idle()
+        collecting.forEach(Job::cancel)
+        val closed = reads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        assertEquals(closed, reads)
+        assertTrue(shadowOf(music).callbacks.isEmpty())
+    }
+
+    @Test
+    fun metadataCancelsThePendingRefreshForHomeAndThePlayer() {
+        allow()
+        sounding()
+        for (home in listOf(false, true)) {
+            val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+            fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+                .setActiveQueueItemId(id).build()
+            shadowOf(music).setPlaybackState(state(5))
+            shadowOf(sessions).clearControllers()
+            shadowOf(sessions).addController(music)
+            var reads = 0
+            val counted = object : AppModes by modes {
+                override fun shuffles(app: MediaController): Boolean? { reads++; return modes.shuffles(app) }
+            }
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = counted, radioNotices = radioNotices)
+            val job = CoroutineScope(Dispatchers.Unconfined).launch {
+                if (home) source.nowPlayingUpdates().collect {} else source.follow(song).collect {}
+            }
+            collecting += job
+            shadowOf(Looper.getMainLooper()).idle()
+            shadowOf(music).executeOnPlaybackStateChanged(state(4))
+            shadowOf(Looper.getMainLooper()).idle()
+            shadowOf(music).executeOnMetadataChanged(music.metadata)
+            shadowOf(Looper.getMainLooper()).idle()
+            val afterMetadata = reads
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+            assertEquals(afterMetadata, reads)
+            job.cancel()
+        }
+    }
+
+    @Test
+    fun closingAnObserverRemovesItsPendingRefresh() {
+        allow()
+        sounding()
+        for (home in listOf(false, true)) {
+            val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+            fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+                .setActiveQueueItemId(id).build()
+            shadowOf(music).setPlaybackState(state(5))
+            shadowOf(sessions).clearControllers()
+            shadowOf(sessions).addController(music)
+            val source = MediaSessionPlayback(app, now = { NOW }, modes = modes, radioNotices = radioNotices)
+            val handler = MediaSessionPlayback::class.java.getDeclaredField("handler").apply { isAccessible = true }.get(source) as android.os.Handler
+            val job = CoroutineScope(Dispatchers.Unconfined).launch {
+                if (home) source.nowPlayingUpdates().collect {} else source.follow(song).collect {}
+            }
+            collecting += job
+            shadowOf(Looper.getMainLooper()).idle()
+            shadowOf(music).executeOnPlaybackStateChanged(state(4))
+            shadowOf(Looper.getMainLooper()).idle()
+            val queue = Looper.getMainLooper().queue
+            val head = android.os.MessageQueue::class.java.getDeclaredField("mMessages").apply { isAccessible = true }
+            val next = android.os.Message::class.java.getDeclaredField("next").apply { isAccessible = true }
+            fun callbacks(): List<Runnable> {
+                val found = mutableListOf<Runnable>()
+                var message = head.get(queue) as? android.os.Message
+                while (message != null) {
+                    if (message.target == handler) message.callback?.let(found::add)
+                    message = next.get(message) as? android.os.Message
+                }
+                return found
+            }
+            val pending = callbacks()
+            assertTrue(pending.isNotEmpty())
+            val guardField = pending.flatMap { runnable -> runnable.javaClass.declaredFields.map { runnable to it } }
+                .first { (_, field) -> field.type.simpleName == "ObserverGuard" }
+            val guard = guardField.second.apply { isAccessible = true }.get(guardField.first)
+            val active = guard.javaClass.getDeclaredField("active").apply { isAccessible = true }.get(guard) as Function0<*>
+            assertEquals(true, active.invoke())
+            job.cancel()
+            assertTrue(pending.none(handler::hasCallbacks))
+            assertEquals(false, active.invoke())
+        }
+    }
+
+    @Test
+    fun closingHomeAndPlayerUnregistersTheirAndroidListeners() {
+        allow()
+        val listenerField = ShadowMediaSessionManager::class.java.getDeclaredField("listeners").apply { isAccessible = true }
+        val audioShadow = shadowOf(app.getSystemService(AudioManager::class.java))
+        val audioField = audioShadow.javaClass.getDeclaredField("audioPlaybackCallbacks").apply { isAccessible = true }
+        fun listeners() = (listenerField.get(null) as Set<*>).toSet()
+        fun audioCallbacks() = (audioField.get(audioShadow) as Set<*>).toSet()
+        val beforeListeners = listeners()
+        val beforeAudio = audioCallbacks()
+        val follow = CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect {} }
+        collecting += follow
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeListeners.size + 1, listeners().size)
+        follow.cancel()
+        assertEquals(beforeListeners, listeners())
+        val home = CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect {} }
+        collecting += home
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeListeners.size + 1, listeners().size)
+        assertEquals(beforeAudio.size + 1, audioCallbacks().size)
+        home.cancel()
+        assertEquals(beforeListeners, listeners())
+        assertEquals(beforeAudio, audioCallbacks())
+    }
+
+    @Test
+    fun closingHomeRemovesARefreshPostedForCoverChanges() {
+        allow()
+        val source = MediaSessionPlayback(app, now = { NOW }, modes = modes, radioNotices = radioNotices)
+        val handler = MediaSessionPlayback::class.java.getDeclaredField("handler").apply { isAccessible = true }.get(source) as android.os.Handler
+        val covers = MediaSessionPlayback::class.java.getDeclaredField("covers").apply { isAccessible = true }.get(source)
+        val changed = covers.javaClass.getDeclaredField("changed").apply { isAccessible = true }.get(covers)
+        val subscribers = changed.javaClass.getMethod("getSubscriptionCount").apply { isAccessible = true }.invoke(changed) as kotlinx.coroutines.flow.StateFlow<*>
+        val before = subscribers.value as Int
+        val home = CoroutineScope(Dispatchers.Unconfined).launch { source.nowPlayingUpdates().collect {} }
+        collecting += home
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(before + 1, subscribers.value)
+        val current = changed.javaClass.getMethod("getValue").apply { isAccessible = true }.invoke(changed) as Long
+        changed.javaClass.getMethod("setValue", Any::class.java).apply { isAccessible = true }.invoke(changed, current + 1)
+        val queue = Looper.getMainLooper().queue
+        val head = android.os.MessageQueue::class.java.getDeclaredField("mMessages").apply { isAccessible = true }
+        val next = android.os.Message::class.java.getDeclaredField("next").apply { isAccessible = true }
+        val pending = mutableListOf<Runnable>()
+        var message = head.get(queue) as? android.os.Message
+        while (message != null) {
+            if (message.target == handler) message.callback?.let(pending::add)
+            message = next.get(message) as? android.os.Message
+        }
+        assertTrue(pending.isNotEmpty())
+        home.cancel()
+        assertTrue(pending.none(handler::hasCallbacks))
+        assertEquals(before, subscribers.value)
+    }
+
+    @Test
+    fun aDirectReadAcceptsTheNewQueueIdAtTheGraceDeadline() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        offered()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(Duration.ofMillis(1_499))
+        assertEquals(142_000L, playback.nowPlaying()?.offsetMs)
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(Duration.ofMillis(1))
+        assertEquals(0L, playback.nowPlaying()?.offsetMs)
+    }
+
+    @Test
+    fun directReadsWithNoObserverOrANewlyKnownQueueKeepTheirClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5))
+        shadowOf(sessions).addController(music)
+        assertEquals(42_000L, playback.nowPlaying()?.offsetMs)
+        shadowOf(music).setPlaybackState(state(MediaSession.QueueItem.UNKNOWN_ID.toLong()))
+        offered()
+        shadowOf(music).executeOnMetadataChanged(music.metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).setPlaybackState(state(6))
+        assertEquals(42_000L, playback.nowPlaying()?.offsetMs)
+    }
+
+    @Test
+    fun aDirectReadKeepsItsSnapshotWhenAnObserverStartsDuringIt() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(position: Long, at: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, at)
+            .setActiveQueueItemId(5).build()
+        shadowOf(music).setPlaybackState(state(42_000, 0))
+        shadowOf(sessions).addController(music)
+        lateinit var source: MediaSessionPlayback
+        var starting = true
+        source = MediaSessionPlayback(app, modes = modes, now = {
+            if (starting) {
+                starting = false
+                shadowOf(music).setPlaybackState(state(90_000, NOW))
+                collecting += CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect {} }
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            NOW
+        })
+        assertEquals(42_000L, source.matching(song).single().following?.clock?.positionMs)
+    }
+
+    @Test
+    fun anUnknownQueueIdUsesTheReportedClockBeforeItsCallback() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        offered()
+        shadowOf(music).setPlaybackState(state(MediaSession.QueueItem.UNKNOWN_ID.toLong(), 120_000))
+        assertEquals(120_000L, playback.nowPlaying()?.offsetMs)
+    }
+
+    @Test
+    fun theLastSameItemSeekIsTheClockKeptDuringTheNextItem() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnPlaybackStateChanged(state(5, 90_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(90_000L, seen.last()?.offsetMs)
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(190_000L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun metadataIsRecentThroughTheGraceDeadline() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(Duration.ofMillis(1_500))
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun changingSessionsAndClosingBothObserversReleasesTheirQueueEntries() {
+        allow()
+        sounding()
+        val first = player("com.spotify.music", "Spotify", song.title, song.artist)
+        val next = player("com.example.music", "Other", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(first).setPlaybackState(state(5))
+        shadowOf(next).setPlaybackState(state(6))
+        shadowOf(sessions).addController(first)
+        offered()
+        followed()
+        val field = MediaSessionPlayback::class.java.getDeclaredField("queueMetadata").apply { isAccessible = true }
+        fun entries() = field.get(playback) as Map<*, *>
+        assertTrue(first.sessionToken in entries())
+        shadowOf(sessions).clearControllers()
+        shadowOf(sessions).addController(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(first.sessionToken in entries())
+        assertTrue(next.sessionToken in entries())
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test
+    fun aDestroyedSessionDoesNotReturnWhenTheQueueWaitEnds() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnSessionDestroyed()
+        shadowOf(sessions).clearControllers()
+        shadowOf(Looper.getMainLooper()).idle()
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertNull(seen.last())
+        assertTrue(shadowOf(music).callbacks.isEmpty())
+    }
+
+    @Test
+    fun cancellingDuringARefreshCannotRegisterTheNextSessionAfterCleanup() {
+        allow()
+        val first = player("com.spotify.music", "Spotify", song.title, song.artist)
+        val next = player("com.example.music", "Other", "Unrelated", "", state = PlaybackState.STATE_PAUSED)
+        fun state(id: Long, mode: Int) = PlaybackState.Builder().setState(mode, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(first).setPlaybackState(state(5, PlaybackState.STATE_PLAYING))
+        shadowOf(next).setPlaybackState(state(7, PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(first)
+        shadowOf(sessions).addController(next)
+        lateinit var watching: Job
+        var cancelled = false
+        val source = MediaSessionPlayback(app, now = { NOW }, modes = modes, readSong = { title, artist, _ ->
+            if (title == song.title && artist.isBlank()) {
+                watching.cancel()
+                cancelled = true
+                song
+            } else {
+                MusicMetadata(title, artist)
+            }
+        })
+        watching = CoroutineScope(Dispatchers.Unconfined).launch { source.follow(song).collect {} }
+        collecting += watching
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(first).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(first).setPlaybackState(state(4, PlaybackState.STATE_PAUSED))
+        shadowOf(next).setPlaybackState(state(7, PlaybackState.STATE_PLAYING))
+        shadowOf(next).setMetadata(MediaMetadata.Builder(next.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, song.title).build())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        assertTrue(cancelled)
+        assertTrue(shadowOf(first).callbacks.isEmpty())
+        assertTrue(shadowOf(next).callbacks.isEmpty())
+    }
+
+    @Test
+    fun queueIdChangesWithoutMetadataEventuallyUseTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(5, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val following = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 42_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, following.last()?.clock?.playing)
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, 120_000))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(120_000L, seen.last()?.offsetMs)
+        assertEquals(120_000L, following.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun youtubeMusicMetadataArrivingAfterItsNewQueueIdRestoresTheClock() {
+        allow()
+        sounding()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", song.title, song.artist, album = "After Hours", duration = 240_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnPlaybackStateChanged(state(27, 0))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(75))
+        assertEquals(142_000L, seen.last()?.offsetMs)
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun sameMetadataBeforeNextQueueItemEventuallyUsesItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        shadowOf(music).executeOnMetadataChanged(music.metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(77))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(100_000L, seen.last()?.offsetMs)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun bufferingBetweenNewMetadataAndQueueItemStillUsesItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, playing: Int) = PlaybackState.Builder().setState(playing, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, PlaybackState.STATE_PLAYING))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(76, PlaybackState.STATE_BUFFERING))
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun firstMetadataAfterStoppedSessionCanTakeTheNewQueueId() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, state = PlaybackState.STATE_STOPPED)
+        fun state(id: Long, playing: Int) = PlaybackState.Builder().setState(playing, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(3, PlaybackState.STATE_STOPPED))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(4, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun nextQueueItemDoesNotGiveTheOldSongItsClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder()
+            .setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).setActions(PlaybackState.ACTION_SEEK_TO).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val following = followed()
+        assertEquals(42_000L, seen.last()?.offsetMs)
+        shadowOf(music).setPlaybackState(state(26, 0))
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(142_000L, seen.last()?.offsetMs)
+        assertEquals(true, following.last()?.clock?.playing)
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).setMetadata(next)
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun metadataBeforeTheQueueChangeStillGetsTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song").build()
+        shadowOf(music).setMetadata(next)
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).setPlaybackState(state(26))
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Next Song", seen.last()?.metadata?.title)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun changedArtistBeforeTheQueueChangeGetsTheNewClock() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76))
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        val next = MediaMetadata.Builder(music.metadata).putString(MediaMetadata.METADATA_KEY_ARTIST, "Other Artist").build()
+        shadowOf(music).executeOnMetadataChanged(next)
+        shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Other Artist", seen.last()?.metadata?.artist)
+        assertEquals(0L, seen.last()?.offsetMs)
+    }
+
+    @Test
+    fun followingAloneKeepsTheOldClockUntilMetadataArrives() {
+        allow()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist, position = 42_000)
+        fun state(id: Long, position: Long) = PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, PLAYED_AT)
+            .setActiveQueueItemId(id).build()
+        shadowOf(music).setPlaybackState(state(76, 42_000))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        shadowOf(music).executeOnPlaybackStateChanged(state(26, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(142_000L, seen.last()?.clock?.positionAt(NOW))
+        assertEquals(true, seen.last()?.clock?.playing)
+        shadowOf(music).executeOnMetadataChanged(music.metadata)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, seen.last()?.clock?.positionMs)
+    }
+
+    @Test
+    fun sameQueueItemAndMissingQueueKeepTheirClocks() {
+        allow()
+        sounding()
+        val music = player("com.spotify.music", "Spotify", song.title, song.artist)
+        fun state(id: Long, position: Long, playbackState: Int = PlaybackState.STATE_PLAYING) {
+            val value = PlaybackState.Builder().setState(playbackState, position, 1f, PLAYED_AT)
+                .setActiveQueueItemId(id).setActions(PlaybackState.ACTION_SEEK_TO).build()
+            shadowOf(music).setPlaybackState(value)
+            shadowOf(music).executeOnPlaybackStateChanged(value)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        state(76, 42_000)
+        shadowOf(sessions).addController(music)
+        val seen = offered()
+        state(76, 0) // Replay.
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(76, 20_000) // Seek.
+        assertEquals(20_000L, seen.last()?.offsetMs)
+        state(76, 20_000, PlaybackState.STATE_PAUSED)
+        assertNull(seen.last()?.offsetMs)
+        val adEnded = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 200_000).build()
+        shadowOf(music).setMetadata(adEnded)
+        shadowOf(music).executeOnMetadataChanged(adEnded)
+        state(76, 0, PlaybackState.STATE_BUFFERING)
+        state(76, 0)
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(MediaSession.QueueItem.UNKNOWN_ID.toLong(), 12_000)
+        assertEquals(12_000L, seen.last()?.offsetMs)
+        state(MediaSession.QueueItem.UNKNOWN_ID.toLong(), 0)
+        assertEquals(0L, seen.last()?.offsetMs)
+        state(99, 1_000)
+        assertEquals(1_000L, seen.last()?.offsetMs)
+        collecting.forEach(Job::cancel)
+        state(100, 2_000)
+        assertEquals(2_000L, offered().last()?.offsetMs)
     }
 
     @Test
@@ -215,17 +1008,34 @@ class PlaybackTest {
     }
 
     @Test
-    fun observingACachedValueNeitherReadsNorMakesItMoreRecent() {
-        var reads = 0
-        val cache = KeptReads<String, Int>(2) { ++reads }
-        assertNull(cache.peek("unread"))
-        assertEquals(0, reads)
-        assertEquals(1, cache.of("first"))
-        assertEquals(2, cache.of("second"))
-        assertEquals(1, cache.peek("first"))
-        assertEquals(3, cache.of("third"))
-        assertNull(cache.peek("first"))
-        assertEquals(4, cache.of("first"))
+    fun peekingAtASessionsNumberNeitherNumbersItNorKeepsItLonger() {
+        val numbers = SessionNumbers(2)
+        val (first, second, third) = List(3) { MediaSession(app, "session$it").sessionToken }
+        assertNull(numbers.peek(first))
+        assertEquals(0, numbers.of(first))
+        assertEquals(1, numbers.of(second))
+        assertEquals(0, numbers.peek(first))
+        assertEquals(2, numbers.of(third))
+        assertNull(numbers.peek(first))
+        assertEquals(3, numbers.of(first))
+    }
+
+    @Test
+    fun aSessionNumberedFromManyThreadsAtOnceGetsOneNumber() {
+        val tokens = List(200) { MediaSession(app, "shared$it").sessionToken }
+        val numbers = SessionNumbers(tokens.size)
+        val threads = 8
+        // Each thread waits for all the others before each new session, so they number it together.
+        val together = CyclicBarrier(threads)
+        val pool = Executors.newFixedThreadPool(threads)
+        try {
+            val got = List(threads) { pool.submit<List<Int>> { tokens.map { together.await(5, TimeUnit.SECONDS); numbers.of(it) } } }
+            val seen = got.map { it.get(30, TimeUnit.SECONDS) }
+            assertTrue(seen.all { it == seen.first() })
+            assertEquals(tokens.size, seen.first().toSet().size)
+        } finally {
+            pool.shutdownNow()
+        }
     }
 
     @Test
@@ -250,6 +1060,22 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.example.next", "Next", next.title, next.artist))
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(1, playback.matching(next).single().session)
+    }
+
+    @Test
+    fun anotherPlaybackFollowsASessionByTheNumberThisOneGaveIt() {
+        allow()
+        val other = MusicMetadata("Other Track", "Other Artist")
+        shadowOf(sessions).addController(player("com.example.other", "Other", other.title, other.artist))
+        shadowOf(sessions).addController(player("com.example.music", "Music", song.title, song.artist))
+        // The sleep timer's own playback, which numbered another app's session first, then is handed the player's number.
+        val timers = MediaSessionPlayback(app, now = { NOW }, modes = modes, queueOf = { queues[it.packageName] }, clockLog = PracticeClockLog(true), radioNotices = radioNotices)
+        timers.matching(other)
+        val session = playback.matching(song).single().session
+        val seen = mutableListOf<Following?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { timers.follow(song, "com.example.music", session).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("com.example.music"), seen.map { it?.appPackage })
     }
 
     @Test
@@ -400,6 +1226,7 @@ class PlaybackTest {
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
         assertEquals(325_474L, checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.metadata.lengthMs)
         assertNull(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.offsetMs)
+        assertTrue(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
         assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
         assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
         // Then the song itself starts over from 0, and plays.
@@ -411,6 +1238,7 @@ class PlaybackTest {
         assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.clock)
         assertFalse(checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.ad)
         assertEquals(325_474L, checkNotNull(seen.last()) { "Expected seen.last() to be non-null" }.durationMs)
+        assertFalse(checkNotNull(playback.nowPlaying()) { "Expected playback.nowPlaying() to be non-null" }.ad)
     }
 
     @Test
@@ -993,6 +1821,20 @@ class PlaybackTest {
             if (app != "com.fake.exact") wrong += "same: $asked followed $app, wanted $playing"
         }
         assertEquals("${wrong.size} wrong follows", emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun prestoMusicsSongIsNamedAsOtherServicesNameItAndFollowed() {
+        allow()
+        sounding()
+        // As Presto names it on a phone: who wrote it first, and every musician with what they play.
+        val seen = followed(MusicMetadata("So What", "Miles Davis"))
+        shadowOf(sessions).addController(
+            player("com.prestomusic.app", "Presto Music", "Davis, M: So What", "Cannonball Adderley (alto saxophone), Bill Evans (piano), Miles Davis (trumpet)")
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Presto Music", seen.last()?.app)
+        assertEquals(MusicMetadata("So What", "Miles Davis"), playback.nowPlaying()?.metadata?.let { MusicMetadata(it.title, it.artist) })
     }
 
     @Test
@@ -3554,6 +4396,47 @@ class PlaybackTest {
 
     @Test
     @Config(shadows = [AppAsked::class])
+    fun anAppStoppedASecondAfterItSaysItPlaysHasntPlayedOn() = runBlocking {
+        val youTube = MusicService.YOUTUBE.packageName
+        allow()
+        val stopped = player(youTube, "YouTube", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_STOPPED)
+        shadowOf(sessions).addController(stopped)
+        val says = { state: Int -> shadowOf(stopped).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val resumes = { by: MediaSessionPlayback -> CoroutineScope(Dispatchers.Unconfined).async { by.resume(song) } }
+        // Stopped for a moment, then playing again, it did play on.
+        val flickers = resumes(playback)
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(flickers.await())
+        assertFalse(playback.playsOnlyInFront(youTube))
+        // Asked from behind, YouTube without Premium says it plays, then stops at once: it only plays in front.
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val fails = resumes(playback)
+        says(PlaybackState.STATE_PLAYING)
+        says(PlaybackState.STATE_STOPPED)
+        assertFalse(fails.await())
+        assertEquals(listOf("play", "play"), asked())
+        assertTrue(playback.playsOnlyInFront(youTube))
+        // Saying it plays before Crosstune looks, then failing, it didn't either.
+        val fresh = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        val quick = resumes(fresh)
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(quick.await())
+        assertTrue(fresh.playsOnlyInFront(youTube))
+        // Failing before it ever says it plays, it isn't held to the second.
+        val other = MediaSessionPlayback(app, now = { NOW }, startMs = 200, playsOnMs = 200, modes = modes)
+        shadowOf(stopped).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_STOPPED, 0, 1f, PLAYED_AT).build())
+        val failsAtOnce = resumes(other)
+        says(PlaybackState.STATE_ERROR)
+        assertTrue(failsAtOnce.isCompleted)
+        assertFalse(failsAtOnce.await())
+        assertTrue(other.playsOnlyInFront(youTube))
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
     fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         allow()
@@ -4111,9 +4994,13 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band", album = "Album"))
         shadowOf(sessions).addController(youTubeMusic)
         assertEquals("Blinding Lights" to 107L, seen.last()?.let { it.song.title to it.queueId })
-        // Paused it still plays it; stopped, it plays nothing.
+        assertEquals(true, seen.last()?.playing)
+        // Paused it still plays it, though not now; stopped, it plays nothing.
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PAUSED, 108))
-        assertEquals(108L, runBlocking { playback.plays(music).first() }?.queueId)
+        assertEquals(108L to false, runBlocking { playback.plays(music).first() }?.let { it.queueId to it.playing })
+        // Loading, not yet.
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_BUFFERING, 108))
+        assertEquals(false, runBlocking { playback.plays(music).first() }?.playing)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
         assertNull(runBlocking { playback.plays(music).first() })
         // What's before it in the queue, by its number; none for the first, or a song not in it.
@@ -4142,7 +5029,7 @@ class PlaybackTest {
             shadowOf(atEnd).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, PLAYED_AT).build())
             runBlocking { playback.plays(youTube).first() }?.ended
         }
-        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true), runBlocking { playback.plays(youTube).first() })
+        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true, playing = false), runBlocking { playback.plays(youTube).first() })
         assertEquals(true, ended(PlaybackState.STATE_PAUSED, 244_000))
         // Short of it, paused it's still playing it, and stopped it plays nothing.
         assertEquals(false, ended(PlaybackState.STATE_PAUSED, 243_999))

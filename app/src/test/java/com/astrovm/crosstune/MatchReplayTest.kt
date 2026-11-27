@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 class MatchReplayTest {
 
     private val fake = FakeSpotify()
+    private val missingLocalizations = ConcurrentHashMap.newKeySet<String>()
     private lateinit var dir: File
     private var proofs = JSONObject()
     private val missingProofs = ConcurrentHashMap.newKeySet<String>()
@@ -91,7 +92,8 @@ class MatchReplayTest {
                     val seen = JSONArray()
                     fake.requestedUrls.clear()
                     aliasRequests.set(0)
-                    urls.put(find(song, answers, names, asked, seen, appleDown) ?: JSONObject.NULL)
+                    val unavailable = appleDown || !both && song.optBoolean("appleDown")
+                    urls.put(find(song, answers, names, asked, seen, unavailable) ?: JSONObject.NULL)
                     asks.put(seen)
                     counts.put(fake.requestedUrls.size + aliasRequests.get())
                 }
@@ -102,6 +104,7 @@ class MatchReplayTest {
             }
         }
         found.put("shown", shown)
+        found.put("missingLocalizations", JSONArray(missingLocalizations.sorted()))
         found.put("requests", requests)
         val label = System.getenv("MATCHCHECK_LABEL") ?: "head"
         val suffix = if (both) if (appleDown) "-down" else "-up" else ""
@@ -125,7 +128,8 @@ class MatchReplayTest {
         val matcher = ExactMatcher(fake.client(), "US", pick = if (asked) pick else { _, _, _ -> null }, timeoutMs = WHILE_MS, pickTimeoutMs = WHILE_MS,
             artistAliases = { name -> aliasRequests.incrementAndGet(); aliases.optJSONArray(name)?.strings()?.toSet() ?: run { missingAliases += name; null } }, // MATCHCHECK_ARTIST_ALIASES
         )
-        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("lengthMs").takeIf { it > 0 })) }
+        val metadata = MusicMetadata(song.getString("title"), song.getString("artist"), lengthMs = song.optLong("sourceLengthMs", if (song.has("sourceLengthMs")) 0 else song.optLong("lengthMs")).takeIf { it > 0 })
+        return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, metadata) }
     }
 
     private fun answer(request: Request, song: JSONObject, answers: Map<String, String?>, names: Boolean, appleDown: Boolean): okhttp3.Response {
@@ -135,7 +139,7 @@ class MatchReplayTest {
             url.host == "itunes.apple.com" && url.encodedPath == "/search" -> {
                 val term = url.queryParameter("term").orEmpty()
                 val store = url.queryParameter("country").orEmpty()
-                val results = if (term == song.optString("query")) {
+                val results = if (term == song.optString("query", term)) {
                     if (store == "US") song.getJSONArray("us") else JSONArray()
                 } else {
                     val key = "$store|$term"
@@ -153,8 +157,13 @@ class MatchReplayTest {
                 ?: FakeSpotify.html(request, """{"results":[]}""")
             url.host == "api.deezer.com" -> FakeSpotify.html(request, JSONObject().put("data", song.getJSONArray(if (url.encodedPath == "/search/artist") "deezerArtists" else "deezer")).toString())
             url.host == "music.youtube.com" -> {
-                val videos = FakeSpotify.bodyOf(request).contains(VIDEOS)
-                FakeSpotify.html(request, answers[if (videos) "videos" else "songs"] ?: "{}")
+                val body = JSONObject(FakeSpotify.bodyOf(request))
+                val language = body.getJSONObject("context").getJSONObject("client").optString("hl")
+                val videos = body.optString("params") == VIDEOS
+                val kind = if (videos) "videos" else "songs"
+                val kept = if (language == "en") answers[kind] ?: "{}" else answers["$kind-$language"]
+                    ?: throw IOException("No localized answer kept").also { missingLocalizations += "$language|${body.optString("query")}" }
+                FakeSpotify.html(request, kept)
             }
             else -> throw IOException("not kept: $url")
         }
@@ -168,7 +177,7 @@ class MatchReplayTest {
         song.takeUnless { it.isNull(kind) }?.getString(kind)?.let { path -> File(path).takeIf(File::isAbsolute) ?: File(dir, path) }
 
     private companion object {
-        val KINDS = listOf("songs", "videos")
+        val KINDS = listOf("songs", "videos", "songs-ja", "songs-ko", "songs-zh-TW")
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
         const val WHILE_MS = 60_000L
     }

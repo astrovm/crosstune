@@ -4,7 +4,7 @@ Ricevi un link da un servizio musicale e apri lo stesso brano nella tua app pref
 
 <b>Funzionalità</b>
 <ul>
-<li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack e li apre in uno qualsiasi di questi servizi o in Amazon Music e Qobuz.</li>
+<li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack e Presto Music e li apre in uno qualsiasi di questi servizi o in Amazon Music e Qobuz.</li>
 <li>Playlist e album mostrano i loro brani: aprine uno qualsiasi nell'app che hai scelto, copia o condividi l'elenco, oppure riproduci tutto, in ordine o in modo casuale, in YouTube Music, YouTube, TIDAL o Spotify.</li>
 <li>Indirizza ogni servizio dove vuoi, ad esempio i link di YouTube in YouTube Music e tutto il resto in Apple Music.</li>
 <li>Mostra prima in Crosstune: il brano parte nell'app che hai scelto mentre resti qui.</li>
@@ -22,4 +22,4 @@ Ricevi un link da un servizio musicale e apri lo stesso brano nella tua app pref
 </ul>
 
 <b>Privacy</b>
-Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per riconoscere un brano, Shazam riceve solo un'impronta del suono, mai l'audio, e il testo si allinea al canto sul tuo dispositivo. Il titolo e l'artista di un brano vanno ai servizi musicali che lo trovano e lo aprono, e ai siti di testi, accordi e traduzioni. Con ChatGPT, l'IA invia a OpenAI il brano, il suo testo e ciò che chiedi. L'unico server di Crosstune riceve le segnalazioni che invii, e quelle automatiche se le attivi. Non conserva alcun indirizzo IP e cancella ogni segnalazione dopo 180 giorni. Tutti i servizi, e cosa contiene ogni segnalazione: https://crosstune.cc/it/privacy/
+Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per riconoscere un brano, Shazam riceve solo un'impronta del suono, mai l'audio, e il testo si allinea al canto sul tuo dispositivo. Il titolo e l'artista di un brano vanno ai servizi musicali che lo trovano e lo aprono, e ai siti di testi, accordi e traduzioni. Apple, Deezer e MusicBrainz possono verificare titoli o nomi degli artisti per trovare la stessa registrazione. Con ChatGPT, l'IA invia a OpenAI il brano, il suo testo e ciò che chiedi. L'unico server di Crosstune riceve le segnalazioni che invii, e quelle automatiche se le attivi. Non conserva alcun indirizzo IP e cancella ogni segnalazione dopo 180 giorni. Tutti i servizi, e cosa contiene ogni segnalazione: https://crosstune.cc/it/privacy/

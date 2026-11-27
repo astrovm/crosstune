@@ -198,6 +198,12 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
         self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
 
+    def test_replay_opt_in_is_passed_only_when_requested(self):
+        box = self.start("replay", ":app:testDebugUnitTest", SYNCREPLAY_ACTIVE="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn("-e SYNCREPLAY_ACTIVE=1", self.asked()[0])
+
     def box_that_runs(self):
         """A podman that runs what the box is asked in its working folder, with a gradlew that says where it ran."""
         podman = self.dir / "bin" / "podman"
@@ -292,6 +298,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
+        self.assertNotIn("SYNCREPLAY_ACTIVE", self.asked()[0])
         self.assertNotIn("MATCHCHECK", self.asked()[0])
 
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):
@@ -396,6 +403,47 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
             box.communicate(timeout=20)
         self.assertTrue(self.asked()[1].endswith(" second"), self.asked())
         self.assertTrue(self.asked()[2].endswith(" third"), self.asked())
+
+    def test_a_later_build_cannot_overtake_a_waiting_single_slot_build(self):
+        self.hold("first")
+        self.hold("second")
+        first = self.start("first", "help", slots="1")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots="1")
+        queue = self.dir / "state" / "queue"
+        deadline = time.monotonic() + 20
+        while len(list(queue.iterdir())) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertEqual(2, len(list(queue.iterdir())))
+        third = self.start("third", "help", slots="3")
+        try:
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.third").exists())
+            self.release("first")
+            self.wait_for("started.second")
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.third").exists())
+        finally:
+            (self.dir / "hold.first").unlink(missing_ok=True)
+            (self.dir / "hold.second").unlink(missing_ok=True)
+            for box in (first, second, third):
+                box.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.third").exists())
+
+    def test_a_build_from_an_older_checkout_is_not_overtaken(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2")
+        self.wait_for("started.first")
+        (self.dir / "state" / "started" / str(first.pid)).unlink()
+        second = self.start("second", "help", slots="2")
+        try:
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            self.release("first")
+            first.communicate(timeout=20)
+            second.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.second").exists())
 
     def test_same_checkout_waits_even_when_memory_and_slots_fit(self):
         self.hold("first")
@@ -863,11 +911,14 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         self.assertEqual([command[command.index("--cpus") + 1] for command in asked], [str(max(cores // 2, 1)), str(cores), str(cores)])
 
     def test_a_ticket_from_an_older_script_counts_as_the_most_it_asks_for(self):
-        # An older checkout's script leaves its ticket empty. This one is held by the test itself.
+        # An empty memory ticket still counts as 16 GiB when its owner is running.
         queue = self.dir / "state" / "queue"
         queue.mkdir(parents=True)
         old = queue / f"1.{os.getpid()}"
         old.touch()
+        started = self.dir / "state" / "started"
+        started.mkdir()
+        (started / str(os.getpid())).write_text("3\n")
         fits = self.start("fits", "help", slots=None, GRADLE_BOX_MEMORY="32")
         fits.communicate(timeout=20)
         self.assertTrue((self.dir / "started.fits").exists())

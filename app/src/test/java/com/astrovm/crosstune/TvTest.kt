@@ -7,7 +7,13 @@ import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Text
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -31,7 +37,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -45,6 +50,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -56,9 +62,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -81,7 +91,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class TvTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
@@ -748,6 +758,265 @@ class TvTest {
             composeRule.waitForIdle()
             composeRule.onNode(row).assertIsFocused()
         }
+    }
+
+    @Test
+    fun onATvRightAndLeftGoBetweenAPracticeSongAndItsPencil() {
+        prefs().edit().putString("saved_lines", """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val all = composeRule.onNode(hasText(string(R.string.practice_all_songs)) and hasClickAction())
+        val song = composeRule.onNode(hasText("Demo") and hasClickAction())
+        val pencil = composeRule.onNode(hasContentDescription(string(R.string.choose_lines)) and hasClickAction())
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasText("Demo") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        // All songs has no pencil, so the remote stays, and Down, not the rows' to take, still goes to the song.
+        all.requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        all.assertIsFocused()
+        pressOnFocused(Key.DirectionDown)
+        song.assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        pencil.assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        song.assertIsFocused()
+        pressOnFocused(Key.DirectionRight)
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown("夜の空") }
+        // Put away, the sheet gives the remote back to the pencil that opened it, not to the screen's Back.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitUntil(5_000) { !shown("夜の空") }
+        pencil.assertIsFocused()
+    }
+
+    @Test
+    fun onATvLettingGoOfASongsLastLineLeavesTheRemoteInPractice() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"夜の空","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1},""" +
+                """{"text":"朝の海","translation":"Morning sea","title":"Other","artist":"Group","interval":3,"due":1}]"""
+        ).commit()
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        composeRule.onNode(hasContentDescription(string(R.string.saved_practice), substring = true) and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasText("Demo") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(hasText("Demo") and hasClickAction()).requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { shown("夜の空") }
+        composeRule.onNode(hasText("夜の空")).performClick()
+        composeRule.onNode(hasText(string(R.string.save_button)) and hasClickAction()).performClick()
+        composeRule.waitUntil(5_000) { !shown("Demo") }
+        // Its pencil went with it: the remote goes to the screen, on Practice's Back, rather than nowhere.
+        assertTrue(shown("Other"))
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        button(R.string.back_button).assertIsFocused()
+    }
+
+    @Test
+    fun onATvASongOpenedFromRecentHandsTheRemoteToItsMainButton() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        // The middle one, so rows stay above and below where it was, for Android to move the remote to.
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        focused().assert(hasAnyAncestor(hasTestTag(RESULT_TAG)) and hasClickAction())
+    }
+
+    @Test
+    fun onATvBackFromASongOpenedFromRecentLandsOnItsRow() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        val activity = checkNotNull(controller).get()
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertEquals(null, model().uiState.result)
+        assertFalse(activity.isFinishing)
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun aRecentRowGivenTheRemoteDoesNotTakeItAgainWhenSearchBringsTheRowBack() {
+        HistoryStore(prefs()).add(recentSong(1))
+        launch()
+        val row = composeRule.onNode(hasText("Song 1") and hasClickAction())
+        row.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 1" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        row.assertIsFocused()
+
+        button(R.string.search_recent).performScrollTo().performClick()
+        val search = composeRule.onNode(hasSetTextAction() and hasText(string(R.string.search_recent)))
+        search.performTextInput("missing")
+        row.assertDoesNotExist()
+        val query = composeRule.onNode(hasSetTextAction() and hasText("missing"))
+        query.assertIsFocused()
+        query.performTextReplacement("")
+        row.assertExists()
+        search.assertIsFocused()
+    }
+
+    @Test
+    fun aRecentRowCanTakeTheRemoteIfItArrivesAfterTheCardClosed() = withPendingRecentFocus { state, first, second ->
+        val secondRow = recentRow(2)
+        secondRow.performScrollTo().requestFocus()
+        secondRow.assertIsFocused()
+        composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
+        recentRow(1).assertIsFocused()
+    }
+
+    @Test
+    fun showingAnotherSongClearsTheRemoteReturnToARowThatHasNotComeBackYet() = withPendingRecentFocus { state, first, second ->
+        val other = recentSong(3)
+        composeRule.runOnIdle { state.value = state.value.copy(link = other.link, result = other.metadata) }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { state.value = state.value.copy(link = null, result = null) }
+        val secondRow = recentRow(2)
+        secondRow.performScrollTo().requestFocus()
+        secondRow.assertIsFocused()
+        composeRule.runOnIdle { state.value = state.value.copy(history = listOf(first, second)) }
+        recentRow(1).assertExists()
+        secondRow.assertIsFocused()
+    }
+
+    private fun withPendingRecentFocus(check: (MutableState<UiState>, HistoryEntry, HistoryEntry) -> Unit) {
+        val first = recentSong(1)
+        val second = recentSong(2)
+        val state = mutableStateOf(UiState(phone = Phone.TV, link = first.link, result = first.metadata, history = listOf(first, second)))
+        val screen = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        try {
+            val activity = screen.get()
+            activity.setContent {
+                CrosstuneTheme {
+                    CrosstuneScreen(state.value, ScreenActions(onClear = {
+                        // Recent is updated as the first card closes, before its row can take focus.
+                        state.value = state.value.copy(link = null, result = null, history = listOf(second))
+                    }))
+                }
+            }
+            composeRule.waitForIdle()
+            activity.onBackPressedDispatcher.onBackPressed()
+            recentRow(1).assertDoesNotExist()
+            check(state, first, second)
+        } finally {
+            screen.pause().stop().destroy()
+        }
+    }
+
+    private fun recentRow(n: Int) = composeRule.onNode(hasText("Song $n") and hasClickAction())
+
+    private fun recentSong(n: Int): HistoryEntry {
+        val url = "https://open.spotify.com/track/song$n"
+        return HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band"))
+    }
+
+    @Test
+    fun aRecentRowRetriesFocusUntilPlacedButDoesNotWaitForever() {
+        val focus = RowButtonFocus()
+        val frames = BroadcastFrameClock()
+        val scope = CoroutineScope(Dispatchers.Main.immediate + frames)
+        var ready = false
+        val screen = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        try {
+            screen.get().setContent {
+                Text("Recent song", focus.rowModifier.focusProperties { canFocus = ready }.clickable {})
+            }
+            val row = composeRule.onNodeWithText("Recent song")
+            row.assertIsNotFocused()
+            composeRule.runOnIdle {
+                val waiting = scope.launch { focus.focusOncePlaced() }
+                repeat(4) { frame ->
+                    assertFalse(waiting.isCompleted)
+                    frames.sendFrame(frame.toLong())
+                }
+                assertFalse(waiting.isCompleted)
+                ready = true
+                frames.sendFrame(4)
+                assertTrue(waiting.isCompleted)
+                assertTrue(scope.launch { focus.focusOncePlaced() }.isCompleted)
+            }
+            row.assertIsFocused()
+
+            composeRule.runOnIdle {
+                ready = false
+                val waiting = scope.launch { focus.focusOncePlaced() }
+                repeat(5) { frame ->
+                    assertFalse(waiting.isCompleted)
+                    frames.sendFrame(5 + frame.toLong())
+                }
+                assertTrue(waiting.isCompleted)
+            }
+        } finally {
+            scope.cancel()
+            screen.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun onATvBackFromTheOnlySongInRecentLandsOnItsRow() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 1" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        // Recent came back whole, its one row too, and the remote waited for it.
+        composeRule.onNode(hasText("Song 1") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvARecentPlayThatGoesStraightToTheAppLeavesTheRemoteOnIt() {
+        for (n in 1..3) {
+            val url = "https://open.spotify.com/track/song$n"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song$n", url), MusicMetadata("Song $n", "Band")))
+        }
+        launch()
+        composeRule.onNode(hasText("Song 2") and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        composeRule.waitUntil(5_000) { model().uiState.result?.title == "Song 2" && !model().uiState.isMatching }
+        composeRule.waitForIdle()
+        // With links not shown in Crosstune, ▶ opens the song in the user's app, and Song 2's card stays.
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        play.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        assertEquals("Song 2", model().uiState.result?.title)
+        play.assertIsFocused()
+    }
+
+    @Test
+    fun onATvRightAndLeftGoBetweenARecentRowAndItsPlay() {
+        val url = "https://open.spotify.com/track/song1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "song1", url), MusicMetadata("Song 1", "Band")))
+        launch()
+        val row = composeRule.onNode(hasText("Song 1") and hasClickAction())
+        val play = composeRule.onNode(hasContentDescription(string(R.string.history_open, "Song 1")) and hasClickAction())
+        row.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionRight)
+        play.assertIsFocused()
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
+        // Any other key is left to the screen: with nothing past the row's start, the remote stays on it.
+        pressOnFocused(Key.DirectionLeft)
+        row.assertIsFocused()
     }
 
     @Test

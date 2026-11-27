@@ -196,7 +196,7 @@ fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
 # Keep the memory ticket readable by older checkouts. Store checkout paths beside it.
-mkdir -p "$state/queue" "$state/checkouts"
+mkdir -p "$state/queue" "$state/checkouts" "$state/started"
 # Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
 exec 7>"$state/queue.lock"
 lock 7
@@ -211,6 +211,8 @@ for queued in "$state"/queue/*; do
 done
 ticket=$state/queue/$stamp.$$
 checkout_ticket=$state/checkouts/${ticket##*/}
+started_ticket=$state/started/${ticket##*.}
+rm -f "$started_ticket"
 for recorded in "$state"/checkouts/*; do
     [[ -f $recorded ]] || continue
     kill -0 "${recorded##*.}" 2>/dev/null || rm -f "$recorded"
@@ -221,12 +223,12 @@ echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
 exec 7>&-
 sdk_properties=
-trap 'rm -f "$ticket" "$checkout_ticket"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
+trap 'rm -f "$ticket" "$checkout_ticket" "$started_ticket" "$state/started.$$.tmp"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other asked checkout line recorded count=0 sum=0 overlap=0
+    local other asked checkout line recorded started limit count=0 sum=0 overlap=0 waiting=0 cap=$slots
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
@@ -234,6 +236,16 @@ ahead_of_me() {
             [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
             sum=$((sum + asked))
+            started=$state/started/${other##*.}
+            if [[ -f $started ]]; then
+                limit=$(head -n 1 "$started" 2>/dev/null) || limit=1
+                [[ $limit =~ ^[0-9]+$ ]] || limit=1
+                ((limit >= 1)) || limit=1
+                ((limit < cap)) && cap=$limit
+            else
+                # Older scripts do not publish a start marker: let them finish before passing them.
+                waiting=1
+            fi
             recorded=$state/checkouts/${other##*/}
             # Also read the intermediate multi-line tickets while those builds finish.
             [[ -f $recorded ]] || recorded=$other
@@ -243,10 +255,10 @@ ahead_of_me() {
                 done
             done < <(cat "$recorded" 2>/dev/null)
         else
-            rm -f "$other" "$state/checkouts/${other##*/}"
+            rm -f "$other" "$state/checkouts/${other##*/}" "$state/started/${other##*.}"
         fi
     done
-    echo "$count $sum $overlap"
+    echo "$count $sum $overlap $waiting $cap"
 }
 
 pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
@@ -276,10 +288,10 @@ take_a_slot() {
 
 said=
 while :; do
-    read -r ahead asked_ahead overlap < <(ahead_of_me)
+    read -r ahead asked_ahead overlap waiting cap < <(ahead_of_me)
     lately=$(stalled avg10)
     # The first in line always fits, as nothing is ahead of it.
-    fits=$((!overlap && ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
+    fits=$((!overlap && !waiting && ahead < cap && (ahead == 0 || asked_ahead + memory <= budget)))
     if ((fits && lately <= stall_limit)) && take_a_slot; then
         break
     fi
@@ -297,6 +309,9 @@ while :; do
     said=$why
     sleep 1
 done
+
+echo "$slots" > "$state/started.$$.tmp"
+mv "$state/started.$$.tmp" "$started_ticket"
 
 python3 "$(dirname "${BASH_SOURCE[0]}")/clean-cache.py" "$state" "$slot"
 home=$state/gradle-$slot
@@ -328,6 +343,9 @@ fi
 # The replay's inputs can be kept apart from any checkout, for all of them (syncreplay.py).
 if [[ -n ${SYNCREPLAY_DIR:-} ]]; then
     box+=(-v "$SYNCREPLAY_DIR:$SYNCREPLAY_DIR" -e "SYNCREPLAY_DIR=$SYNCREPLAY_DIR")
+fi
+if [[ ${SYNCREPLAY_ACTIVE:-} == 1 ]]; then
+    box+=(-e SYNCREPLAY_ACTIVE=1)
 fi
 # So are SongCheck's, as songs' words are people's and stay out of every checkout (scripts/readingsaudit).
 if [[ -n ${SONGCHECK_DIR:-} ]]; then

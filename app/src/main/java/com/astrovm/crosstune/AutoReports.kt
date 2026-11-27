@@ -66,8 +66,15 @@ internal class AutoReports(
             }
         }
 
-    private fun keyOf(song: MusicMetadata, problem: SongProblem) =
+    private fun keyOf(song: MusicMetadata, problem: SongProblem) = "${problem.key}\u0000${RecordingKey.withLinkWhenIdBlank(song)}"
+
+    /** Before recordings were distinguished, a problem applied to every recording with these names. */
+    private fun legacyKey(song: MusicMetadata, problem: SongProblem) =
         "${problem.key}\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+
+    private fun matches(key: String, song: MusicMetadata, problem: SongProblem) = key == keyOf(song, problem) || key == legacyKey(song, problem)
+
+    private fun wasSent(key: String, sent: Collection<String>) = key in sent || key.split('\u0000').take(3).joinToString("\u0000") in sent
 
     /** Whether the offer to allow them wasn't made yet in this app session: the process, so it's asked again once the app is started anew. */
     fun mayAsk(): Boolean = preferences.getLong(KEY_ASKED_IN, NEVER) != session
@@ -75,6 +82,11 @@ internal class AutoReports(
     /** The offer is made now, so it isn't again until the app is started anew. */
     fun asked() {
         preferences.edit().putLong(KEY_ASKED_IN, session).apply()
+    }
+
+    /** An offer hidden by closing the lyrics was not answered. */
+    fun offerInterrupted() {
+        if (!mayAsk()) preferences.edit().remove(KEY_ASKED_IN).apply()
     }
 
     /**
@@ -91,7 +103,7 @@ internal class AutoReports(
         preferences.getString(KEY_SENT, null)?.let { runCatching { JSONArray(it) }.getOrNull() }.strings()
 
     /** Whether [song]'s [problem] was reported already. */
-    fun reported(song: MusicMetadata, problem: SongProblem): Boolean = keyOf(song, problem) in sent()
+    fun reported(song: MusicMetadata, problem: SongProblem): Boolean = sent().any { matches(it, song, problem) }
 
     /** [song]'s [problem] reported, so it isn't again; only the latest are remembered. */
     fun remember(song: MusicMetadata, problem: SongProblem) = synchronized(shared) { remember(keyOf(song, problem)) }
@@ -167,12 +179,14 @@ internal class AutoReports(
      * kept, as one made before the no was said, and kept only after it, would wait to go when they're turned on again.
      */
     fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = synchronized(shared) {
-        val key = keyOf(song, problem)
+        val existing = kept()
+        val legacy = legacyKey(song, problem)
+        val key = legacy.takeIf { old -> existing.any { it.key == old } } ?: keyOf(song, problem)
         val owed = Owed(key, json)
         if (problem != SongProblem.TIMED_BY_HAND && allowed == false) return owed
-        keep(kept().filter { it.key != key } + owed)
+        keep(existing.filterNot { matches(it.key, song, problem) } + owed)
         // Kept, it carries its id from now on.
-        shared.ids.remove(key)
+        shared.ids.remove(keyOf(song, problem))
         owed
     }
 
@@ -183,14 +197,20 @@ internal class AutoReports(
      */
     fun idFor(song: MusicMetadata, problem: SongProblem): String = synchronized(shared) {
         val key = keyOf(song, problem)
-        kept().firstOrNull { it.key == key }?.id ?: shared.ids.getOrPut(key) { UUID.randomUUID().toString() }
+        val existing = kept()
+        existing.firstOrNull { it.key == legacyKey(song, problem) }?.id
+            ?: existing.firstOrNull { it.key == key }?.id
+            ?: shared.ids.getOrPut(key) { UUID.randomUUID().toString() }
     }
 
-    /** The key [song]'s timing report is owed under. */
-    fun owedKey(song: MusicMetadata) = keyOf(song, SongProblem.TIMED_BY_HAND)
+    /** The current and legacy keys [song]'s timing report may be owed under. */
+    fun owedKeys(song: MusicMetadata) = setOf(keyOf(song, SongProblem.TIMED_BY_HAND), legacyKey(song, SongProblem.TIMED_BY_HAND))
 
     /** What's owed, unless it went by now. */
-    fun owed(): List<Owed> = kept().filter { it.key !in sent() }
+    fun owed(): List<Owed> = sent().let { sent -> kept().filterNot { wasSent(it.key, sent) } }
+
+    /** Whether a report for this song and problem is waiting on the phone. */
+    fun owes(song: MusicMetadata, problem: SongProblem): Boolean = owed().any { matches(it.key, song, problem) }
 
     private fun kept(): List<Owed> = runCatching {
         val list = JSONArray(preferences.getString(KEY_OWED, null) ?: return emptyList())
@@ -204,7 +224,7 @@ internal class AutoReports(
      */
     private fun keep(all: List<Owed>) {
         val sent = sent().toSet()
-        val owed = all.filter { it.key !in sent }
+        val owed = all.filterNot { wasSent(it.key, sent) }
         val latest = owed.filterNot { it.earlier }.groupBy { it.key.startsWith(BY_HAND_START) }.values.flatMap { it.takeLast(MAX_OWED) }.toSet()
         val list = JSONArray(owed.filter { it.earlier || it in latest }.map { JSONObject().put("key", it.key).put("json", it.json) })
         preferences.edit().putString(KEY_OWED, list.toString()).commit()
@@ -226,7 +246,9 @@ internal class AutoReports(
             val earlier = songs.keys().asSequence().mapNotNull { key ->
                 val owed = earlierReport(key, songs.optJSONObject(key) ?: return@mapNotNull null, sung, version, android) ?: return@mapNotNull null
                 // A song whose timing went already, by hand in this version, or kept, isn't sent again.
-                owed.takeIf { it.key !in sent && "${SongProblem.TIMED_BY_HAND.key}\u0000${key.split('\u0000').take(2).joinToString("\u0000")}" !in sent }
+                val hand = "${SongProblem.TIMED_BY_HAND.key}\u0000"
+                val legacy = key.split('\u0000').take(2).joinToString("\u0000")
+                owed.takeIf { it.key !in sent && hand + key !in sent && hand + legacy !in sent }
             }.toList()
             keep(kept() + earlier)
             preferences.edit().putBoolean(KEY_EARLIER_READ, true).commit()
@@ -259,7 +281,7 @@ internal class AutoReports(
     }
 
     /** Nothing owed for [song]: the words were put back as they were. */
-    fun owedNothing(song: MusicMetadata) = synchronized(shared) { keep(kept().filter { it.key != owedKey(song) }) }
+    fun owedNothing(song: MusicMetadata) = synchronized(shared) { keep(kept().filterNot { matches(it.key, song, SongProblem.TIMED_BY_HAND) }) }
 
 
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */

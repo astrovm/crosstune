@@ -11,13 +11,16 @@ with ANDROID_SERIAL. It needs adb, which scripts/lib/adbtool.py finds: $ADB, the
 
 `jank` cold starts the app before each run, so the main screen shows only its Recent list, then
 swipes the same way each run: up the list and back down, a fling each, from the screen's own size.
-The phone's history is the content, so compare builds on one phone.
+The phone's history is the content, so compare builds on one phone. A list that doesn't scroll
+draws next to nothing, so a run with fewer frames than flings stops there.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
 a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
 aapt2 (Android SDK Build Tools) checks a private copy of each APK before any install, and each run installs that
 checked copy, only once it is confirmed as Crosstune Dev. An APK that
-isn't debuggable is then compiled from its baseline profile, as Play has it after an install.
+isn't debuggable is then compiled from its baseline profile, as Play has it after an install. Builds that
+aren't debuggable need the same versionCode, as Android won't install an older one over a newer one: build the
+version before with this one's number to compare them. It stops before any install when they differ.
 A debug build runs most of its code in Android's interpreter, so measure a release-like build
 (`-PperfBuild :app:assemblePerf`, the minified release as "Crosstune Dev", signed with the debug key) for what
 people's phones do. Messages about the phone cooling down go to stderr. When Android gives no cold-start time, the
@@ -70,6 +73,25 @@ def check_apk(apk: Path, source: Path) -> None:
         sys.exit(f"Cannot install {source}: expected {PACKAGE}, found {package}")
 
 
+def version_of(apk: Path) -> tuple[str, bool]:
+    """Its version code, and whether it's debuggable."""
+    result = subprocess.run([aapt2_path(), "dump", "badging", str(apk)], check=False, capture_output=True, text=True)
+    code = re.search(r"versionCode='([0-9]+)'", result.stdout)
+    return (code.group(1) if code else "", "application-debuggable" in result.stdout.splitlines())
+
+
+def check_turns(builds: list[tuple[str, str]]) -> None:
+    """Builds that take turns all install over each other. Android takes an older version code over a newer one
+    only for a debuggable build, so a release-like one of the version before stopped at its second install."""
+    versions = {label: version_of(Path(apk)) for label, apk in builds}
+    if len({code for code, _ in versions.values()}) > 1 and not all(debuggable for _, debuggable in versions.values()):
+        listed = ", ".join(f"{label} {code or 'unknown'}" for label, (code, _) in versions.items())
+        sys.exit(
+            f"Cannot take turns between version codes {listed}: Android installs an older version over a newer one"
+            " only when it's debuggable. Build them with the same versionCode."
+        )
+
+
 def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
     builds = []
     for index, argument in enumerate(arguments):
@@ -83,6 +105,7 @@ def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
             sys.exit(f"Cannot copy {source}: {error.strerror}")
         check_apk(staged, source)
         builds.append((label, str(staged)))
+    check_turns(builds)
     return builds
 
 
@@ -194,7 +217,15 @@ def jank(args: argparse.Namespace) -> dict:
         for _ in range(args.swipes):
             shell("input", "swipe", x, start, x, end, "150")
             time.sleep(0.9)
-    return gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    result = gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    # A list that scrolls draws dozens of frames a fling. Fewer than one each means nothing moved, and
+    # the few frames there are would read as all janky.
+    if result["frames"] < args.swipes * 2:
+        sys.exit(
+            f"Only {result['frames']} frames were drawn over {args.swipes * 2} flings: the main screen didn't scroll."
+            " Open enough songs in Crosstune Dev for Recent to fill more than a screen."
+        )
+    return result
 
 
 def cpu(args: argparse.Namespace) -> dict:

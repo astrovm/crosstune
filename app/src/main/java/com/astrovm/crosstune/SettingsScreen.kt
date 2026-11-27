@@ -1551,7 +1551,7 @@ private fun Swatch(color: Color, onColor: Color, name: String, isSelected: Boole
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = isSelected, interactionSource = null, indication = focusRing(CircleShape), role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = name }
             .border(2.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
             .padding(6.dp)

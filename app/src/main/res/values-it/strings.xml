@@ -14,6 +14,7 @@
     <string name="open_in_spotify">Apri in Spotify</string>
     <string name="open_in_audiomack">Apri in Audiomack</string>
     <string name="open_in_qobuz">Apri in Qobuz</string>
+    <string name="open_in_presto_music">Apri in Presto Music</string>
     <string name="open_in_bandcamp">Apri in Bandcamp</string>
     <string name="open_in_amazon_music">Apri in Amazon Music</string>
     <string name="from_service">da %1$s</string>

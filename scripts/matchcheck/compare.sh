@@ -27,7 +27,7 @@ assert sum("MATCHCHECK_ARTIST_ALIASES" in line for line in lines) == 1
 path.write_text("".join(line for line in lines if "MATCHCHECK_ARTIST_ALIASES" not in line))
 PY
 cd "$root"
-python3 scripts/matchcheck/replay.py prepare "$out" --require-answers --also-latin
+python3 scripts/matchcheck/replay.py prepare "$out" --require-answers --also-latin --source-length
 # The probe only records missing searches. Its match results are not used in the comparison.
 python3 scripts/matchcheck/replay.py run "$out" probe --both --probe
 python3 scripts/matchcheck/replay.py capture-proofs "$out"

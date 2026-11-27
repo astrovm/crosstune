@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Spotify में खोलें</string>
     <string name="open_in_audiomack">Audiomack में खोलें</string>
     <string name="open_in_qobuz">Qobuz में खोलें</string>
+    <string name="open_in_presto_music">Presto Music में खोलें</string>
     <string name="open_in_bandcamp">Bandcamp में खोलें</string>
     <string name="open_in_amazon_music">Amazon Music में खोलें</string>
     <string name="from_service">%1$s से</string>

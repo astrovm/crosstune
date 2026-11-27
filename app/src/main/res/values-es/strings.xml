@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Abrir en Spotify</string>
     <string name="open_in_audiomack">Abrir en Audiomack</string>
     <string name="open_in_qobuz">Abrir en Qobuz</string>
+    <string name="open_in_presto_music">Abrir en Presto Music</string>
     <string name="open_in_bandcamp">Abrir en Bandcamp</string>
     <string name="open_in_amazon_music">Abrir en Amazon Music</string>
     <string name="from_service">de %1$s</string>

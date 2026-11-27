@@ -1,0 +1,46 @@
+name: Cache prune
+
+# Deletes the Actions caches nothing restores again: all but the newest CodeQL dependency cache of each branch, and a
+# closed pull request's caches (scripts/cache-prune/). CodeQL's default setup saves about 570 MB per push, and once the
+# repository passes its 10 GB GitHub evicts the small caches CI's jobs need, which then run out of time downloading.
+# Every hour, and when a pull request closes. A pull request that changes it runs it without deleting.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, closed]
+    paths:
+      - scripts/cache-prune/**
+      - .github/workflows/cache-prune.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Delete caches nothing restores
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            python3 scripts/cache-prune/prune_caches.py --dry-run
+          else
+            python3 scripts/cache-prune/prune_caches.py
+          fi

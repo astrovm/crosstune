@@ -82,8 +82,8 @@ class MatcherRecordingEvidenceTest {
         return (lastMatch as? ExactMatcher.Match.Found)?.url
     }
 
-    // Issue #1199: the 4:25 artist video may be another recording; the 3:58 fan video matches the source length.
-    @Test fun peaceSignKeepsTheFanWhenTheArtistVideoHasAnotherLength() = assertEquals(WATCH + "LlqIAiDzgpM", find(0, true))
+    // The artist names the song both ways. The 3:58 singing-archive upload's duration alone doesn't give it the artist's credit.
+    @Test fun peaceSignKeepsTheCreditedArtistVideoOverACloserFanUpload() = assertEquals(WATCH + "9aJVr5tTTWk", find(0, true))
 
     @Test fun bayCityKeepsTheLongRecording() = assertEquals(WATCH + "HNfnjWbO4ds", find(1, true))
 

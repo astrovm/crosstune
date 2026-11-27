@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Replay the songs collect.py kept through the real ExactMatcher, without the network.
 
+    python3 scripts/matchcheck/replay.py prepare OUT       # OUT/replay.json: what each song is served, and which results are right
+    python3 scripts/matchcheck/replay.py prepare OUT --apple-down --source-length
     python3 scripts/matchcheck/replay.py prepare OUT --require-answers  # fail if a search wasn't captured
     python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down | --both]  # --both writes LABEL-up and LABEL-down
     python3 scripts/matchcheck/replay.py capture-proofs OUT  # capture candidate searches recorded by a probe run
@@ -18,6 +20,10 @@ A song result is right when one of its names is a name a store gives the song, b
 is right when it's named so, says no other version, and is the artist's; or names the artist, where
 no song result and no video of the artist's is right, as someone else's lyrics video is no match where
 the song is there. Every wrong open, and every video, is listed with -v, to be checked by eye.
+
+Prepare with --apple-down to fail every Apple request rather than returning no results, and with
+--source-length to pass the collected recording length as if the link supplied it. Localized song
+searches use the kept response for that language. Replay lists any not kept in "missingLocalizations".
 
 Run LABEL on another checkout, e.g. origin/main, with the same test file and gradle-box.sh, and
 compare with --against. OUT stays out of git: it holds what the services answered.
@@ -49,8 +55,8 @@ def raw_path(out, url, body):
     return path if os.path.exists(path) else None
 
 
-def ytm_path(out, query, params):
-    return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT}, "query": query, "params": params})
+def ytm_path(out, query, params, language="en"):
+    return raw_path(out, collect.YTM_SEARCH, {"context": {"client": collect.YTM_CLIENT | {"hl": language}}, "query": query, "params": params})
 
 
 # What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
@@ -126,6 +132,12 @@ def read_json(path):
         return json.load(kept)
 
 
+def deezer_row(row):
+    """Raw captures already have Deezer's artist object. The compact collector saves only its name."""
+    artist = row.get("artist")
+    return row if isinstance(artist, dict) else dict(row, artist={"name": artist})
+
+
 def cached_deezer(out, path, query):
     params = urllib.parse.urlencode({"q": query, "limit": 10})
     kept = raw_path(out, f"https://api.deezer.com/{path}?{params}", None)
@@ -151,7 +163,7 @@ def latin_queries(out, songs):
     return found
 
 
-def prepare(out, require_answers=False, also_latin=False):
+def prepare(out, require_answers=False, also_latin=False, *, apple_down=False, source_length=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
     if also_latin:
@@ -168,15 +180,19 @@ def prepare(out, require_answers=False, also_latin=False):
         native = {}
         for n in song["native"]:
             native.setdefault(n["store"], {"trackId": song["id"], "trackName": n["title"], "artistName": n["artist"], "collectionName": n["album"], "trackTimeMillis": song["lengthMs"]})
+        localized = {f"songs-{language}": os.path.relpath(path, out) for language in ("ja", "ko", "zh-TW")
+                     if (path := ytm_path(out, query, collect.YTM_SONGS, language))}
         replay.append({
             "title": song["title"], "artist": song.get("askedArtist", song["artist"]), "lengthMs": song["lengthMs"], "query": query,
+            "appleDown": apple_down, "sourceLengthMs": song["lengthMs"] if source_length else None,
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
-            "deezer": song.get("deezer", []), "deezerArtists": song.get("deezerArtists", []),
+            "deezer": [deezer_row(row) for row in song.get("deezer", [])], "deezerArtists": song.get("deezerArtists", []),
             # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
             "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,
+            **localized,
         })
     with open(os.path.join(out, "replay.json"), "w", encoding="utf-8") as kept:
         json.dump(replay, kept, ensure_ascii=False)
@@ -303,6 +319,7 @@ def main():
     parser.add_argument("out")
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
+    parser.add_argument("--source-length", action="store_true", help="use the collected length as the link's length")
     parser.add_argument("--apple-down", action="store_true", help="make Apple requests fail")
     parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
     parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
@@ -312,7 +329,7 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
-        prepare(args.out, args.require_answers, args.also_latin)
+        prepare(args.out, args.require_answers, args.also_latin, apple_down=args.apple_down, source_length=args.source_length)
     elif args.action == "run":
         run(args.out, args.label, args.apple_down, args.both, args.require_proofs, args.probe)
     elif args.action == "capture-proofs":

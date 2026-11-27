@@ -43,12 +43,22 @@ internal class SongSearcher(
                 val found = withTimeoutOrNull(timeoutMs) { answering { itunes(words, PINYIN_STORE) } }.orEmpty()
                 found.filter { song -> Readings.pinyinLetters(SongNames.bareTitle(song.title))?.let { it in typed } == true }
             }
-            val songs = pinyin.await() + deezer.await() + itunes.await()
+            val spoken = pinyin.await()
+            val songs = spoken + deezer.await() + itunes.await()
             // Each service's own repeated name is one song. A karaoke, a cover, a music box
             // or a piano version goes after the artist's own song. Deezer lists those first
             // when the artist is written in their own script, and Apple already has the song.
-            songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
-                .sortedBy { anotherRecording(it) }
+            // Then the songs found by how their name is said, and those by the artist typed:
+            // Deezer can't tell "Yoru ni Kakeru YOASOBI" is YOASOBI's 夜に駆ける, and puts
+            // covers that spell the name out ahead of it.
+            val typed = SongNames.words(words)
+            val distinct = songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+            // A song whose name is what was typed, word for word, "Heart of Glass", is what was
+            // meant, not a song by Heart. A cover that adds the artist to its name, "Idol Yoasobi
+            // Instrumental", isn't.
+            val said = SongNames.wordList(words)
+            val named = distinct.any { !anotherRecording(it) && SongNames.wordList(SongNames.bareTitle(it.title)) == said }
+            distinct.sortedWith(compareBy<MusicMetadata> { anotherRecording(it) }.thenBy { it !in spoken && (named || !byArtistTyped(it, typed)) })
         }
     }
 
@@ -62,6 +72,19 @@ internal class SongSearcher(
         if (markedRecording(song.title) || markedRecording(song.artist)) return true
         if (changedKey(song.title)) return true
         return remakeOfAnotherSong(song.title)
+    }
+
+    /**
+     * Whether [song] is by an artist named in full among the [typed] words, "The" or not, and its
+     * name is the rest of them: it has them all, or no words in Latin letters to have them. With
+     * nothing else typed, "YOASOBI", it's any of theirs, in the order Deezer has them.
+     */
+    private fun byArtistTyped(song: MusicMetadata, typed: Set<String>): Boolean {
+        val artist = SongNames.words(SongNames.withoutArticle(song.artist))
+        if (artist.isEmpty() || !typed.containsAll(artist)) return false
+        val rest = typed - artist
+        val title = SongNames.words(song.title)
+        return title.isEmpty() || title.containsAll(rest)
     }
 
     /** "Originally Performed by" names the singer and not the people on the row. */

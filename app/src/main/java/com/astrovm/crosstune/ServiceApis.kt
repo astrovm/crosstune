@@ -22,7 +22,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * The APIs behind TIDAL's, SoundCloud's and Audiomack's own websites, which need no account: what
+ * The APIs behind TIDAL's, SoundCloud's, Audiomack's and Presto Music's own sites, which need no account: what
  * each website itself asks with, for songs, albums, artists and playlists' songs. None is a public
  * API, so any of them may stop answering; everything that uses them falls back to what it did before.
  */
@@ -213,6 +213,29 @@ internal class ServiceApis(
         val uploader = list.optJSONObject("uploader")?.optString("url_slug").orEmpty()
         return list.optJSONArray("tracks").objects().take(MAX_TRACKS).mapNotNull { audiomackTrack(it, uploader, cover) }
     }
+
+    // Presto Music
+
+    /** Presto's album results, or null when the page does not show every result. */
+    suspend fun prestoAlbums(query: String): List<JSONObject>? {
+        val url = "${Presto.API}/explore/search".toHttpUrl().newBuilder()
+            .addQueryParameter("search", query)
+            .addQueryParameter("limit", "50")
+            .addQueryParameter("offset", "0")
+            .addQueryParameter("sort", "recommended")
+            .addQueryParameter("type", "album")
+            .build()
+        val answer = getObject(url)
+        if (answer.optString("status") != "ok") throw IOException("Presto Music answered ${answer.optInt("code")}")
+        val payload = answer.getJSONObject("payload")
+        val results = payload.getJSONArray("results")
+        if (payload.optString("totalCount").toIntOrNull() != results.length()) return null
+        return (0 until results.length()).map(results::getJSONObject)
+    }
+
+    /** The songs of the Presto Music [album] with this [code], by its leader where they play, with its cover. */
+    suspend fun prestoTracks(code: String, album: MusicMetadata): List<MusicMetadata> =
+        Presto.tracks(getObject("${Presto.API}/tracks/$code".toHttpUrl()), album).take(MAX_TRACKS)
 
     companion object {
         const val TIDAL_API = "https://api.tidal.com/v1"

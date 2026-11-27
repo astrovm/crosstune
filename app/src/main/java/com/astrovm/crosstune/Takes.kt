@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.text.Normalizer
 
 /**
  * The take of a song a name says it is: live, karaoke, a TV size. YouTube Music lists these beside the studio song, in any
@@ -13,19 +14,51 @@ internal object Takes {
      * The take a tag of [name] says it is: "(ライブ)", "(Live from Budokan)", "- Live", "(オフ・ヴォーカル)", "(TV Size)". Only
      * how a tag starts, or ends in a remix or a cover, counts, so a show's name inside one, "(TVアニメ「ライブ」オープニング
      * テーマ)", and a credit, "(with Live Crew)", say nothing, nor a tag that is an [artists] own name, "(Live Crew)". Null when no
-     * tag does.
+     * tag does. The picker can investigate an unclear credit when [includeUnclearLive] is false.
      */
-    fun saysAnotherTake(name: String, artists: Collection<String> = emptyList()): Take? {
+    fun saysAnotherTake(name: String, artists: Collection<String> = emptyList(), includeUnclearLive: Boolean = true): Take? {
         val named = artists.flatMap(SongNames::artistNames).map(SongNames::normalize)
-        val takes = tagsOf(name).filter { tag -> SongNames.normalize(tag).let { letters -> named.none { letters == it } } }.mapNotNull(::takeOfTag)
+        val takes = tagsOf(name).filter { tag -> SongNames.normalize(tag).let { letters -> named.none { letters == it } } }
+            .mapNotNull { takeOfTag(it, includeUnclearLive) }
         return takes.firstOrNull { it == Take.LIVE } ?: takes.firstOrNull()
     }
+
+    /** A video's recording notes are separate from subtitles, upload language and remaster notes. */
+    fun videoRecordingNotes(name: String): Set<String> =
+        tagsOf(name).map { tag ->
+            SongNames.normalize(tag.takeWhile { it !in TAG_BRACKET_OPENS }).let { if (it == "fromthefirsttake") "thefirsttake" else it }
+        }.filter { it in VIDEO_RECORDINGS }.toSet()
 
     /**
      * [title] says it's another version, a cover, karaoke, a remix, by a word or a mark anywhere in it, but not for the word
      * "live", which a song's own name may hold, as "Live Forever" does: a live take says so in a tag, which [saysAnotherTake] reads.
      */
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
+
+    /** Read only a disco note on a normalized copy. The matcher still needs the original title or album. */
+    fun namesDisco(name: String): Boolean =
+        tagsOf(Normalizer.normalize(name, Normalizer.Form.NFKC)).any { tag ->
+            // A dash note or an outer bracket can hold a second tag, such as a remaster note.
+            SongNames.normalize(tag.takeWhile { it !in TAG_BRACKET_OPENS }) in DISCO_LABELS
+        }
+
+    /** A link can name a disco recording without using the same note delimiters as a search result. */
+    fun requestsDisco(name: String): Boolean {
+        val written = Normalizer.normalize(name, Normalizer.Form.NFKC)
+        val words = SongNames.writtenWords(written)
+        val joined = words.any { it == "discoversion" || it == "discomix" }
+        if (joined || words.zipWithNext().any { (first, second) -> first == "disco" && second in DISCO_LATIN_ENDINGS }) return true
+        val letters = SongNames.normalize(written)
+        return DISCO_JAPANESE_LABELS.any { it in letters }
+    }
+
+    private val DISCO_LATIN_ENDINGS = setOf("version", "mix", "ver")
+    private val DISCO_JAPANESE_LABELS = listOf(
+        "DISCOバージョン", "プロモーション用DISCOバージョン",
+        "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
+        "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
+    ).map(SongNames::normalize).toSet()
+    private val DISCO_LABELS = DISCO_LATIN_ENDINGS.map { "disco$it" }.toSet() + DISCO_JAPANESE_LABELS
 
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
@@ -51,21 +84,33 @@ internal object Takes {
         return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
     }
 
-    private fun takeOfTag(tag: String): Take? {
+    private fun takeOfTag(tag: String, includeUnclearLive: Boolean): Take? {
         val letters = SongNames.normalize(tag).trimStart { it.isDigit() }
         val words = SongNames.wordList(tag).dropWhile { it.all(Char::isDigit) }
         val first = words.firstOrNull()
         val spoken = words.take(2).joinToString("")
         return when {
             letters.isEmpty() -> null
-            first in LIVE_FIRST_WORDS || spoken in LIVE_PAIRS || LIVE_MARKS.any(letters::startsWith) -> Take.LIVE
+            liveTag(first, words, includeUnclearLive) || spoken in LIVE_PAIRS || LIVE_MARKS.any(letters::startsWith) -> Take.LIVE
             first in OTHER_FIRST_WORDS || spoken in OTHER_PAIRS || words.lastOrNull() in OTHER_LAST_WORDS ||
                 OTHER_MARKS.any(letters::startsWith) -> Take.OTHER
             else -> null
         }
     }
 
+    private fun liveTag(first: String?, words: List<String>, includeUnclearLive: Boolean): Boolean {
+        if (first !in LIVE_FIRST_WORDS) return false
+        if (first != "live" || includeUnclearLive || words.size == 1) return true
+        val following = words[1]
+        return following in LIVE_NOTE_WORDS || following.all(Char::isDigit)
+    }
+
     private val LIVE_FIRST_WORDS = setOf("live", "vivo", "directo")
+    private val LIVE_NOTE_WORDS = setOf("at", "from", "in", "on", "version", "ver", "performance", "acoustic", "recording", "remix")
+    private val VIDEO_RECORDINGS = listOf(
+        "English Version", "Japanese Version", "Korean Version", "Spanish Version", "Versión Español", "Reprise",
+        "THE FIRST TAKE", "Christmas Version", "クリスマスバージョン", "Ballad Version", "バラードバージョン"
+    ).map(SongNames::normalize).toSet()
     private val LIVE_PAIRS = setOf("envivo", "aovivo")
     private val LIVE_MARKS = listOf("ライブ", "ライヴ", "现场", "現場", "演唱会", "演唱會", "라이브").map(SongNames::normalize)
     private val OTHER_FIRST_WORDS = setOf(

@@ -22,8 +22,10 @@
     <string name="open_in_spotify">Open in Spotify</string>
     <string name="service_audiomack" translatable="false">Audiomack</string>
     <string name="service_qobuz" translatable="false">Qobuz</string>
+    <string name="service_presto_music" translatable="false">Presto Music</string>
     <string name="open_in_audiomack">Open in Audiomack</string>
     <string name="open_in_qobuz">Open in Qobuz</string>
+    <string name="open_in_presto_music">Open in Presto Music</string>
     <string name="open_in_bandcamp">Open in Bandcamp</string>
     <string name="open_in_amazon_music">Open in Amazon Music</string>
     <string name="from_service">from %1$s</string>

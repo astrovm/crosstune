@@ -465,7 +465,7 @@ jobs:
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
       # what changed is compiled again. Saved from main, like Gradle's caches.
       # A cache only saves time, so the build goes on without it when it can't be set up.
-      - uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+      - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         id: ccache
         continue-on-error: true
         with:

@@ -4,7 +4,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 
 <b>Özellikler</b>
 <ul>
-<li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music ve Qobuz'da açar.</li>
+<li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack ve Presto Music bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music ve Qobuz'da açar.</li>
 <li>Çalma listeleri ve albümler şarkılarını gösterir: istediğiniz şarkıyı seçtiğiniz uygulamada açın, listeyi kopyalayın veya paylaşın ya da hepsini sırayla veya karışık olarak YouTube Music, YouTube, TIDAL veya Spotify'da çalın.</li>
 <li>Her servisi farklı bir yere yönlendirin; örneğin YouTube bağlantılarını YouTube Music'e, diğer hepsini Apple Music'e.</li>
 <li>Önce Crosstune'da göster: siz buradayken şarkı seçtiğiniz uygulamada çalar.</li>
@@ -22,4 +22,4 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 </ul>
 
 <b>Gizlilik</b>
-Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez; sözler şarkıyla cihazınızda eşleştirilir. Bir şarkının adı ve sanatçısı, onu bulan ve açan müzik servislerine ve söz, akor ve çeviri sitelerine gider. ChatGPT ile girişte yapay zekâ şarkıyı, sözlerini ve sorduklarınızı OpenAI'ye gönderir. Crosstune'un tek sunucusu gönderdiğiniz sorun bildirimlerini ve açarsanız otomatik olanları alır. IP adresi saklamaz ve her bildirimi 180 gün sonra siler. Tüm servisler ve her bildirimin içeriği: https://crosstune.cc/tr/privacy/
+Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez; sözler şarkıyla cihazınızda eşleştirilir. Bir şarkının adı ve sanatçısı, onu bulan ve açan müzik servislerine ve söz, akor ve çeviri sitelerine gider. Apple, Deezer ve MusicBrainz aynı kaydı bulmak için şarkı adlarını veya sanatçı adlarını kontrol edebilir. ChatGPT ile girişte yapay zekâ şarkıyı, sözlerini ve sorduklarınızı OpenAI'ye gönderir. Crosstune'un tek sunucusu gönderdiğiniz sorun bildirimlerini ve açarsanız otomatik olanları alır. IP adresi saklamaz ve her bildirimi 180 gün sonra siler. Tüm servisler ve her bildirimin içeriği: https://crosstune.cc/tr/privacy/

@@ -22,7 +22,9 @@ if (!projectM) logger.warn("third_party/projectm is missing, so this build has n
 
 android {
     namespace = "com.astrovm.crosstune"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     // The Android fixtures and their JVM tests share these helpers.
     sourceSets.named("test") { kotlin.directories += "src/sharedTest/kotlin" }
@@ -33,8 +35,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2270100
-        versionName = "2.27.1"
+        versionCode = 2290000
+        versionName = "2.29.0"
 
         testInstrumentationRunner = providers.gradleProperty("crosstuneTestRunner").orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
@@ -206,14 +208,14 @@ kover {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.11.01")
     implementation(composeBom)
     testImplementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.19.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 

@@ -4,7 +4,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 
 <b>Fitur</b>
 <ul>
-<li>Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, dan Audiomack, lalu membukanya di salah satu aplikasi itu atau di Amazon Music dan Qobuz.</li>
+<li>Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, dan Presto Music, lalu membukanya di salah satu aplikasi itu atau di Amazon Music dan Qobuz.</li>
 <li>Playlist dan album menampilkan lagunya: buka lagu mana pun di aplikasimu, salin atau bagikan daftarnya, atau putar semuanya, berurutan atau acak, di YouTube Music, YouTube, TIDAL, atau Spotify.</li>
 <li>Arahkan tiap layanan ke tujuan berbeda, misalnya link YouTube ke YouTube Music dan sisanya ke Apple Music.</li>
 <li>Tampilkan di Crosstune dulu: lagu diputar di aplikasi pilihanmu selagi kamu tetap di sini.</li>
@@ -22,4 +22,4 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 </ul>
 
 <b>Privasi</b>
-Tanpa akun, analitik, atau iklan. Riwayat tetap di perangkatmu. Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya, dan lirik diselaraskan dengan nyanyian di perangkatmu. Judul dan artis lagu dikirim ke layanan musik yang mencari dan membukanya, serta ke situs lirik, chord, dan terjemahan. Masuk ChatGPT, fitur AI mengirim lagu, liriknya, serta pertanyaanmu ke OpenAI. Satu-satunya server Crosstune menerima laporan masalah yang kamu kirim, dan laporan otomatis jika kamu menyalakannya. Server ini tidak menyimpan alamat IP dan menghapus setiap laporan setelah 180 hari. Semua layanan, dan isi setiap laporan: https://crosstune.cc/id/privacy/
+Tanpa akun, analitik, atau iklan. Riwayat tetap di perangkatmu. Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya, dan lirik diselaraskan dengan nyanyian di perangkatmu. Judul dan artis lagu dikirim ke layanan musik yang mencari dan membukanya, serta ke situs lirik, chord, dan terjemahan. Apple, Deezer, dan MusicBrainz dapat memeriksa judul atau nama artis untuk menemukan rekaman yang sama. Masuk ChatGPT, fitur AI mengirim lagu, liriknya, serta pertanyaanmu ke OpenAI. Satu-satunya server Crosstune menerima laporan masalah yang kamu kirim, dan laporan otomatis jika kamu menyalakannya. Server ini tidak menyimpan alamat IP dan menghapus setiap laporan setelah 180 hari. Semua layanan, dan isi setiap laporan: https://crosstune.cc/id/privacy/
