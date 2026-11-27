@@ -6,6 +6,7 @@ import android.app.AppOpsManager
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,7 +17,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowLooper
-import org.robolectric.shadows.ShadowSystemClock
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -25,10 +25,15 @@ import java.util.concurrent.TimeUnit
 class PlaybackCaptureTest {
     private val app = ApplicationProvider.getApplicationContext<Application>()
 
-    /** The grant is back as a phone has it, whatever a test set, as the tests share it. */
+    /** A no another test left is gone, as the tests share it. */
+    @Before
+    fun withNoNoYet() = PlaybackCapture.forget()
+
+    /** The grant is back as a phone has it, and a no is forgotten, whatever a test left, as the tests share them. */
     @After
     fun withoutTheGrant() {
         PhoneAppOps.projectMedia = AppOpsManager.MODE_DEFAULT
+        PlaybackCapture.forget()
     }
 
     @Test
@@ -83,8 +88,6 @@ class PlaybackCaptureTest {
     fun coveringAnAppThatOnlyPlaysInFrontItAsksNothingAsTheAskWouldStopIt() {
         PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
-        // A no from another listen is long past.
-        ShadowSystemClock.advanceBy(11, TimeUnit.MINUTES)
         val capture = PlaybackCapture(app)
         val listening = Executors.newSingleThreadExecutor()
         FloatingLyricsService.covering = true
