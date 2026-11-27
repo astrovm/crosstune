@@ -18,6 +18,30 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun shiftedCommandsKeepTheirVerbs() {
+        val cases = listOf(
+            "この下駄の鼻緒をすげえ！" to "すげる", "刀の柄をすげえ！" to "すげる",
+            "切れた鼻緒を今すげえ！" to "すげる", "朝までに鼻緒をすげー！" to "すげる",
+            "穴を開けて鼻緒をすげえ！" to "すげる", "君は大きな山をこええ！" to "こえる",
+            "君がやらなきゃ誰がやる、君がおせえ" to "おせる", "怖くないよ、僕がいてえ" to "いる",
+            "窓を閉めるな、君があけえ！" to "あける", "きみの頭もなでなでやろ" to "なでる"
+        )
+        fun check() {
+            for ((line, lookup) in cases) {
+                assertTrue(line, Readings.words(line, Script.JAPANESE).any { it.lookup == lookup })
+            }
+            assertTrue(Readings.words("君をすげえ好き", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertTrue(Readings.words("鼻緒を結ぶ、すげえ", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertTrue(Readings.words("鼻緒を結んですげえ", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertTrue(Readings.words("腹がいてえ", Script.JAPANESE).any { it.lookup == "いたい" })
+            assertTrue(Readings.words("部屋がくれえ", Script.JAPANESE).any { it.lookup == "くらい" })
+            assertEquals("なでなで", Readings.words("なでなでやん", Script.JAPANESE).single().lookup)
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun shiftedWordsKeepTheirReadingAndPracticeWordsInContext() {
         val cases = listOf(
             Triple("このなめえ好き", "kono namee suki", listOf("この=この", "なめえ=名前", "好き=好き")),

@@ -114,8 +114,9 @@ internal object Readings {
      * 25 to keep なでなで together before particles and copulas.
      * 26 to separate 何 or なん from explanatory なんだ.
      * 27 to read colloquial adjectives, すげえ for すごい, and nouns, おめえ for お前, as one word.
+     * 28 to keep commands with an object or a person subject as verbs.
      */
-    const val VERSION = 27
+    const val VERSION = 28
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1305,16 +1306,31 @@ internal object Readings {
             noun?.kind == "名詞" && noun.subkind != "非自立"
     }
 
+    private fun personSubject(ahead: List<Piece>): Boolean {
+        val person = ahead.getOrNull(ahead.lastIndex - 1) ?: return false
+        return ahead.lastOrNull()?.surface == "が" &&
+            (person.subkind == "代名詞" || person.surface in setOf("君", "僕", "俺", "お前", "あなた"))
+    }
+
+    private fun objectInClause(ahead: List<Piece>): Boolean =
+        ahead.takeLastWhile { piece -> piece.subkind != "接続助詞" && piece.surface.all { it.isLetterOrDigit() || it.isWhitespace() } }
+            .zipWithNext().any { (noun, particle) -> noun.kind == "名詞" && particle.surface == "を" && particle.kind == "助詞" }
+
+    private fun phraseEnds(after: List<Piece>): Boolean {
+        val next = after.firstOrNull()
+        val endings = setOf("よ", "な", "ね", "ぞ", "ぜ", "わ", "さ", "って", "だろ", "じゃん", "っす")
+        return next == null || (next.surface.none(Char::isLetterOrDigit) && after.drop(1).none { it.surface.any(Char::isLetterOrDigit) }) ||
+            (next.surface in endings && after.takeWhile { it.surface.any(Char::isLetterOrDigit) }.all { it.surface in endings })
+    }
+
+    private fun objectPredicate(ahead: List<Piece>, after: List<Piece>) = phraseEnds(after) && objectInClause(ahead)
+
     private fun realSplitCanJoin(text: String, first: Piece, ahead: List<Piece>, after: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
         val subject = markedSubject(ahead)
         if (text.startsWith("くれ") && !subject) return false
-        val starts = before == null || before.subkind == "代名詞" || (first.kind != "名詞" && subject)
-        val next = after.firstOrNull()
-        val endings = setOf("よ", "な", "ね", "ぞ", "ぜ", "わ", "さ", "って", "だろ", "じゃん", "っす")
-        val ends = next == null || (next.surface.none(Char::isLetterOrDigit) && after.drop(1).none { it.surface.any(Char::isLetterOrDigit) }) ||
-            (next.surface in endings && after.takeWhile { it.surface.any(Char::isLetterOrDigit) }.all { it.surface in endings })
-        return starts && ends
+        val starts = before == null || before.subkind == "代名詞" || (first.kind != "名詞" && subject && !personSubject(ahead))
+        return starts && phraseEnds(after)
     }
 
     private fun shiftedNoun(surface: String): Piece? {
@@ -1380,10 +1396,12 @@ internal object Readings {
     private fun particleBeforeEe(text: String, first: Piece): Boolean =
         first.kind == "助詞" && first.surface in setOf("よ", "は", "や") && text.removePrefix(first.surface).startsWith("え")
 
+    private fun originalShiftedWordStays(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>) =
+        objectPredicate(ahead, after) || particleBeforeEe(text, span.first()) ||
+            dictionaryWordStays(span.first(), ahead.lastOrNull(), text) || pastVerb(span)
+
     private fun shiftedWord(text: String, span: List<Piece>, ahead: List<Piece>, after: List<Piece>): Piece? {
-        if (particleBeforeEe(text, span.first())) return null
-        if (dictionaryWordStays(span.first(), ahead.lastOrNull(), text)) return null
-        if (pastVerb(span)) return null
+        if (originalShiftedWordStays(text, span, ahead, after)) return null
         val adjective = shiftedAdjective(text)
         if (realSplit(text, span.first())) {
             return adjective?.takeIf { canShiftAdjective(text, span.first()) && realSplitCanJoin(text, span.first(), ahead, after) }
@@ -1572,8 +1590,11 @@ internal object Readings {
             } else null
             // A copula after なでなで, standard or Kansai: なでなでだ, なでなでやん, and なでなでやろ, which IPADIC takes for a form of やる.
             val volitional = next?.surface == "やろ" && pieces.getOrNull(index + 2)?.surface == "う"
+            val beforeNade = out.dropLastWhile { it.surface in setOf("な", "なで") }
+            val objectBeforeNade = beforeNade.lastOrNull()?.surface in setOf("を", "も") &&
+                beforeNade.getOrNull(beforeNade.lastIndex - 1)?.kind == "名詞"
             val copulaNext = !volitional && ((next?.kind == "助動詞" && next.base in setOf("だ", "です", "や", "やん")) ||
-                (next?.base == "やる" && next.surface == "やろ"))
+                (next?.base == "やる" && next.surface == "やろ" && !objectBeforeNade))
             // A sentence-final が can be labelled as a conjunction, though it follows the noun.
             val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
             val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
