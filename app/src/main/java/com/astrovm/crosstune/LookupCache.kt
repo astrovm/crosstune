@@ -162,6 +162,7 @@ internal class LookupCache(
 
     private fun write(file: File, json: String) {
         try {
+            file.parentFile?.mkdirs()
             file.writeWhole(json)
         } catch (_: IOException) {
             // Not kept, it's just looked up again.

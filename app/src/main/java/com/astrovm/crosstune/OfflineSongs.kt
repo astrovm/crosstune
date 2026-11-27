@@ -97,6 +97,7 @@ internal class OfflineSongs(
         val json = JSONArray().apply { all.forEach { put(json(it)) } }.toString()
         withContext(ioDispatcher) {
             try {
+                file.parentFile?.mkdirs()
                 file.writeWhole(json)
             } catch (_: IOException) {
                 // Not written, it's still kept until the app closes.
