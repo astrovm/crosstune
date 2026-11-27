@@ -18,6 +18,31 @@ import kotlin.concurrent.thread
 class ReadingsTest {
 
     @Test
+    fun shiftedWordsKeepTheirReadingAndPracticeWordsInContext() {
+        val cases = listOf(
+            Triple("このなめえ好き", "kono namee suki", listOf("この=この", "なめえ=名前", "好き=好き")),
+            Triple("あいつてめえ", "aitsu temee", listOf("あいつ=あいつ", "てめえ=てめえ")),
+            Triple("そのあめえだね", "sono ameeda ne", listOf("その=その", "あめえだ=あめる", "ね=ね")),
+            Triple("そのなめえ聞かせて", "sono namee kikasete", listOf("その=その", "なめえ=名前", "聞かせて=聞く")),
+            Triple("こええが好き", "koe e ga suki", listOf("こえ=こえる", "え=え", "が=が", "好き=好き")),
+            Triple("うぜえの対処", "uzee no taisho", listOf("うぜえ=うざい", "の=の", "対処=対処")),
+            Triple("あめーおいしい", "amee oishii", listOf("あめー=あめ", "おいしい=おいしい")),
+            Triple("あめーが欲しい", "amee ga hoshii", listOf("あめー=あめ", "が=が", "欲しい=欲しい")),
+            Triple("すげええ", "suge ee", listOf("すげ=すげる", "ええ=ええ")),
+            Triple("すげえええ", "sugee ee", listOf("すげえ=すごい", "ええ=ええ")),
+            Triple("それやべえだろ", "sore yabeedaro", listOf("それ=それ", "やべえだろ=やばい")),
+        )
+        fun check() {
+            for ((line, reading, words) in cases) {
+                assertEquals(line, reading, Readings.of(listOf(line), Script.JAPANESE).single().romanized)
+                assertEquals(line, words, Readings.words(line, Script.JAPANESE).map { "${it.text}=${it.lookup}" })
+            }
+        }
+        check()
+        TestUniDic.reading(::check)
+    }
+
+    @Test
     fun futariAfterANounIsNotAnOldKanaVerb() = assertJapaneseBoundaries(listOf(
         Triple("おとなふたりとこどもひとり", "otona futari to kodomo hitori", listOf("おとな", "ふたり", "と", "こども", "ひとり")),
         Triple("私たちふたり", "watashitachi futari", listOf("私たち", "ふたり")),
