@@ -985,8 +985,16 @@ internal class ExactMatcher(
         val live = saysLive(metadata.title) || catalog?.live == true
         val artists = exact.map { it.second.details.first() }.toSet()
         if (rows.any { row -> row.details.first() in artists && rowIsLive(row) != live && fitsReleaseLength(row, sourceLength) &&
-                SongNames.same(SongNames.bareTitle(row.name), metadata.title) }) return null
+                onlyLiveTakeOf(row, metadata.title) }) return null
         return exact.firstOrNull { disco.allows(it.second) && rowIsLive(it.second) == live }
+    }
+
+    /** The song's name with a live note and nothing else: no remix, no re-recording, as "Song - Live" is. */
+    private fun onlyLiveTakeOf(row: Row, title: String): Boolean {
+        val album = row.details.getOrNull(1).orEmpty()
+        val notes = SongNames.normalize(row.name + album)
+        return SongNames.same(SongNames.bareTitle(row.name), title) && !Takes.saysAnotherVersionBesidesLive(row.name) &&
+            rerecordingLabels.none { it in notes }
     }
 
     private fun pickerMayKnowSong(row: Row, metadata: MusicMetadata, names: Names, ambiguous: Boolean): Boolean {
@@ -1250,8 +1258,8 @@ internal class ExactMatcher(
         val edition = linkedEditionInAnotherScript(base, abroad, names.linkedEdition)?.takeIf { disco.allows(it) }
         return edition ?: chooseNamedRecording(sameName, metadata.album ?: names.corroboratingAlbum, metadata.title, disco, names.sourceExplicit)
             ?: pickKnownStudioBesideLive(sameName, names)
-            ?: if (sourceLength == null) equivalentAlbumReleases(sameName, names, recording.live).singleOrNull()
-            else sourceNamesBilingualRelease(sameName, metadata.title, sourceLength)
+            ?: sourceLength?.let { sourceNamesBilingualRelease(sameName, metadata.title, it) }
+            ?: equivalentAlbumReleases(sameName, names, recording.live).singleOrNull()
     }
 
     private fun sourceNamesBilingualRelease(rows: List<Row>, title: String, length: Long): Row? {
@@ -1415,7 +1423,7 @@ internal class ExactMatcher(
         val known = eligible.filter { knownUntranslatedTitle(it, names) }
         val byAlbum = albumVerifiedRows(known, names, metadata, recording)
         val byVersion = versionSeparatedRows(rows, known, names, recording)
-        val byRelease = if (sourceLength == null) equivalentAlbumReleases(eligible, names, wantsLive) else emptySet()
+        val byRelease = equivalentAlbumReleases(eligible, names, wantsLive)
         val byRequestedLive = if (wantsLive) uniqueLiveRows(eligible) else emptySet()
         return eligible.filter { row ->
             val name = candidateName(row)
@@ -1493,7 +1501,8 @@ internal class ExactMatcher(
     private fun unprovedSubstitution(row: Row, plausible: List<Row>, rows: List<Row>, names: Names, sourceLength: Long?): Boolean {
         if (sourceLength == null) return false
         val first = plausible.takeWhile { it !== row }.firstOrNull { !fitsSource(it, sourceLength) }
-        val conflict = rows.any { disprovesSongLength(it, names, sourceLength) } ||
+        // A live take's length says nothing of the studio recording's, nor the other way round.
+        val conflict = rows.any { disprovesSongLength(it, names, sourceLength) && rowIsLive(it) == rowIsLive(row) } ||
             first != null && candidateName(first) != candidateName(row)
         if (!conflict) return false
         if (namesTitleInRow(row, names) || catalogParenthesizedName(row, names) || repeatsSourceTitle(row.name, names.requestedTitle)) return false

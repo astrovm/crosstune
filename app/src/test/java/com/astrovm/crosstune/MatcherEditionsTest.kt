@@ -167,6 +167,18 @@ class MatcherEditionsTest {
         assertEquals("live0000000", opens(live, studio + liveRow, emptyList(), editions))
     }
 
+    @Test
+    fun theArtistsLiveTakeAsLongAsTheLinkKeepsTheStudioTakeOut() {
+        val link = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val studio = row("Song", "Artist • Album • 3:30", "album000000")
+        val single = apple("Song", "Artist", 210_000, 12, "Album")
+        assertEquals(null, opens(link, listOf(studio, row("Song - Live", "Artist • Album • 4:00", "live0000000")), emptyList(), single))
+        // Another artist's live take, or the artist's of another length, says nothing of the link's.
+        assertEquals("album000000", opens(link, listOf(studio, row("Song - Live", "Someone Else • Album • 4:00", "live0000000")), emptyList(), single))
+        assertEquals("album000000", opens(link, listOf(studio, row("Song - Live", "Artist • Album • 5:00", "live0000000")), emptyList(), single))
+        assertEquals("album000000", opens(link, listOf(studio, row("Other Song - Live", "Artist • Album • 4:00", "live0000000")), emptyList(), single))
+    }
+
     /** No answer from MusicBrainz leaves the native name unproved: retried, never a lasting wrong take. */
     @Test
     fun aNativeArtistWithNoAliasAnswerIsNotTheConcertTake() {
