@@ -57,7 +57,7 @@ main() {
         mkdir -p "$tree/$(dirname "$source")"
         cp "$source" "$tree/$source"
     fi
-    local variant=Debug flavor_path= apk_name=app-debug
+    local variant=Debug flavor_path='' apk_name=app-debug
     if [[ -d $tree/app/src/play ]]; then
         variant=PlayDebug
         flavor_path=play/

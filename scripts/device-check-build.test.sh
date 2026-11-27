@@ -15,7 +15,7 @@ cat > "$repo/scripts/gradle-box/gradle-box.sh" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ -z ${FAKE_FAIL:-} ]] || exit 1
-variant=Debug folder= apk=app-debug
+variant=Debug folder='' apk=app-debug
 if [[ -d app/src/play ]]; then variant=PlayDebug; folder=play/; apk=app-play-debug; fi
 if [[ $1 == ":app:assemble$variant" ]]; then
     mkdir -p "app/build/outputs/apk/${folder}debug"
