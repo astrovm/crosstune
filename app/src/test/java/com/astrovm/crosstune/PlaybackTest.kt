@@ -2392,6 +2392,7 @@ class PlaybackTest {
         }
         val again = SteadyLengths(prefs)
         assertEquals(10_500L, again.of("Ad 0", "Band", 10_500))
+        assertEquals(10_000L, again.of("Ad 1", "Band", 10_500))
         assertEquals(10_000L, again.of("Ad 500", "Band", 10_500))
     }
 
