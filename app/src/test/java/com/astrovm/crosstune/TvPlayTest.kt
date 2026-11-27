@@ -262,7 +262,10 @@ class TvPlayTest {
         assertTrue(onPlayer())
         // Nor does a press that began here and ended in another window count for an end that comes later.
         assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+        view.isPressed = true
         view.dispatchWindowFocusChanged(false)
+        // The view still does what any view does when its window loses focus, such as letting go of a touch.
+        assertFalse(view.isPressed)
         view.dispatchWindowFocusChanged(true)
         assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
         composeRule.waitForIdle()
