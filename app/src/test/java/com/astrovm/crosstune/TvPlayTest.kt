@@ -260,6 +260,13 @@ class TvPlayTest {
         assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
         composeRule.waitForIdle()
         assertTrue(onPlayer())
+        // Nor does a press that began here and ended in another window count for an end that comes later.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+        view.dispatchWindowFocusChanged(false)
+        view.dispatchWindowFocusChanged(true)
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
+        composeRule.waitForIdle()
+        assertTrue(onPlayer())
         assertFalse(shadowOf(floating.get()).isStoppedBySelf)
     }
 

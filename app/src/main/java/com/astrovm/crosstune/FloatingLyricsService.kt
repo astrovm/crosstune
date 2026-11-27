@@ -341,6 +341,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
             }
             return true
         }
+
+        /** A press whose end went to another window is over, so a later end alone doesn't finish it. */
+        override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+            super.onWindowFocusChanged(hasWindowFocus)
+            pressed = false
+        }
     }
 
     private fun showUnlock(host: FloatingHost) {
