@@ -115,8 +115,9 @@ internal object Readings {
      * 26 to separate 何 or なん from explanatory なんだ.
      * 27 to read colloquial adjectives, すげえ for すごい, and nouns, おめえ for お前, as one word.
      * 28 to keep commands with an object or a person subject as verbs.
+     * 29 to keep object commands before punctuation followed by another clause.
      */
-    const val VERSION = 28
+    const val VERSION = 29
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1323,7 +1324,8 @@ internal object Readings {
             (next.surface in endings && after.takeWhile { it.surface.any(Char::isLetterOrDigit) }.all { it.surface in endings })
     }
 
-    private fun objectPredicate(ahead: List<Piece>, after: List<Piece>) = phraseEnds(after) && objectInClause(ahead)
+    private fun objectPredicate(ahead: List<Piece>, after: List<Piece>) = objectInClause(ahead) &&
+        (phraseEnds(after) || after.firstOrNull()?.surface?.firstOrNull()?.let { !it.isLetterOrDigit() && !it.isWhitespace() } == true)
 
     private fun realSplitCanJoin(text: String, first: Piece, ahead: List<Piece>, after: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
