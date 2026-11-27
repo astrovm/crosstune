@@ -3987,6 +3987,18 @@ class ExactMatcherTest {
         assertEquals(url, matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(title = "Song", album = "Ａｌｂｕｍ：Ｄｉｓｃｏ・Ｍｉｘ Deluxe")))
     }
 
+    /** Beside the plain row, a disco row as long as the link opens only for a link that asks for the disco version. */
+    @Test
+    fun theDiscoRowBesideThePlainOneOpensOnlyWhenAskedFor() = runBlocking {
+        val plain = youTubeMusicRow("Song", "Band • Album • 4:41", videoId = "plain000000")
+        val disco = youTubeMusicRow("Song", "Band • Album (Disco Version) • 4:41", videoId = "mix00000000")
+        namesAndTabs(songs = listOf(plain, disco))
+        assertEquals("https://music.youtube.com/watch?v=plain000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band", lengthMs = 281_000)))
+        namesAndTabs(songs = listOf(plain, disco))
+        assertEquals("https://music.youtube.com/watch?v=mix00000000",
+            matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Song", "Band", album = "Album (Disco Version)")))
+    }
+
     @Test
     fun aDiscoRowThatCannotOpenStillRulesOutAnUnrelatedTitle() = runBlocking {
         val live = youTubeMusicRow("Song - Live", "Band • Album (Disco Mix) • 4:41", videoId = "live0000000")

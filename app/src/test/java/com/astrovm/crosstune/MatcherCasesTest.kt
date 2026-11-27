@@ -577,6 +577,110 @@ class MatcherCasesTest {
         assertEquals(null, find(case.copy(linkMs = 261_000)))
     }
 
+    /** 8 s from the link is still its length; a row further off, listed first, is not it. */
+    @Test
+    fun aRowEightSecondsFromTheLinkIsTheLinksLength() {
+        val case = Case("8 s off", "song1", lengthMs = null, linkMs = 248_000, songs = listOf(row("Fake Song", length = "5:00"), row("Fake Song", length = "4:00")))
+        assertEquals("song1", find(case))
+    }
+
+    /** Where the songs listed are of another length, the artist's video 8 s from the link is still the song. */
+    @Test
+    fun anArtistsVideoEightSecondsFromTheLinkFitsItBesideASongOfAnotherLength() {
+        val case = Case("video 8 s off", "video0", lengthMs = null, linkMs = 248_000, songs = listOf(row("Fake Song", length = "3:00")),
+            videos = listOf(video("Fake Song", "4:00")))
+        assertEquals("video0", find(case))
+    }
+
+    /** Only a video less than half as long as the recording is too short to be the song: half is not less. */
+    @Test
+    fun aVideoHalfAsLongAsTheRecordingCanStillBeTheSong() {
+        val case = Case("half as long", "video0", lengthMs = 240_000, videos = listOf(video("Fake Song", "2:00")))
+        assertEquals("video0", find(case))
+        assertEquals(null, find(case.copy(videos = listOf(video("Fake Song", "1:59")))))
+    }
+
+    /** A disco version opens only for a link that asks for one: otherwise the first row, as on main. */
+    @Test
+    fun aDiscoVersionOpensOnlyForALinkThatAsksForIt() {
+        val songs = listOf(row("Fake Song"), row("Fake Song (Disco Version)"))
+        assertEquals("song1", find(Case("disco asked", "song1", title = "Fake Song (Disco Version)", lengthMs = null, songs = songs)))
+        val plain = Case("disco not asked", "song0", lengthMs = null, songs = listOf(row("Fake Song"), row("Fake Song", album = "Fake Album (Disco Version)")))
+        assertEquals("song0", find(plain))
+    }
+
+    /** A live link opens the one live row of the song's name, not the studio row before it. */
+    @Test
+    fun aLiveLinkOpensTheOneLiveRowOfTheSongsName() {
+        val case = Case("live asked", "song1", title = "Fake Song (Live)", lengthMs = null, songs = listOf(row("Fake Song"), row("Fake Song", album = "Live at Budokan")))
+        assertEquals("song1", find(case))
+    }
+
+    /** A dash before the song's own name is the title, not a take: "Short Hair" is no short version. */
+    @Test
+    fun aVideoOfASongNamedLikeATakeIsStillTheSong() {
+        val case = Case("short hair", "video0", title = "Short Hair", picked = 0, videos = listOf(video("Fake Band - Short Hair", channel = "Fan")))
+        assertEquals("video0", find(case))
+        assertEquals(null, find(case.copy(title = "Fake Song", videos = listOf(video("Fake Song - Short Version", channel = "Fan")))))
+    }
+
+    /** A video named in kana, as the song's Japanese name reads, is the song, lyrics caption or not; kanji are no reading. */
+    @Test
+    fun aVideoNamedAsTheJapaneseNameReadsIsTheSong() {
+        val case = Case("kana video", "video0", title = "Kakusei", japan = japanese("覚醒"), picked = 0)
+        for (title in listOf("かくせい", "カクセイ", "かくせい Lyrics", "かくせい lyrics video")) {
+            assertEquals(title, "video0", find(case.copy(videos = listOf(video(title, channel = "Fan")))))
+        }
+        assertEquals("video0", find(case.copy(title = "Coffee", japan = japanese("珈琲"), videos = listOf(video("コーヒー", channel = "Fan")))))
+        assertEquals(null, find(case.copy(videos = listOf(video("覚醒する", channel = "Fan")))))
+        assertEquals(null, find(case.copy(videos = listOf(video("かくせい Lyrics Video Lyrics", channel = "Fan")))))
+    }
+
+    /** The picker offers no row it can't know is the song, such as another artist's or another part, and offers the one row that may be. */
+    @Test
+    fun thePickerOffersOnlyRowsThatMayBeTheSong() {
+        val pick = Case("picker", null, picked = 0, lengthMs = null)
+        assertEquals("another artist", null, find(pick.copy(songs = listOf(row("Fake Song", artist = "Other Band")))))
+        assertEquals("another part", null, find(pick.copy(songs = listOf(row("Fake Song Part 2", artist = "偽バンド")))))
+        val live = pick.copy(album = "Live at Budokan", lengthMs = 240_000, linkMs = 240_000)
+        assertEquals("the live edition's take", "song0",
+            find(live.copy(songs = listOf(row("Fake Song", "Live at Budokan", "偽バンド", "4:00")))))
+        val twice = listOf(row("別の名", artist = "偽バンド"), row("別の名", "Other Album", "偽バンド"))
+        assertEquals("one of two alike", null, find(pick.copy(lengthMs = 90_000, songs = twice)))
+        assertEquals("the one by itself", "song0", find(pick.copy(lengthMs = 90_000, songs = twice.take(1))))
+    }
+
+
+    /**
+     * Of two rows of the song's Japanese name, the usual release beside a best-of carries the same studio take, so the first
+     * opens; and where Apple has two editions, the row at its edition's length, not the live one, is the song.
+     */
+    @Test
+    fun theUsualReleaseBesideABestOfIsTheSong() {
+        val case = Case("best of", "song0", album = "Original Album", japan = japanese("偽の歌"),
+            songs = listOf(row("偽の歌", "Fake Album"), row("偽の歌", "The Best")))
+        assertEquals("song0", find(case))
+        val editions = case.copy(editions = listOf("Other Album" to 200_000), songs = listOf(row("偽の歌", "Live at Budokan"), row("偽の歌", "Fake Album")))
+        assertEquals("song1", find(editions))
+    }
+
+
+    /** Apple's album tells two rows of the song's Japanese name apart. */
+    @Test
+    fun applesAlbumTellsTwoRowsOfTheJapaneseNameApart() {
+        val case = Case("album", "song1", japan = japanese("偽の歌"), songs = listOf(row("偽の歌", "Other Album"), row("偽の歌", "Fake Album")))
+        assertEquals("song1", find(case))
+    }
+
+    /** A row from a karaoke album is someone else's take: the picker doesn't offer it, unless the song's name says karaoke. */
+    @Test
+    fun thePickerLeavesOutAKaraokeAlbumsRow() {
+        val case = Case("karaoke album", null, picked = 0, songs = listOf(row("Fake Song", album = "Karaoke Hits", artist = "偽バンド")))
+        assertEquals(null, find(case))
+        assertEquals("song0", find(case.copy(songs = listOf(row("Fake Song", artist = "偽バンド")))))
+        assertEquals("song0", find(case.copy(title = "Fake Song (Karaoke)", songs = listOf(row("Fake Song (Karaoke)", album = "Karaoke Hits", artist = "偽バンド")))))
+    }
+
     @Test
     fun thePickerCanRecognizeATranslatedTitleBeforeItsLyricsCaption() {
         val case = Case("lyrics captions", "video0", title = "Let's go travel", japan = japanese("旅に出よう"), picked = 0)
