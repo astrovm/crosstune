@@ -1,0 +1,110 @@
+# JMdict 2026-11-23, by the Electronic Dictionary Research and Development Group, https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
+# through jmdict-simplified 3.6.2. Licensed under CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+# as the Group's licence asks, https://www.edrdg.org/edrdg/licence.html
+# Common nouns and pronouns in -ae, with their common written form,
+# then ~ colloquial and slang い adjectives in kana, for IPADIC, which lacks some.
+# Made by scripts/readingsaudit/readingsaudit.py oldkana.
+あたりまえ	当たり前
+あぶらえ	油絵
+あまえ	甘え
+いちにんまえ	一人前
+いれかえ	入れ替え
+うったえ	訴え
+うでまえ	腕前
+えきまえ	駅前
+おさえ	抑え
+おとこまえ	男前
+おなまえ	お名前
+おまえ	お前
+かいびかえ	買い控え
+かかえ	抱え
+かんがえ	考え
+きがえ	着替え
+きまえ	気前
+きりかえ	切り替え
+くちごたえ	口答え
+くみかえ	組み替え
+こころがまえ	心構え
+このまえ	この前
+ころもがえ	衣替え
+さしつかえ	差し支え
+じまえ	自前
+そなえ	備え
+てごたえ	手応え
+てびかえ	手控え
+てまえ	手前
+でまえ	出前
+でむかえ	出迎え
+なまえ	名前
+にんまえ	人前
+はごたえ	歯ごたえ
+ひかえ	控え
+ひだりまえ	左前
+ひとまえ	人前
+ひるまえ	昼前
+ふたえ	二重
+ふりかえ	振替
+まえまえ	前々
+みばえ	見栄え
+むかえ	迎え
+めのまえ	目の前
+めばえ	芽生え
+もちまえ	持ち前
+りょうがえ	両替
+わけまえ	分け前
+~あざとい
+~いなたい
+~いもい
+~いもっぽい
+~うざい
+~うざったい
+~うっさい
+~えぐい
+~えもい
+~おぞい
+~おっかない
+~かわよい
+~がめつい
+~きもい
+~ぐろい
+~けばい
+~こっぴどい
+~しどい
+~しゃばい
+~しょっぱい
+~しょんどい
+~すっごい
+~すんごい
+~ださい
+~だるい
+~ちっこい
+~ちっさい
+~ちびっこい
+~ちょろい
+~つまんない
+~でかい
+~でっかい
+~とっぽい
+~どぎつい
+~どでかい
+~なつい
+~なまっちろい
+~ぬくい
+~ぬくとい
+~はずい
+~はんぱない
+~ひゃっこい
+~ぶっとい
+~へぼい
+~ぺらい
+~ぼろい
+~まあるい
+~まぶい
+~むさい
+~めんどい
+~もさい
+~もっさい
+~ものっそい
+~やばい
+~やらかい
+~んまい

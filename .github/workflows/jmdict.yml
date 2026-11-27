@@ -113,6 +113,8 @@ jobs:
           path: |
             ${{ env.TABLES }}/jmdict-readings.txt
             ${{ env.TABLES }}/old-kana.txt
+            ${{ env.TABLES }}/shifted-words.txt
+            ${{ env.TABLES }}/common-split-words.txt
             ${{ env.TABLES }}/notices/edrdg-licence.txt
             ${{ env.TABLES }}/notices/jmdict-documentation.txt
             ${{ env.NOTICE_MANIFEST }}
