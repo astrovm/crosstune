@@ -406,11 +406,7 @@ internal class ChatGpt(
     }
 
     /** Written whole and then swapped in, so a write cut short never loses the tokens. */
-    private suspend fun write(account: JSONObject) = withContext(ioDispatcher) {
-        val temporary = File(file.parentFile, "${file.name}.tmp")
-        temporary.writeText(account.toString())
-        temporary.renameTo(file)
-    }
+    private suspend fun write(account: JSONObject) = withContext(ioDispatcher) { file.writeWhole(account.toString()) }
 
     /** [write], for what a failing disk mustn't take a caller down with it: it's still held here, and written next time. */
     private suspend fun keptIfWritable(account: JSONObject) {
