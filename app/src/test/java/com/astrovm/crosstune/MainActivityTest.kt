@@ -11,6 +11,7 @@ import androidx.activity.BackEventCompat
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
@@ -49,6 +50,8 @@ import android.Manifest
 import android.provider.Settings
 import android.view.textclassifier.TextClassifier
 import android.text.SpannableString
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
@@ -1413,6 +1416,8 @@ class MainActivityTest {
         waitForText(string(R.string.play_all_progress, 0, 50))
         release.countDown()
         waitForText(string(R.string.play_all_progress, 49, 50))
+        // The bar is as far along as the count says.
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasProgressBarRangeInfo(ProgressBarRangeInfo(49f / 50, 0f..1f))).fetchSemanticsNodes().isNotEmpty() }
         last.countDown()
         // YouTube Music is asked to play them from here, as Play does.
         val music = MusicService.YOUTUBE_MUSIC.packageName
@@ -3302,6 +3307,9 @@ class MainActivityTest {
         click(string(R.string.search_button))
         waitForText(string(R.string.song_search_title))
         assertTextShown(string(R.string.loading_text))
+        // A bar that can't say how far it got, and words a screen reader says as they change.
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        composeRule.onNode(hasText(string(R.string.loading_text)) and SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)).assertExists()
         release.countDown()
     }
 
