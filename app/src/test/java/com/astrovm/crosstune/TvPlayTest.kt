@@ -242,6 +242,28 @@ class TvPlayTest {
     }
 
     @Test
+    fun backThatTheKeyboardTookLeavesTheCoverAsItIs() {
+        launch()
+        val floating = playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        val view = overlays(floating.get()).single()
+        // The keyboard took the press to hide, and only its end comes here, as measured on a Samsung.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0, 0, 0, 0, KeyEvent.FLAG_CANCELED)))
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        // A whole press goes back, to the player, with its end marked canceled, as that phone sends it.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+        assertTrue(view.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0, 0, 0, 0, KeyEvent.FLAG_CANCELED)))
+        waitUntil { onPlayer() }
+        // And that press is spent: an end alone after it goes nowhere.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
+        composeRule.waitForIdle()
+        assertTrue(onPlayer())
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+    }
+
+    @Test
     fun onATvBackFromTheWordsLandsOnPauseAndFromThePlayerOnPlay() {
         launch()
         val floating = playCovered()

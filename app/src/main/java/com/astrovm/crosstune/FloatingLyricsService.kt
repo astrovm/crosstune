@@ -323,11 +323,22 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         covering = false
     }
 
-    /** Takes the remote's Back, which no activity is there to. */
+    /**
+     * Takes Back, which no activity is there to. It goes back only when the press started here too: the keyboard
+     * takes a press to hide, and leaves its end to come here alone. A press's end marked canceled still counts,
+     * as that's how a Samsung on Android 16 sends every Back to a window like this one.
+     */
     private inner class BackFrame(context: Context) : FrameLayout(context) {
+        private var pressed = false
+
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.keyCode != KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
-            if (event.action == KeyEvent.ACTION_UP) onBackPressedDispatcher.onBackPressed()
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                pressed = true
+            } else if (pressed) {
+                pressed = false
+                onBackPressedDispatcher.onBackPressed()
+            }
             return true
         }
     }
