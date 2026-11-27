@@ -279,7 +279,7 @@ internal data class UiState(
 
     /** The song the screen is about, that casting would hand to a TV: the words shown, the player's, or the card's. */
     val songToCast: MusicMetadata?
-        get() = (lyricsFor ?: player?.takeUnless { it.stationOnly }?.song ?: result)?.takeIf { it.type == ItemType.TRACK }
+        get() = (lyricsFor ?: player?.takeUnless { it.songless }?.song ?: result)?.takeIf { it.type == ItemType.TRACK && !it.unnamed }
 
     /** Whether the Cast button shows: a TV with Crosstune is around, or one is cast to, and there's a song to hand it. */
     val canCast: Boolean

@@ -706,7 +706,7 @@ internal class MediaSessionPlayback(
             } } finally { unwatchQueues(before) }
             pick(controllers)
         }
-        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
+        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(otherApps(it.orEmpty())) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
@@ -911,7 +911,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
-        val apps = runCatching { activeSessions() }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
+        val apps = runCatching { activeSessions() }.getOrDefault(emptyList())
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
@@ -1039,7 +1039,10 @@ internal class MediaSessionPlayback(
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
-    private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
+    /** The TV receiver mirrors the music app in its own session for Cast. Only the source app can control the song. */
+    private fun otherApps(controllers: List<MediaController>) = controllers.filter { it.packageName != context.packageName }
+
+    private fun activeSessions(): List<MediaController> = otherApps(sessions.getActiveSessions(listener)).also { controllers ->
         covers.retainSessions(controllers.map { it.sessionToken }.toSet())
     }
 
@@ -1052,7 +1055,7 @@ internal class MediaSessionPlayback(
     private fun playingApps(): List<MediaController> {
         val sounding = audio.isMusicActive
         val all = if (hasAccess()) runCatching { activeSessions() }.getOrNull() else null
-        val eligible = all.orEmpty().filter { it.packageName != context.packageName && !it.leftBehind() }
+        val eligible = all.orEmpty().filterNot { it.leftBehind() }
         val playing = eligible.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING && (sounding || it.remote()) }
         if (playing.isNotEmpty() || !sounding) return playing
         // The phone's sound does not say whose it is: Android withholds the app from the audio playback
@@ -1076,7 +1079,7 @@ internal class MediaSessionPlayback(
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
         return runCatching { activeSessions() }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.plays(song) }
+            .filter { it.plays(song) }
             .sortedWith(nearestFirst)
             // plays() already checked the session's title and artist. YouTube's video-title
             // parser can mistake a bilingual title's first half for an artist.
@@ -1187,7 +1190,7 @@ internal class MediaSessionPlayback(
             } } finally { unwatchQueues(before) }
             update()
         }
-        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
+        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(otherApps(it.orEmpty())) }
         // Audio can fall silent before a player updates its session, or start after it says PLAYING.
         val sounding = object : AudioManager.AudioPlaybackCallback() {
             override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) = update()

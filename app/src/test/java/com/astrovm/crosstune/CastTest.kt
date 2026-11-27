@@ -298,6 +298,10 @@ class CastTest {
         val playing = UiState(player = station, castAround = true)
         assertNull(playing.songToCast)
         assertFalse(playing.canCast)
+        val withPlaybackState = playing.copy(player = station.copy(song = station.song.copy(unnamed = true), stationAppLabel = null))
+        assertNull(withPlaybackState.songToCast)
+        assertFalse(withPlaybackState.canCast)
+        assertNull(UiState(result = station.song.copy(unnamed = true)).songToCast)
         // The song's card under it still goes.
         assertEquals(song, playing.copy(result = song).songToCast)
         assertEquals(song, playing.copy(player = PlayerState(song, null)).songToCast)

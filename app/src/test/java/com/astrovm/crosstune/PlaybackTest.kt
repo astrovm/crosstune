@@ -147,6 +147,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun theCastReceiverCannotBecomeTheSourceOfItsOwnSong() {
+        allow()
+        val mirror = player(app.packageName, "Crosstune", song.title, song.artist, position = 200)
+        shadowOf(sessions).addController(mirror)
+        val clocks = followed()
+        assertNull(clocks.last())
+        assertTrue(playback.matching(song).isEmpty())
+
+        val music = player("com.google.android.youtube.tv", "YouTube", song.title, song.artist, position = 800)
+        shadowOf(sessions).addController(music)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(music, playback.appFor(song))
+        assertEquals(music.packageName, playback.matching(song).single().app)
+        assertEquals(800L, clocks.last()?.clock?.positionMs)
+    }
+
+    @Test
     fun aNewItemWithoutAnEarlierClockIsFollowedImmediately() {
         allow()
         sounding()
