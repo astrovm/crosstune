@@ -48,6 +48,7 @@ The first app you pick on a song is where songs play from then on. Change it in 
 - **Practice with the music.** Save lines and they come back as cards: rate each **Again**, **Hard**, **Good** or **Easy**. A card plays its line in the music app that has the song open, or in a small YouTube player, and you stay in Crosstune. Tap the bell for a daily reminder of the cards due.
 - **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
 - **On your TV.** Runs on Android TV and Google TV too: what's playing, its lyrics and visuals on the big screen, all with the remote. **Play** opens a song in YouTube with its lyrics over it.
+- **Cast to your TV.** With the Google Play or GitHub build, a Cast button on a song sends it to Crosstune on your TV, which plays it in YouTube with the lyrics over it. Your phone becomes the remote: pause, skip, translation and readings. It shows only when a TV with Crosstune is on your network.
 - **Your colors.** Light or dark, your wallpaper's colors, and pure black for OLED screens.
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
 - **No tracking.** Drops tracking bits like `?si=` from links.
@@ -95,6 +96,7 @@ In **Settings** → **Practice**, use **Allow exact time**. Without it, Android 
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask.
 - The [browser extension](extension) sends the developer nothing. It sends a link's title and artist where the app does, and, while its lyrics panel is open, to LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words.
 - Crosstune's only server gets the problem reports you send, or turn on. Until you decide about automatic reports, a report for singing heard far from the lyrics waits on your phone; only the latest 20 problems found are kept, and older ones are deleted. It keeps no IP address, and deletes each report after 180 days.
+- Casting sends the song's title, artist, link and cover, and your controls, to Crosstune on the TV you pick, over your local network through Google Cast, part of Google Play Services. The build without Google Play Services can't cast.
 
 The full [privacy policy](https://crosstune.cc/privacy/) names every service and what each report carries.
 
@@ -117,6 +119,8 @@ The commands are in [AGENTS.md](AGENTS.md#commands), and how to build, test and 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 
 Crosstune includes, or downloads when it's needed, these works by others. The app lists them in its language, with each license's full text as published, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt). Rebuild the app from the cloned source to replace projectM with a changed copy.
+
+Google Play services, Firebase Android SDK, and javax.inject are included in the Play build.
 
 | Work | By | License |
 | --- | --- | --- |
@@ -156,5 +160,8 @@ Crosstune includes, or downloads when it's needed, these works by others. The ap
 | [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform) | JetBrains s.r.o. and the Android Open Source Project | Apache License 2.0 |
 | [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |
 | [Reorderable](https://github.com/Calvin-LL/Reorderable) | Calvin Liang | Apache License 2.0 |
+| [Firebase Android SDK](https://github.com/firebase/firebase-android-sdk) | Google | Apache License 2.0 |
+| [javax.inject](https://github.com/javax-inject/javax-inject) | The JSR-330 Expert Group | Apache License 2.0 |
+| [Google Play services](https://developer.android.com/studio/terms.html) | Google | Android Software Development Kit License |
 
 The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) are made from [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed. The readings: words of two or more kanji, and words with one kanji followed by る or るる, that JMdict reads one way where Crosstune reads them otherwise. The words in kana: common words with い, う or お after their first kana, words with ひ, ふ or ほ there that are no old spelling, and common words with small kana for word searches. Both are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.

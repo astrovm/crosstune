@@ -55,9 +55,13 @@ class ReadingsSpeed {
     }
 
     private class Reader(root: File, parent: ClassLoader) : AutoCloseable {
+        private val task = if (File(root, "app/src/play").isDirectory) "PlayDebug" else "Debug"
+        private val variant = task.replaceFirstChar(Char::lowercaseChar)
+        private val built = File(root, "app/build/intermediates")
         private val loader = MainLoader(listOf(
-            File(root, "app/build/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
-            File(root, "app/build/intermediates/built_in_kotlinc/debugUnitTest/compileDebugUnitTestKotlin/classes"),
+            File(built, "built_in_kotlinc/$variant/compile${task}Kotlin/classes"),
+            File(built, "built_in_kotlinc/${variant}UnitTest/compile${task}UnitTestKotlin/classes"),
+            File(built, "javac/$variant/compile${task}JavaWithJavac/classes"),
             File(root, "app/src/main/resources")
         ).map { it.toURI().toURL() }.toTypedArray(), parent)
         private val type = loader.loadClass("com.astrovm.crosstune.Readings")
@@ -76,17 +80,13 @@ class ReadingsSpeed {
         override fun loadClass(name: String, resolve: Boolean): Class<*> {
             if (!name.startsWith("com.astrovm.crosstune.")) return super.loadClass(name, resolve)
             synchronized(this) {
-                val type = findLoadedClass(name) ?: try {
-                    findClass(name)
-                } catch (_: ClassNotFoundException) {
-                    super.loadClass(name, false)
-                }
+                val type = findLoadedClass(name) ?: findClass(name)
                 if (resolve) resolveClass(type)
                 return type
             }
         }
 
         override fun getResource(name: String): URL? =
-            if (name.startsWith("com/astrovm/crosstune/")) findResource(name) ?: super.getResource(name) else super.getResource(name)
+            if (name.startsWith("com/astrovm/crosstune/")) findResource(name) else super.getResource(name)
     }
 }

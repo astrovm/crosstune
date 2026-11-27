@@ -305,6 +305,8 @@ covers: file app/src/main/res/drawable/ic_bedtime.xml
 covers: file app/src/main/res/drawable/ic_bedtime_on.xml
 covers: file app/src/main/res/drawable/ic_bookmark.xml
 covers: file app/src/main/res/drawable/ic_bookmark_added.xml
+covers: file app/src/main/res/drawable/ic_cast.xml
+covers: file app/src/main/res/drawable/ic_cast_connected.xml
 covers: file app/src/main/res/drawable/ic_check.xml
 covers: file app/src/main/res/drawable/ic_chevron_right.xml
 covers: file app/src/main/res/drawable/ic_close.xml
@@ -453,6 +455,24 @@ license: Apache License 2.0
 text: apache-2.0.txt
 url: https://android.googlesource.com/platform/frameworks/support
 translate: name
+covers: maven androidx.appcompat:appcompat
+covers: maven androidx.appcompat:appcompat-resources
+covers: maven androidx.cursoradapter:cursoradapter
+covers: maven androidx.customview:customview
+covers: maven androidx.documentfile:documentfile
+covers: maven androidx.drawerlayout:drawerlayout
+covers: maven androidx.fragment:fragment
+covers: maven androidx.legacy:legacy-support-core-utils
+covers: maven androidx.loader:loader
+covers: maven androidx.localbroadcastmanager:localbroadcastmanager
+covers: maven androidx.mediarouter:mediarouter
+covers: maven androidx.palette:palette
+covers: maven androidx.print:print
+covers: maven androidx.recyclerview:recyclerview
+covers: maven androidx.tracing:tracing-android
+covers: maven androidx.vectordrawable:vectordrawable
+covers: maven androidx.vectordrawable:vectordrawable-animated
+covers: maven androidx.viewpager:viewpager
 covers: maven androidx.activity:activity
 covers: maven androidx.activity:activity-compose
 covers: maven androidx.activity:activity-ktx

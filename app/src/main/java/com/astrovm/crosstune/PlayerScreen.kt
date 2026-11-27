@@ -306,6 +306,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
+            if (state.canCast) CastButton(state, actions.onCast)
             if (!player.stationOnly) SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
             if (listed != null) IconButton(onClick = { openUpNext(false) }, modifier = Modifier.focusRequester(fromTools)) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))

@@ -143,6 +143,48 @@ jobs:
         self.assertIn('apksigcopier" compare', release["verify"])
         self.assertNotIn("apt-get", release["verify"])
 
+    def test_both_apks_use_the_reproducible_signing_flags_and_verifier(self):
+        release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            binary = root / "bin"
+            binary.mkdir()
+            calls = root / "calls"
+            fake = '#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\n[[ -z "$FAIL" || "$*" != *"$FAIL"* ]]\n'
+            for name in ("apksigner", "apksigcopier"):
+                path = binary / name
+                path.write_text(fake, encoding="utf-8")
+                path.chmod(0o755)
+            env = dict(os.environ, TAG="v1.2.3", CALLS=str(calls), FAIL="", apksigner=str(binary / "apksigner"),
+                       verifier=str(root), keystore="key", RELEASE_KEY_ALIAS="alias")
+
+            def loop(job):
+                start = job.index("          for flavor in play foss; do")
+                end = job.index("\n          done", start) + len("\n          done")
+                return job[start:end]
+
+            sign = loop(release["sign"])
+            verify = loop(release["verify"])
+            for script, paths in (
+                (sign, ("apk/play/release/app-play-release-unsigned.apk", "apk/foss/release/app-foss-release-unsigned.apk")),
+                (verify, ("rebuilt/play/release/app-play-release-unsigned.apk", "rebuilt/foss/release/app-foss-release-unsigned.apk")),
+            ):
+                calls.write_text("")
+                run = subprocess.run(["bash", "-e", "-c", script], env=env, capture_output=True, text=True, check=False)
+                self.assertEqual(0, run.returncode, run.stderr)
+                lines = calls.read_text().splitlines()
+                self.assertEqual(2, len(lines))
+                for line, path, output in zip(lines, paths, ("Crosstune-v1.2.3.apk", "Crosstune-v1.2.3-foss.apk")):
+                    self.assertIn(path, line)
+                    self.assertIn(output, line)
+                    if script == sign:
+                        for flag in ("-J-enable-native-access=ALL-UNNAMED", "--alignment-preserved", "--v1-signing-enabled false", "--v2-signing-enabled true"):
+                            self.assertIn(flag, line)
+                for path in paths:
+                    calls.write_text("")
+                    failed = subprocess.run(["bash", "-e", "-c", script], env={**env, "FAIL": path}, capture_output=True, text=True, check=False)
+                    self.assertNotEqual(0, failed.returncode, path)
+
     def test_the_signed_apk_is_compared_with_a_rebuild_from_scratch_before_the_release(self):
         release = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
         # The rebuild waits for nothing, so its build runs while the other jobs do, and it uses no cache of theirs.
@@ -151,8 +193,8 @@ jobs:
         self.assertIn("permissions: {}", rebuild)
         # It downloads its own dependencies and cannot reuse another build's outputs.
         self.assertIn("uses: ./.github/actions/jdk\n        with:\n          gradle: disabled", rebuild)
-        self.assertIn("./gradlew :app:assembleRelease --no-build-cache", rebuild)
-        self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/release/app-release-unsigned.apk", rebuild)
+        self.assertIn("./gradlew :app:assemblePlayRelease :app:assembleFossRelease --no-build-cache", rebuild)
+        self.assertIn("name: rebuilt\n          path: app/build/outputs/apk/*/release/app-*-release-unsigned.apk", rebuild)
         # The comparison takes the APK sign made and the one rebuild made, and runs none of the build's code.
         verify = release["verify"]
         self.assertIn("needs: [sign, rebuild]", verify)
@@ -161,7 +203,7 @@ jobs:
         self.assertNotIn("submodules", verify)
         self.assertIn("sparse-checkout: scripts/release/apksigcopier-requirements.txt", verify)
         self.assertIn("name: rebuilt\n          path: rebuilt", verify)
-        self.assertIn('compare "Crosstune-$TAG.apk" --unsigned rebuilt/app-release-unsigned.apk', verify)
+        self.assertIn('compare "$file" --unsigned "rebuilt/$flavor/release/app-$flavor-release-unsigned.apk"', verify)
         # No release without the comparison.
         self.assertIn("needs: [build, sign, verify]", release["publish"])
 
@@ -415,7 +457,10 @@ class PublishTest(unittest.TestCase):
     def test_the_release_keeps_the_signed_app_bundle_for_play_console(self):
         run, sent = self.publish("v2.26.0", releases("v2.25.0"))
         self.assertEqual(0, run.returncode, run.stderr)
-        self.assertEqual(["release", "create", "v2.26.0", "Crosstune-v2.26.0.apk", "Crosstune-v2.26.0.aab"], sent[:5])
+        self.assertEqual(
+            ["release", "create", "v2.26.0", "Crosstune-v2.26.0.apk", "Crosstune-v2.26.0-foss.apk", "Crosstune-v2.26.0.aab"],
+            sent[:6],
+        )
         publish = jobs((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))["publish"]
         self.assertIn("name: Crosstune-${{ env.TAG }}-play", publish)
 

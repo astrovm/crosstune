@@ -798,6 +798,7 @@ private fun BarTools(
         if (state.lyricLines.isNotEmpty()) {
             IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
         }
+        if (state.canCast) CastButton(state, actions.onCast)
         // Putting the words in time needs to know where the song is, and words timed by ear time themselves.
         if (state.lyricLines.isNotEmpty() && state.following != null && !state.lyricsTimedByEar) {
             LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)

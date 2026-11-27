@@ -84,10 +84,11 @@ jobs:
         with:
           gradle: central
 
-      # The same checks as CI, which also build the minified release APK, plus the App Bundle
-      # that Google Play needs.
+      # The same checks as CI, which also build the minified release APKs, plus the App Bundle that
+      # Google Play needs. "play" is the build Google Play and GitHub ship; "foss" is the same app with
+      # no Google code, for F-Droid, and is signed and published beside it.
       - name: Test, lint and build
-        run: ./gradlew :app:ci :app:bundleRelease --build-cache
+        run: ./gradlew :app:ci :app:bundlePlayRelease --build-cache
 
       # Each licence text in Settings → About → Licenses is still the one its work publishes, fetched
       # again; the NDK's own notice is read from the NDK the build above installed.
@@ -97,14 +98,14 @@ jobs:
       - name: Verify version metadata
         run: |
           expected="${TAG#v}"
-          actual="$(jq -r '.elements[0].versionName' app/build/outputs/apk/release/output-metadata.json)"
+          actual="$(jq -r '.elements[0].versionName' app/build/outputs/apk/play/release/output-metadata.json)"
           if [[ "$actual" != "$expected" ]]; then
             echo "::error::APK versionName is '$actual', expected '$expected'"
             exit 1
           fi
           [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+) ]]
           expected_code=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 10000 + 10#${BASH_REMATCH[3]} * 100))
-          actual_code="$(jq -r '.elements[0].versionCode' app/build/outputs/apk/release/output-metadata.json)"
+          actual_code="$(jq -r '.elements[0].versionCode' app/build/outputs/apk/play/release/output-metadata.json)"
           if [[ "$actual_code" != "$expected_code" ]]; then
             echo "::error::APK versionCode is '$actual_code', expected '$expected_code'"
             exit 1
@@ -115,8 +116,9 @@ jobs:
         with:
           name: unsigned
           path: |
-            app/build/outputs/apk/release/app-release-unsigned.apk
-            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/apk/play/release/app-play-release-unsigned.apk
+            app/build/outputs/apk/foss/release/app-foss-release-unsigned.apk
+            app/build/outputs/bundle/playRelease/app-play-release.aab
           if-no-files-found: error
 
   # Runs on a fresh runner with only the APK and App Bundle. The environment can require approval before the
@@ -160,16 +162,20 @@ jobs:
           # JDK 25 warns, and a later JDK will block, a native call from apksigner's unnamed module.
           # The JDK names this flag. apksigner passes each -J option through to java.
           # API 26 and later accept v2. The v1 ZIP metadata cannot always be reproduced by apksigcopier.
-          "$apksigner" -J-enable-native-access=ALL-UNNAMED sign \
-            --alignment-preserved \
-            --v1-signing-enabled false \
-            --v2-signing-enabled true \
-            --ks "$keystore" \
-            --ks-key-alias "$RELEASE_KEY_ALIAS" \
-            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
-            --key-pass env:RELEASE_KEY_PASSWORD \
-            --out "$out" \
-            apk/release/app-release-unsigned.apk
+          for flavor in play foss; do
+            file="Crosstune-$TAG.apk"
+            [[ "$flavor" == "foss" ]] && file="Crosstune-$TAG-foss.apk"
+            "$apksigner" -J-enable-native-access=ALL-UNNAMED sign \
+              --alignment-preserved \
+              --v1-signing-enabled false \
+              --v2-signing-enabled true \
+              --ks "$keystore" \
+              --ks-key-alias "$RELEASE_KEY_ALIAS" \
+              --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+              --key-pass env:RELEASE_KEY_PASSWORD \
+              --out "$file" \
+              "apk/$flavor/release/app-$flavor-release-unsigned.apk"
+          done
           # Google Play takes the App Bundle signed with the upload key, which is this same key.
           jarsigner \
             -keystore "$keystore" \
@@ -177,7 +183,7 @@ jobs:
             -keypass:env RELEASE_KEY_PASSWORD \
             -sigalg SHA256withRSA -digestalg SHA-256 \
             -signedjar "Crosstune-$TAG.aab" \
-            bundle/release/app-release.aab \
+            bundle/playRelease/app-play-release.aab \
             "$RELEASE_KEY_ALIAS"
           # Verify against the upload key in this keystore. A check with no keystore uses the
           # public CA store, and warns because an Android upload key is self-signed.
@@ -203,11 +209,13 @@ jobs:
           fi
           echo "cert_sha256=$cert_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Upload signed APK
+      - name: Upload signed APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Crosstune-${{ env.TAG }}
-          path: Crosstune-${{ env.TAG }}.apk
+          path: |
+            Crosstune-${{ env.TAG }}.apk
+            Crosstune-${{ env.TAG }}-foss.apk
           if-no-files-found: error
 
       # For Google Play, signed once, here, with no keystore where the Play key is. The GitHub release keeps it
@@ -235,14 +243,14 @@ jobs:
         with:
           gradle: disabled
 
-      - name: Build unsigned APK
-        run: ./gradlew :app:assembleRelease --no-build-cache
+      - name: Build unsigned APKs
+        run: ./gradlew :app:assemblePlayRelease :app:assembleFossRelease --no-build-cache
 
-      - name: Upload the rebuilt APK
+      - name: Upload the rebuilt APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rebuilt
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: app/build/outputs/apk/*/release/app-*-release-unsigned.apk
           if-no-files-found: error
 
   # Checks that the signed APK's signature fits the rebuild. If it doesn't, F-Droid would skip this version.
@@ -259,7 +267,7 @@ jobs:
           sparse-checkout: scripts/release/apksigcopier-requirements.txt
           sparse-checkout-cone-mode: false
 
-      - name: Download the rebuilt APK
+      - name: Download the rebuilt APKs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rebuilt
@@ -287,10 +295,14 @@ jobs:
           EOF
           chmod +x "$bindir/apksigner"
           PATH="$bindir:$tools:$PATH"
-          if ! "$verifier/bin/apksigcopier" compare "Crosstune-$TAG.apk" --unsigned rebuilt/app-release-unsigned.apk; then
-            echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
-            exit 1
-          fi
+          for flavor in play foss; do
+            file="Crosstune-$TAG.apk"
+            [[ "$flavor" == "foss" ]] && file="Crosstune-$TAG-foss.apk"
+            if ! "$verifier/bin/apksigcopier" compare "$file" --unsigned "rebuilt/$flavor/release/app-$flavor-release-unsigned.apk"; then
+              echo "::error::The signed $flavor APK doesn't match a fresh build, so F-Droid can't ship it"
+              exit 1
+            fi
+          done
 
   publish:
     needs: [build, sign, verify]
@@ -365,7 +377,7 @@ jobs:
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
           fi
-          gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG.aab" "${args[@]}"
+          gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG-foss.apk" "Crosstune-$TAG.aab" "${args[@]}"
 
   # Sends the signed App Bundle and its release notes to Google Play's internal testing, which Google doesn't
   # review. Production is a step of its own, promote.yml, which takes the store listing along: one review a

@@ -17,9 +17,9 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Zamanlı sözler: müzik uygulamanı takip eder ya da seninle birlikte dinler, diğer uygulamaların üzerinde yüzer ve arkada MilkDrop görselleriyle akar. Yanlış söz, zamanlama ya da okunuş mu var? Sözlerden ya da kelimeden tek dokunuşla bildir: yalnızca geliştiriciye gider.</li>
 <li>Kana, pinyin, romaji ve çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun. Sırası gelenleri her gün hatırlatır.</li>
 <li>Şarkıları baştan sona çevirmek, satırları açıklamak, öğrenmeye değer kelimeleri bulmak ve şarkıları tarif ederek aramak için ücretli ChatGPT planınla giriş yap.</li>
-<li>Android TV'de de kumandayla çalışır.</li>
+<li>Android TV'de kumanda ve Cast.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>
 
 <b>Gizlilik</b>
-Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez; sözler şarkıyla cihazınızda eşleştirilir. Bir şarkının adı ve sanatçısı, onu bulan ve açan müzik servislerine ve söz, akor ve çeviri sitelerine gider. ChatGPT ile girişte yapay zekâ şarkıyı, sözlerini ve sorduklarınızı OpenAI'ye gönderir. Crosstune'un tek sunucusu gönderdiğiniz sorun bildirimlerini ve açarsanız otomatik olanları alır. IP adresi saklamaz ve her bildirimi 180 gün sonra siler. Tüm servisler ve her bildirimin içeriği: https://crosstune.cc/tr/privacy/
+Hesap, analiz veya reklam yok. Yayın yaparken Google Cast şarkı bilgilerini ve oynatma komutlarını televizyonunuza gönderir. Geçmiş cihazınızda kalır. Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez; sözler şarkıyla cihazınızda eşleştirilir. Bir şarkının adı ve sanatçısı, onu bulan ve açan müzik servislerine ve söz, akor ve çeviri sitelerine gider. ChatGPT ile girişte yapay zekâ şarkıyı, sözlerini ve sorduklarınızı OpenAI'ye gönderir. Crosstune'un tek sunucusu gönderdiğiniz sorun bildirimlerini ve açarsanız otomatik olanları alır. IP adresi saklamaz ve her bildirimi 180 gün sonra siler. Tüm servisler ve her bildirimin içeriği: https://crosstune.cc/tr/privacy/

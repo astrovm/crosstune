@@ -147,6 +147,7 @@ jobs:
           bash scripts/device-check-build.test.sh
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
+          node scripts/test-site-apk.cjs
           node --test "report/*.test.mjs"
 
   # What the release, promote and store listing workflows send to Google Play: .github/play/play.sh with the real
@@ -224,13 +225,13 @@ jobs:
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
-        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+        run: ./gradlew :app:testPlayDebugUnitTest :app:testFossDebugUnitTest :pitest-changed-lines:test :app:koverLogPlayDebug :app:koverXmlReportPlayDebug :app:koverVerifyPlayDebug --build-cache --configuration-cache
 
       # Lint, release builds and PIT resolve artifacts the unit tests do not. Run the real tasks so
       # every job starts from their dependencies too; a dry run would not download them.
       - name: Resolve the other jobs' dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
-        run: ./gradlew :app:lintDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        run: ./gradlew :app:lintPlayDebug :app:lintFossDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundlePlayRelease :app:cachePitestDependencies --build-cache --configuration-cache
 
       # The cache is immutable. An exact hit needs no save; a new build-file hash gets a new key.
       - name: Save Gradle dependencies
@@ -252,7 +253,7 @@ jobs:
           # processes, and which one ran longest, can be read from a run.
           path: |
             app/build/reports/tests/
-            app/build/test-results/testDebugUnitTest/
+            app/build/test-results/testPlayDebugUnitTest/
             app/build/reports/kover/
           retention-days: 14
           if-no-files-found: warn
@@ -305,7 +306,7 @@ jobs:
 
       - name: Every case of each fuzz
         run: >-
-          ./gradlew :app:testDebugUnitTest -PfuzzFull --build-cache --configuration-cache
+          ./gradlew :app:testPlayDebugUnitTest -PfuzzFull --build-cache --configuration-cache
           --tests com.astrovm.crosstune.TitlesAgainstMainTest --tests com.astrovm.crosstune.PatternLettersTest
           --tests com.astrovm.crosstune.CutTitleTest --tests com.astrovm.crosstune.LinearPatternsTest
           --tests com.astrovm.crosstune.ArtistBeforeTest
@@ -316,7 +317,7 @@ jobs:
         with:
           name: fuzz
           path: |
-            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/tests/testPlayDebugUnitTest/
             app/build/titles-differences.tsv
           retention-days: 14
           if-no-files-found: warn
@@ -381,7 +382,7 @@ jobs:
       - uses: ./.github/actions/jdk
 
       - name: Lint
-        run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
+        run: ./gradlew :app:lintPlayDebug :app:lintFossDebug :app:detekt --build-cache --configuration-cache
 
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
@@ -435,7 +436,8 @@ jobs:
         with:
           name: lint-report
           path: |
-            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-playDebug.html
+            app/build/reports/lint-results-fossDebug.html
             app/build/reports/detekt/
           retention-days: 14
           if-no-files-found: warn
@@ -478,7 +480,7 @@ jobs:
           install: binary
 
       - name: Build
-        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --build-cache --configuration-cache
+        run: ./gradlew :app:assemblePlayDebug :app:assemblePlayRelease :app:assembleFossRelease :app:notices --build-cache --configuration-cache
         env:
           # CMake reads these to put ccache in front of the NDK's compilers. Empty, it uses none.
           CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
@@ -493,7 +495,7 @@ jobs:
       # The release runs the full checks and bundle; save their Central dependencies for it on main.
       - name: Resolve release dependencies
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
-        run: ./gradlew :app:ci :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        run: ./gradlew :app:ci :app:bundlePlayRelease :app:cachePitestDependencies --build-cache --configuration-cache
         env:
           CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
           CMAKE_CXX_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}

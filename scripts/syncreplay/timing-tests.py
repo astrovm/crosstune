@@ -27,7 +27,7 @@ def junit_jars():
         if not target.exists():
             source = next((jar for cache in caches if cache.exists() for jar in cache.rglob(name)), None)
             if source is None:
-                raise SystemExit(f'No {name} in Gradle caches. Run scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest first.')
+                raise SystemExit(f'No {name} in Gradle caches. Run scripts/gradle-box/gradle-box.sh :app:testPlayDebugUnitTest first.')
             shutil.copy(source, target)
         jars.append(target)
     return jars

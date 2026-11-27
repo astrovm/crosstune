@@ -35,7 +35,9 @@ main() {
     tests=$tree/app/src/test/java/com/astrovm/crosstune
     cp "$here/app/src/test/java/com/astrovm/crosstune/$cases" "$here/scripts/$folder/$writer.kt" "$tests/"
     # The box of that checkout, which mounts it; only the writer runs, so main's own tests stay out of it.
-    (cd "$tree" && GRADLE_BOX_MEMORY=${GRADLE_BOX_MEMORY:-7} nice -n 10 scripts/gradle-box/gradle-box.sh --max-workers=2 :app:testDebugUnitTest --tests "*.$writer")
+    local variant=Debug
+    [[ ! -d $tree/app/src/play ]] || variant=PlayDebug
+    (cd "$tree" && GRADLE_BOX_MEMORY=${GRADLE_BOX_MEMORY:-7} nice -n 10 scripts/gradle-box/gradle-box.sh --max-workers=2 ":app:test${variant}UnitTest" --tests "*.$writer")
     golden=app/src/test/resources/$kind-golden.tsv.gz
     gzip -9n < "$tree/app/build/$kind-golden.tsv" > "$here/$golden"
     echo "Wrote $golden from $sha: $(gzip -dc "$here/$golden" | wc -l) lines"

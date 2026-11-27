@@ -78,22 +78,30 @@ def box(checkout, *tasks):
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", *tasks], cwd=checkout, env=env, check=True)
 
 
+def debug_variant(checkout):
+    """The Cast build has a Play flavor. Older commits had one debug APK."""
+    build = checkout / "app/build.gradle.kts"
+    return "PlayDebug" if build.is_file() and 'create("play")' in build.read_text() else "Debug"
+
+
 def on_jvm(checkout):
-    box(checkout, ":app:testDebugUnitTest", "--tests", "*WriteTitlesBaseline")
+    box(checkout, f":app:test{debug_variant(checkout)}UnitTest", "--tests", "*WriteTitlesBaseline")
     return checkout / "app/build/titles-baseline.tsv.gz"
 
 
 def on_emulator(checkout, serial, count, long=None):
     serial = regextable.emulator(serial)
+    task = debug_variant(checkout)
+    variant = task[0].lower() + task[1:]
     # The app supplies its actual runtime dependencies, including HttpUrl for shared links.
-    box(checkout, ":app:assembleDebug")
-    box(checkout, ":app:compileDebugUnitTestKotlin")
+    box(checkout, f":app:assemble{task}")
+    box(checkout, f":app:compile{task}UnitTestKotlin")
     built = checkout / "app/build/intermediates/built_in_kotlinc"
-    tests = built / "debugUnitTest/compileDebugUnitTestKotlin/classes"
+    tests = built / f"{variant}UnitTest/compile{task}UnitTestKotlin/classes"
     work = checkout.parent
     classes = work / "classes"
     (classes / "com/astrovm/crosstune").mkdir(parents=True)
-    app_classes = built / "debug/compileDebugKotlin/classes"
+    app_classes = built / f"{variant}/compile{task}Kotlin/classes"
     shutil.make_archive(str(work / "app-classes"), "zip", app_classes)
     for name in TEST_CLASSES:
         for found in (tests / "com/astrovm/crosstune").glob(f"{name}*.class"):
@@ -104,9 +112,10 @@ def on_emulator(checkout, serial, count, long=None):
     tools = max((regextable.SDK / "build-tools").iterdir())
     platform = max((regextable.SDK / "platforms").iterdir()) / "android.jar"
     # The app's resource ids, which the readers' enums name.
-    ids = next(checkout.glob("app/build/intermediates/*r_class_jar/debug/*/R.jar"))
+    ids = next(checkout.glob(f"app/build/intermediates/*r_class_jar/{variant}/*/R.jar"))
     regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), "--classpath", str(work / "app-classes.zip"), "--classpath", str(ids), "--classpath", str(stdlib), str(work / "classes.zip"))
-    app = checkout / "app/build/outputs/apk/debug/app-debug.apk"
+    apk = "play/debug/app-play-debug.apk" if task == "PlayDebug" else "debug/app-debug.apk"
+    app = checkout / "app/build/outputs/apk" / apk
     try:
         regextable.adb("-s", serial, "push", str(app), DEVICE_APP)
         regextable.adb("-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)

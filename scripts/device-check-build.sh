@@ -57,16 +57,24 @@ main() {
         mkdir -p "$tree/$(dirname "$source")"
         cp "$source" "$tree/$source"
     fi
+    local variant=Debug flavor_path='' apk_name=app-debug
+    if [[ -d $tree/app/src/play ]]; then
+        variant=PlayDebug
+        flavor_path=play/
+        apk_name=app-play-debug
+    fi
     (
         cd "$tree"
-        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebug
-        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh :app:assembleDebugAndroidTest "-PcrosstuneTestRunner=com.astrovm.crosstune.$runner"
+        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh ":app:assemble$variant"
+        nice -n 10 env GRADLE_BOX_MEMORY=7 scripts/gradle-box/gradle-box.sh ":app:assemble${variant}AndroidTest" "-PcrosstuneTestRunner=com.astrovm.crosstune.$runner"
     )
     [[ $(git rev-parse HEAD) == "$head" ]] || { echo "HEAD moved during the build" >&2; return 1; }
     [[ $(git -C "$tree" rev-parse HEAD) == "$sha" ]] || { echo "The commit built moved during the build" >&2; return 1; }
     [[ $dirty == true || -z $(git status --porcelain) ]] || { echo "The source changed during the build" >&2; return 1; }
     mkdir -p "$out"
-    cp "$tree/app/build/outputs/apk/debug/app-debug.apk" "$tree/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" "$out/"
+    local outputs=$tree/app/build/outputs/apk
+    cp "$outputs/${flavor_path}debug/$apk_name.apk" "$out/${apks[0]}"
+    cp "$outputs/androidTest/${flavor_path}debug/$apk_name-androidTest.apk" "$out/${apks[1]}"
     {
         echo "$sha"
         [[ $sha == "$head" ]] || echo "with $source from $head, SHA-256 $(sum256 "$source" | cut -d' ' -f1)"

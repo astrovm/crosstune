@@ -25,7 +25,8 @@ class UpdatesTest {
     private val prefs = app.getSharedPreferences("updates_test", Context.MODE_PRIVATE)
     private var clock = 1_000_000_000L
 
-    private fun checker(installed: String = "2.8.16") = UpdateChecker(fake.client(), prefs, installed, now = { clock })
+    private fun checker(installed: String = "2.8.16", flavor: String = "play") =
+        UpdateChecker(fake.client(), prefs, installed, now = { clock }, flavor = flavor)
 
     /** GitHub's latest release, [tag], with [assets] by name. */
     private fun release(tag: String, vararg assets: String) {
@@ -40,6 +41,53 @@ class UpdatesTest {
         release("v2.9.0", "notes.txt", "Crosstune-v2.9.0.apk")
         assertEquals(Update("2.9.0", "https://github.com/astrovm/crosstune/releases/download/v2.9.0/Crosstune-v2.9.0.apk"), checker().newer())
         assertEquals(listOf("https://api.github.com/repos/astrovm/crosstune/releases/latest"), fake.requestedUrls)
+    }
+
+    @Test
+    fun eachFlavorSelectsItsOwnApkInEitherOrder() = runBlocking {
+        val play = "Crosstune-v2.9.0.apk"
+        val foss = "Crosstune-v2.9.0-foss.apk"
+        for (assets in listOf(arrayOf(foss, play), arrayOf(play, foss))) {
+            for ((flavor, name) in listOf("play" to play, "foss" to foss)) {
+                prefs.edit().clear().commit()
+                release("v2.9.0", *assets)
+                val url = "https://github.com/astrovm/crosstune/releases/download/v2.9.0/$name"
+                assertEquals(url, checker(flavor = flavor).newer()?.apkUrl)
+                fake.handler = { throw java.io.IOException("offline") }
+                assertEquals(url, checker(flavor = flavor).newer()?.apkUrl)
+            }
+        }
+    }
+
+    @Test
+    fun wrongMissingOrStaleApksAreNotUpdates() = runBlocking {
+        for ((flavor, name) in listOf("play" to "Crosstune-v2.9.0-foss.apk", "foss" to "Crosstune-v2.9.0.apk")) {
+            release("v2.9.0", name, "Crosstune-v2.8.0.apk")
+            assertNull(checker(flavor = flavor).newer())
+            prefs.edit().putLong("update_checked", clock).putString("update_version", "2.9.0")
+                .putString("update_apk", "https://github.com/astrovm/crosstune/releases/download/v2.9.0/$name").commit()
+            assertNull(checker(flavor = flavor).newer())
+            prefs.edit().clear().commit()
+        }
+        prefs.edit().putLong("update_checked", clock).putString("update_version", "2.10.0")
+            .putString("update_apk", "https://github.com/astrovm/crosstune/releases/download/v2.9.0/Crosstune-v2.9.0.apk").commit()
+        assertNull(checker().newer())
+    }
+
+    @Test
+    fun anApkAddressMustMatchItsAssetAndTag() = runBlocking {
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"tag_name":"v2.9.0","assets":[{"name":"Crosstune-v2.9.0.apk","browser_download_url":"https://github.com/astrovm/crosstune/releases/download/v2.9.0/Crosstune-v2.9.0-foss.apk"}]}""")
+        }
+        assertNull(checker().newer())
+    }
+
+    @Test
+    fun aTagWithoutVAlsoKeepsItsApk() = runBlocking {
+        release("2.9.0", "Crosstune-2.9.0.apk")
+        val url = "https://github.com/astrovm/crosstune/releases/download/2.9.0/Crosstune-2.9.0.apk"
+        assertEquals(url, checker().newer()?.apkUrl)
+        assertEquals(url, checker().newer()?.apkUrl)
     }
 
     @Test
@@ -183,7 +231,7 @@ class UpdatesTest {
 
     @Test
     fun anApkWithNoDownloadAddressIsNoUpdate() = runBlocking {
-        fake.handler = { request -> FakeSpotify.html(request, """{"tag_name":"v2.9.0","assets":[{"name":"Crosstune.apk"}]}""") }
+        fake.handler = { request -> FakeSpotify.html(request, """{"tag_name":"v2.9.0","assets":[{"name":"Crosstune-v2.9.0.apk"}]}""") }
         assertNull(checker().newer())
     }
 

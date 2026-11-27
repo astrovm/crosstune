@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """The licence texts in Settings → About → Licenses, copied from where each work publishes it.
 
-Each line of app/src/test/resources/com/astrovm/crosstune/notice-texts.txt names a text in
-app/src/main/resources/com/astrovm/crosstune/notices/, its SHA-256 and its source:
+Each line of the notice-texts, jmdict-notice-texts and notice-texts-play manifests names a text in
+app/src/main/resources/com/astrovm/crosstune/notices/ or app/src/play/resources/com/astrovm/crosstune/notices/,
+its SHA-256 and its source:
 
   PATH                 a file in this checkout, such as a submodule's LICENSE, at the commit it's on
   ndk:PATH             a file in the NDK that app/build.gradle.kts names, in the Android SDK
@@ -44,6 +45,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "app/src/test/resources/com/astrovm/crosstune/notice-texts.txt"
 JMDICT_MANIFEST = MANIFEST.with_name("jmdict-notice-texts.txt")
 TEXTS = ROOT / "app/src/main/resources/com/astrovm/crosstune/notices"
+PLAY_TEXTS = ROOT / "app/src/play/resources/com/astrovm/crosstune/notices"
+PLAY_MANIFEST = MANIFEST.with_name("notice-texts-play.txt")
 BLOCKS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ol", "ul", "dl", "dt", "dd", "table", "tr", "center", "pre", "blockquote"}
 
 
@@ -145,7 +148,7 @@ def source_bytes(source: str, validate=None) -> bytes:
     elif "!" in source:
         url, inner = source.split("!", 1)
         archive = download(url)
-        if url.endswith((".zip", ".jar")):
+        if url.endswith((".zip", ".jar", ".aar")):
             data = zipfile.ZipFile(io.BytesIO(archive)).read(inner.lstrip("/"))
         else:
             with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
@@ -243,7 +246,7 @@ def unreachable(error):
     return isinstance(error, (TimeoutError, ConnectionError))
 
 
-def fetch_texts(manifest, selected, keep_if_unreachable=False):
+def fetch_texts(manifest, selected, folder, keep_if_unreachable=False):
     # Download all selected texts first, so a failed download cannot change half the snapshot.
     texts = {}
     for name, _, source in selected:
@@ -251,7 +254,7 @@ def fetch_texts(manifest, selected, keep_if_unreachable=False):
             def validate(data, name=name):
                 try:
                     check_jmdict_page(name, data)
-                    previous = (TEXTS / name).read_bytes()
+                    previous = (folder / name).read_bytes()
                     if len(data) < len(previous):
                         sys.exit(f"EDRDG content in {name} is shorter than the snapshot. Review it before replacing the snapshot.")
                     if name == "edrdg-licence.txt":
@@ -278,17 +281,17 @@ def fetch_texts(manifest, selected, keep_if_unreachable=False):
         texts[name] = data
     lines = manifest.read_text().splitlines()
     for name, data in texts.items():
-        (TEXTS / name).write_bytes(data)
+        (folder / name).write_bytes(data)
         digest = hashlib.sha256(data).hexdigest()
         lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", line) for line in lines]
         print(f"wrote {name} {digest[:12]}")
     manifest.write_text("\n".join(lines) + "\n")
 
 
-def check_texts(selected, snapshot):
+def check_texts(selected, snapshot, folder):
     passed = True
     for name, digest, source in selected:
-        bundled = hashlib.sha256((TEXTS / name).read_bytes()).hexdigest()
+        bundled = hashlib.sha256((folder / name).read_bytes()).hexdigest()
         expected = digest if snapshot else hashlib.sha256(source_bytes(source)).hexdigest()
         ok = bundled == digest == expected
         passed &= ok
@@ -304,17 +307,19 @@ def main(argv):
         sys.exit(f"{command} takes no {' '.join(sorted(options))}")
     keep_if_unreachable = bool(options)
     only = set(argv[2:]) - options
-    manifests = [JMDICT_MANIFEST] if command == "fetch-jmdict" else [MANIFEST, JMDICT_MANIFEST]
+    manifests = [(JMDICT_MANIFEST, TEXTS)] if command == "fetch-jmdict" else [
+        (MANIFEST, TEXTS), (JMDICT_MANIFEST, TEXTS), (PLAY_MANIFEST, PLAY_TEXTS),
+    ]
     passed = True
-    for manifest in manifests:
+    for manifest, folder in manifests:
         selected = [entry for entry in entries(manifest) if not only or entry[0] in only]
         if not selected:
             continue
         try:
             if command in ("fetch", "fetch-jmdict"):
-                fetch_texts(manifest, selected, keep_if_unreachable)
+                fetch_texts(manifest, selected, folder, keep_if_unreachable)
             else:
-                passed &= check_texts(selected, snapshot=command == "check-release" and manifest == JMDICT_MANIFEST)
+                passed &= check_texts(selected, snapshot=command == "check-release" and manifest == JMDICT_MANIFEST, folder=folder)
         except FileNotFoundError as missing:
             sys.exit(f"No {missing.filename}")
     return 0 if passed else 1

@@ -15,12 +15,15 @@ cat > "$repo/scripts/gradle-box/gradle-box.sh" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ -z ${FAKE_FAIL:-} ]] || exit 1
-if [[ $1 == :app:assembleDebug ]]; then
-    mkdir -p app/build/outputs/apk/debug
-    { echo "app $*"; cat app/code.txt 2>/dev/null || true; } > app/build/outputs/apk/debug/app-debug.apk
+variant=Debug folder='' apk=app-debug
+if [[ -d app/src/play ]]; then variant=PlayDebug; folder=play/; apk=app-play-debug; fi
+if [[ $1 == ":app:assemble$variant" ]]; then
+    mkdir -p "app/build/outputs/apk/${folder}debug"
+    { echo "app $*"; cat app/code.txt 2>/dev/null || true; } > "app/build/outputs/apk/${folder}debug/$apk.apk"
 else
-    mkdir -p app/build/outputs/apk/androidTest/debug
-    { echo "runner $*"; cat app/src/androidTest/java/com/astrovm/crosstune/*.kt 2>/dev/null || true; } > app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+    [[ $1 == ":app:assemble${variant}AndroidTest" ]]
+    mkdir -p "app/build/outputs/apk/androidTest/${folder}debug"
+    { echo "runner $*"; cat app/src/androidTest/java/com/astrovm/crosstune/*.kt 2>/dev/null || true; } > "app/build/outputs/apk/androidTest/${folder}debug/$apk-androidTest.apk"
     if [[ -n ${FAKE_EDIT:-} ]]; then echo edited > "$FAKE_EDIT"; fi
 fi
 FAKE
@@ -123,5 +126,11 @@ grep -q "No commit nowhere" "$work/out" || fail "the unknown commit isn't named"
 [[ -z $(ls -A "$repo/build/namescheck-main") ]] || fail "an unknown commit left an earlier build's files: $(ls "$repo/build/namescheck-main")"
 if build --at "$head" OfflineChordCheck chordcheck-main; then fail "a runner that isn't here built"; fi
 grep -q "No app/src/androidTest/java/com/astrovm/crosstune/OfflineChordCheck.kt" "$work/out" || fail "the missing runner isn't named"
+
+# The Play build keeps the device scripts' published APK names.
+mkdir -p "$repo/app/src/play"
+build PracticeClockCheck castclock || fail "the Play APKs did not build"
+grep -qx 'app :app:assemblePlayDebug' "$repo/build/castclock/app-debug.apk" || fail "expected the Play app"
+grep -q 'runner :app:assemblePlayDebugAndroidTest ' "$repo/build/castclock/app-debug-androidTest.apk" || fail "expected the Play runner"
 
 echo "device-check-build.sh: all cases pass"

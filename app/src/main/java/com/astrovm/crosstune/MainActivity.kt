@@ -173,6 +173,7 @@ class MainActivity : ComponentActivity() {
                     playQueue = queue,
                     queueOrder = order,
                     sleepTimer = sleepTimer(applicationContext),
+                    cast = castSender(applicationContext),
                     qobuzNumbers = qobuzNumbers(applicationContext, matcher),
                     offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher),
                     newLinePlayer = { linePlayerFactory(applicationContext) },
@@ -423,6 +424,30 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var linePlayerFactory: (Context) -> LinePlayer = ::YouTubeLinePlayer
 
+        /** The TVs the phone casts to; tests have fakes, and a build without Google Play Services has none. */
+        @VisibleForTesting
+        internal var castSenderFactory: (Context) -> CastSender = ::platformCastSender
+
+        /** What a phone casting to this TV is answered by. */
+        @VisibleForTesting
+        internal var castReceiverFactory: (Context) -> CastReceiver = ::platformCastReceiver
+
+        private var castSender: Pair<Context, CastSender>? = null
+        private var castReceiver: Pair<Context, CastReceiver>? = null
+
+        /** One for the whole app, as Google Cast keeps one session however the screen is made again. */
+        internal fun castSender(context: Context): CastSender {
+            val app = context.applicationContext
+            castSender?.takeIf { it.first === app }?.let { return it.second }
+            return castSenderFactory(app).also { castSender = app to it }
+        }
+
+        internal fun castReceiver(context: Context): CastReceiver {
+            val app = context.applicationContext
+            castReceiver?.takeIf { it.first === app }?.let { return it.second }
+            return castReceiverFactory(app).also { castReceiver = app to it }
+        }
+
         /** Crosstune's own queue, and the app it's for. */
         private var playQueue: Pair<Context, PlayQueue>? = null
 
@@ -617,6 +642,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         chordWikiHost.attach(this, chordWikiFactory)
         enableEdgeToEdge()
+        // Before the intent is handled, as it may be a phone's cast, which only a receiver that has started takes.
+        // A TV answers the phones that cast to it, and tells them what it plays.
+        if (phoneFactory(applicationContext) == Phone.TV) {
+            viewModel.startCastReceiver(castReceiver(applicationContext))
+        }
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
         savedInstanceState?.getString(STATE_MICROPHONE_FOR)?.let { kept -> MicrophoneFor.entries.firstOrNull { it.name == kept } }?.let { afterMicrophone = it }
         val incomingLink = savedInstanceState?.getString(STATE_INCOMING_LINK)
@@ -671,6 +701,8 @@ class MainActivity : ComponentActivity() {
                         is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect) else effect.qobuz?.started(false)
                         is Effect.Show -> show(effect)
                         Effect.RecognizeElsewhere -> recognizers.firstOrNull { !it.listensHere }?.let { tryStartActivity(it.intent) }
+                        Effect.ChooseTv -> castSender(applicationContext).chooseTv(this@MainActivity)
+                        Effect.ShowTv -> castSender(applicationContext).showTv(this@MainActivity)
                         is Effect.Share -> {
                             startActivity(shareChooser(effect.url))
                             finish()
@@ -734,6 +766,7 @@ class MainActivity : ComponentActivity() {
         onPlayerOpenApp = viewModel::openPlayerApp,
         onPlayerOpenWith = viewModel::playerOpenWith,
         onPlayerMenu = viewModel::playerMenu,
+        onCast = viewModel::cast,
         onPlayerPlayPause = viewModel::playerPlayPause,
         onPlayerSkip = viewModel::playerSkip,
         onPlayerShuffle = viewModel::playerShuffle,
@@ -1199,9 +1232,15 @@ class MainActivity : ComponentActivity() {
         if (state.handlingIncomingLink) outState.putString(STATE_INCOMING_LINK, state.linkText)
     }
 
+    /**
+     * Reopening from Recents replays the original link; the app is shown instead of opening it again. And a
+     * phone's cast that opened Crosstune brings its song through Google Cast, not in the intent.
+     */
+    private fun isNotALink(intent: Intent) =
+        intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0 || castReceiver(applicationContext).handle(intent)
+
     private fun handleIntent(intent: Intent) {
-        // Reopening from Recents replays the original link; show the app instead of opening it again.
-        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        if (isNotALink(intent)) return
 
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with
