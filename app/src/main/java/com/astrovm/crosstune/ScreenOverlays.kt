@@ -1,8 +1,6 @@
 package com.astrovm.crosstune
 
 import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -99,9 +97,7 @@ internal class Overlay(val content: State<@Composable () -> Unit>, val opener: F
 
 /** Whether this is drawn in an activity's window, over which a dialog or sheet can open a window of its own. */
 @Composable
-internal fun inAnActivity(): Boolean = LocalContext.current.activity() != null
-
-private tailrec fun Context.activity(): Activity? = if (this is Activity) this else if (this is ContextWrapper) baseContext.activity() else null
+internal fun inAnActivity(): Boolean = LocalContext.current is Activity
 
 /** Draws [content], the screen, with room over it in [overlays] for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
 @Composable
