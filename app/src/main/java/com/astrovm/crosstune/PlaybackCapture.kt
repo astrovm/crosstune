@@ -130,6 +130,8 @@ private object Projections {
             app = context.applicationContext
             main.removeCallbacks(end)
             projection?.let { users++; return it }
+            // Asking opens a screen, and an app that only plays in front stops once anything opens over it: under the cover, it isn't asked.
+            if (FloatingLyricsService.covering) return null
             // Refused moments ago, it's not asked again for each listen.
             refusedAt?.let { if (SystemClock.elapsedRealtime() - it < RETRY_MS) return null }
             asking ?: CountDownLatch(1).also {
