@@ -162,6 +162,44 @@ class YouTubeMusicAdEndTest {
         assertEquals(item(20_000), onTime.heard(item(40_000), PlaybackClock(500, 31_900), 31_900, 31_900))
     }
 
+    @Test
+    fun aResetWithAnUnknownQueueIdStillEndsTheSameItemsAd() {
+        // Issue #1291: item 26 plays to its 20 s end; its reset says no queue ID, then its length changes, still on 26.
+        val history = YouTubeMusicAdEnd()
+        val old = item(20_000, 26)
+        val next = item(40_000, 26)
+        assertNull(history.heard(old, PlaybackClock(0, 10_000), 10_000, 10_000))
+        assertNull(history.heard(old.copy(queueId = null), PlaybackClock(0, 30_000), 30_000, 30_000))
+        assertNull(history.heard(next, PlaybackClock(0, 30_000), 30_020, 30_020))
+        assertTrue(history.waitsFor(next))
+        // The second start, half a second after the reset, confirms it, as the one with the same ID throughout would.
+        assertEquals(old, history.heard(next, PlaybackClock(0, 30_500), 30_500, 30_500))
+    }
+
+    @Test
+    fun aLengthChangeExactlyAClockStepAheadStillContinuesThePlay() {
+        // Issue #1291: the new length comes at the old end, said exactly SAME_CLOCK_MS ahead of where the old play got to.
+        val history = YouTubeMusicAdEnd()
+        val old = item(20_000)
+        val next = item(40_000)
+        assertNull(history.heard(old, PlaybackClock(0, 10_000), 10_000, 10_000))
+        assertNull(history.heard(next, PlaybackClock(20_000 + SAME_CLOCK_MS, 30_000), 30_000, 30_000))
+        assertNull(history.heard(next, PlaybackClock(0, 30_100), 30_100, 30_100))
+        assertTrue(history.waitsFor(next))
+        assertEquals(old, history.heard(next, PlaybackClock(0, 30_500), 30_500, 30_500))
+    }
+
+    @Test
+    fun aPositionAnAdsLengthIntoTheNewItemIsNoReset() {
+        // Issue #1291: said 1.5 s in, its start projected back to the old end, it's past where a reset could be.
+        val history = YouTubeMusicAdEnd()
+        val old = item(20_000)
+        val next = item(40_000)
+        assertNull(history.heard(old, PlaybackClock(0, 10_000), 10_000, 10_000))
+        assertNull(history.heard(next, PlaybackClock(AD_END_MS, 30_000 + AD_END_MS), 30_000 + AD_END_MS, 30_000 + AD_END_MS))
+        assertFalse(history.waitsFor(next))
+    }
+
     private fun pendingRestart() = YouTubeMusicAdEnd().apply {
         heard(item(20_000), PlaybackClock(0, 10_000), 10_000, 10_000)
         heard(item(20_000), PlaybackClock(0, 30_000), 30_000, 30_000)

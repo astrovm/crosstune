@@ -592,7 +592,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // On the move to another screen, the one left has nothing to wait for.
     LaunchedEffect(moving.targetState) { if (moving.targetState != waiting) waiting = null }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalMainFocus provides focuses.of(Screen.MAIN)) {
-    WithOverlays(inside = state.phone == Phone.TV, overlays) {
+    // Covering another app, the screen is in a service's window, where a dialog's own window would crash Crosstune.
+    WithOverlays(inside = state.phone == Phone.TV || !inAnActivity(), overlays) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
