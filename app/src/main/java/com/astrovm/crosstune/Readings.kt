@@ -117,8 +117,9 @@ internal object Readings {
      * 28 to keep commands with an object or a person subject as verbs.
      * 29 to keep object commands before punctuation followed by another clause.
      * 30 to keep object commands across pauses and before spaces.
+     * 31 to look up かわええ as かわいい, and read 頭がいてえ as 頭 が いてえ with UniDic.
      */
-    const val VERSION = 30
+    const val VERSION = 31
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
