@@ -949,7 +949,7 @@ internal class ExactMatcher(
         }
         song?.let { return Answer(watchUrl + it.id, lasting = available.everyStore) }
         matchingVideo(metadata, rows, videoRows, available, recording, watchUrl, disco)?.let { return it }
-        namedFallback(exact, available, metadata, disco)?.let { return Answer(it.first, lasting = available.everyStore) }
+        namedFallback(exact, rows, available, metadata, disco)?.let { return Answer(it.first, lasting = available.everyStore) }
         val localize = if (available.complete) null else suspend {
             localizedSong(metadata, items, available, recording, disco)?.let { watchUrl + it }
         }
@@ -973,13 +973,19 @@ internal class ExactMatcher(
     /**
      * The first row of the song's exact name when none is as long as the link, as main opened: a radio edit's link
      * finds only the album's take. A duration is no edition name, but a live recording is another: not when the link
-     * or the catalog's edition as long as it says live and the row doesn't, or the other way round.
+     * or the catalog's edition as long as it says live and the row doesn't, or the other way round; nor when the
+     * artist's live take of the song is as long as the link, and so is the link's take.
      */
-    private fun namedFallback(exact: List<Pair<String, Row>>, names: Names, metadata: MusicMetadata, disco: DiscoRequest): Pair<String, Row>? {
+    private fun namedFallback(
+        exact: List<Pair<String, Row>>, rows: List<Row>, names: Names, metadata: MusicMetadata, disco: DiscoRequest
+    ): Pair<String, Row>? {
         val sourceLength = metadata.lengthMs?.takeIf { it > 0 } ?: return null
         if (exact.any { fitsReleaseLength(it.second, sourceLength) }) return null
         val catalog = names.linkedEdition ?: names.primaryEdition?.takeIf { sameRecordingLength(sourceLength, it.lengthMs) }
         val live = saysLive(metadata.title) || catalog?.live == true
+        val artists = exact.map { it.second.details.first() }.toSet()
+        if (rows.any { row -> row.details.first() in artists && rowIsLive(row) != live && fitsReleaseLength(row, sourceLength) &&
+                SongNames.same(SongNames.bareTitle(row.name), metadata.title) }) return null
         return exact.firstOrNull { disco.allows(it.second) && rowIsLive(it.second) == live }
     }
 
