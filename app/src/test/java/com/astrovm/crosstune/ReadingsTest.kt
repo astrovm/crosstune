@@ -24,7 +24,9 @@ class ReadingsTest {
             "切れた鼻緒を今すげえ！" to "すげる", "朝までに鼻緒をすげー！" to "すげる",
             "穴を開けて鼻緒をすげえ！" to "すげる", "君は大きな山をこええ！" to "こえる",
             "山をこええ！次は海" to "こえる", "鼻緒をすげえ。それから歩く" to "すげる",
+            "鼻緒を、すげえ！" to "すげる", "鼻緒をすげえ 次へ" to "すげる",
             "君がおせえ、早く" to "おせる",
+            "君がおせえ 早く" to "おせる",
             "君がやらなきゃ誰がやる、君がおせえ" to "おせる", "怖くないよ、僕がいてえ" to "いる",
             "窓を閉めるな、君があけえ！" to "あける", "きみの頭もなでなでやろ" to "なでる"
         )
@@ -33,6 +35,8 @@ class ReadingsTest {
                 assertTrue(line, Readings.words(line, Script.JAPANESE).any { it.lookup == lookup })
             }
             assertTrue(Readings.words("君をすげえ好き", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertTrue(Readings.words("山を越えた、すげえ！", Script.JAPANESE).any { it.lookup == "すごい" })
+            assertTrue(Readings.words("山を越えた すげえ", Script.JAPANESE).any { it.lookup == "すごい" })
             assertTrue(Readings.words("鼻緒を結ぶ、すげえ", Script.JAPANESE).any { it.lookup == "すごい" })
             assertTrue(Readings.words("鼻緒を結んですげえ", Script.JAPANESE).any { it.lookup == "すごい" })
             assertTrue(Readings.words("腹がいてえ", Script.JAPANESE).any { it.lookup == "いたい" })

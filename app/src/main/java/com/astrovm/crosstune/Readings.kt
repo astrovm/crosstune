@@ -116,8 +116,9 @@ internal object Readings {
      * 27 to read colloquial adjectives, すげえ for すごい, and nouns, おめえ for お前, as one word.
      * 28 to keep commands with an object or a person subject as verbs.
      * 29 to keep object commands before punctuation followed by another clause.
+     * 30 to keep object commands across pauses and before spaces.
      */
-    const val VERSION = 29
+    const val VERSION = 30
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1313,8 +1314,12 @@ internal object Readings {
             (person.subkind == "代名詞" || person.surface in setOf("君", "僕", "俺", "お前", "あなた"))
     }
 
+    private fun endsObjectClause(piece: Piece): Boolean =
+        piece.surface.any { it in "。！？!?" } || piece.kind in setOf("動詞", "形容詞") ||
+            (piece.kind == "助動詞" && piece.base in setOf("た", "だ", "です", "ない", "ぬ"))
+
     private fun objectInClause(ahead: List<Piece>): Boolean =
-        ahead.takeLastWhile { piece -> piece.subkind != "接続助詞" && piece.surface.all { it.isLetterOrDigit() || it.isWhitespace() } }
+        ahead.takeLastWhile { !endsObjectClause(it) }
             .zipWithNext().any { (noun, particle) -> noun.kind == "名詞" && particle.surface == "を" && particle.kind == "助詞" }
 
     private fun phraseEnds(after: List<Piece>): Boolean {
@@ -1325,7 +1330,7 @@ internal object Readings {
     }
 
     private fun objectPredicate(ahead: List<Piece>, after: List<Piece>) = objectInClause(ahead) &&
-        (phraseEnds(after) || after.firstOrNull()?.surface?.firstOrNull()?.let { !it.isLetterOrDigit() && !it.isWhitespace() } == true)
+        (phraseEnds(after) || after.firstOrNull()?.surface?.firstOrNull()?.let { !it.isLetterOrDigit() } == true)
 
     private fun realSplitCanJoin(text: String, first: Piece, ahead: List<Piece>, after: List<Piece>): Boolean {
         val before = ahead.lastOrNull()
