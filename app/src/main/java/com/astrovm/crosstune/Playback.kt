@@ -13,7 +13,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -43,15 +42,18 @@ import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -214,9 +216,9 @@ internal data class Queued(val title: String, val artist: String, val id: Long? 
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
  * one after another, then what it plays on after those; TIDAL numbers each song by what it is.
  * [ended] once the app stopped at the song's end, as YouTube does after a list's last song.
- * [previousId] is the number of the song before it in the queue.
+ * [previousId] is the number of the song before it in the queue. [playing] now, not paused, loading, or stopped at the end.
  */
-internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null, val playing: Boolean = true)
 
 /** A matching session and controls bound to its token, even when its app has other sessions. */
 internal data class PlaybackMatch(
@@ -232,7 +234,8 @@ internal interface PlaybackSource {
 
     /**
      * Where [song] is in the app playing it, as that changes; null while no app plays it. Only [app], by package, when
-     * one is named. Asked of [app], what plays with no song named is [song] by just what it calls it, as
+     * one is named. A named song with both [app] and [session] can follow the same song in any app if that session goes away.
+     * Asked of [app], what plays with no song named is [song] by just what it calls it, as
      * [Unnamed.played], even nothing; see [playingUnnamed]. So is it for each control asked of [app] below.
      */
     fun follow(song: MusicMetadata, app: String? = null, session: Int? = null): Flow<Following?>
@@ -349,9 +352,6 @@ internal interface PlaybackSource {
     @MainThread
     fun unnamedUpdates(): Flow<Unnamed?>
 
-    /** Whether the phone's music plays out loud, where the microphone hears it: not muted, nor in headphones. */
-    fun playsAloud(): Boolean
-
     /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
     @MainThread
     fun plays(app: String): Flow<AppPlays?>
@@ -376,6 +376,8 @@ internal class MediaSessionPlayback(
     private val waker: AppWaker = MediaBrowserWaker(context),
     /** How long an app asked to play has to start. */
     private val startMs: Long = START_MS,
+    /** How long an app asked to play on from behind has to keep playing. */
+    private val playsOnMs: Long = PLAYS_ON_MS,
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
@@ -400,16 +402,24 @@ internal class MediaSessionPlayback(
         readSong(title, artist, musicVideo)
     }
 
+    /**
+     * The title and artist [metadata] gives, as other services write them: Presto Music's "Davis, M: So What" by
+     * "Cannonball Adderley (alto saxophone), Miles Davis (trumpet)" is "So What" by "Miles Davis", see [Presto.song].
+     */
+    private fun MediaController.names(metadata: MediaMetadata): Pair<String, String> {
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        if (MusicService.ofPackage(packageName) != MusicService.PRESTO_MUSIC) return title to artist
+        return Presto.song(title, Presto.musicians(artist)).let { it.title to it.artist }
+    }
+
     private fun MediaController.songName(title: String, artist: String): MusicMetadata? {
         val musicVideo = MusicService.ofPackage(packageName) == MusicService.YOUTUBE_MUSIC
         return songsRead.of(Triple(title, artist, musicVideo))
     }
 
-    /** How many sessions were numbered; see [sessionNumbers]. */
-    private val sessionsNumbered = AtomicInteger()
-
-    /** Each session's number, by its token, the same in every follow of it; see [Following.session]. */
-    private val sessionNumbers = KeptReads<MediaSession.Token, Int>(SESSIONS_KEPT) { sessionsNumbered.getAndIncrement() }
+    /** Each session's number, by its token; see [SessionNumbers]. */
+    private val sessionNumbers = sessionNumbersOf(context)
 
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
@@ -417,6 +427,149 @@ internal class MediaSessionPlayback(
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
+    // A session can publish the next item's clock before its name. Only compare IDs while it is watched.
+    private data class QueueMetadata(val id: Long, val title: String?, val artist: String?, val renamedAt: Long? = null,
+        val clock: PlaybackClock? = null, val waitingId: Long? = null, val waitingAt: Long = 0)
+    private val queueMetadata = ConcurrentHashMap<MediaSession.Token, QueueMetadata>()
+    private val queueWatchers = mutableMapOf<MediaSession.Token, Int>()
+    private val queueGraceMs = 1_500L
+
+    private fun watchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
+        queueWatchers[token] = (queueWatchers[token] ?: 0) + 1
+    }
+
+    private fun unwatchQueue(token: MediaSession.Token) = synchronized(queueWatchers) {
+        val remaining = (queueWatchers[token] ?: 1) - 1
+        if (remaining == 0) {
+            queueWatchers.remove(token)
+            queueMetadata.remove(token)
+        } else {
+            queueWatchers[token] = remaining
+        }
+    }
+
+    private fun unwatchQueues(watched: List<Pair<MediaController, MediaController.Callback>>) =
+        watched.forEach { (controller, _) -> unwatchQueue(controller.sessionToken) }
+
+    private fun unregisterQueues(watched: List<Pair<MediaController, MediaController.Callback>>) =
+        watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+
+    private fun MediaController.metadataArrived(metadata: MediaMetadata?) {
+        val id = playbackState?.activeQueueItemId ?: MediaSession.QueueItem.UNKNOWN_ID.toLong()
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        synchronized(queueWatchers) {
+            if (sessionToken !in queueWatchers) return
+            val previous = queueMetadata[sessionToken]
+            val renamed = previous == null || previous.title != title || previous.artist != artist
+            queueMetadata[sessionToken] = QueueMetadata(id, title, artist, if (renamed) SystemClock.uptimeMillis() else previous.renamedAt, previous?.clock)
+        }
+    }
+
+    private fun MediaController.stateArrived(state: PlaybackState?) = synchronized(queueWatchers) {
+        if (sessionToken !in queueWatchers) return@synchronized
+        if (state == null || state.activeQueueItemId == MediaSession.QueueItem.UNKNOWN_ID.toLong()) {
+            queueMetadata.remove(sessionToken)
+            return@synchronized
+        }
+        queueMetadata.computeIfPresent(sessionToken) { _, previous ->
+            val id = state.activeQueueItemId
+            val recentlyRenamed = previous.renamedAt?.let { SystemClock.uptimeMillis() - it <= queueGraceMs } == true
+            if (recentlyRenamed && id != previous.id) previous.copy(id = id, renamedAt = null) else previous
+        }
+    }
+
+    private fun MediaController.clockMatches(state: PlaybackState): Boolean {
+        val id = state.activeQueueItemId
+        if (id == MediaSession.QueueItem.UNKNOWN_ID.toLong()) return true
+        synchronized(queueWatchers) {
+            if (sessionToken !in queueWatchers) return true
+            val metadata = metadata
+            val first = QueueMetadata(id, metadata?.getString(MediaMetadata.METADATA_KEY_TITLE), metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST))
+            val previous = queueMetadata[sessionToken]
+            val known = if (previous == null || previous.id == MediaSession.QueueItem.UNKNOWN_ID.toLong()) first else previous
+            val time = SystemClock.uptimeMillis()
+            val next = when {
+                known.id == id -> known.copy(waitingId = null)
+                known.waitingId == null -> known.copy(waitingId = id, waitingAt = time)
+                time - known.waitingAt >= queueGraceMs -> known.copy(id = id, waitingId = null)
+                known.waitingId != id -> known.copy(waitingId = id)
+                else -> known
+            }
+            queueMetadata[sessionToken] = next
+            return next.id == id
+        }
+    }
+
+    /** A single refresh covers all pending sessions, without extending a wait when more states arrive. */
+    private fun scheduleQueueRefresh(controllers: List<MediaController>, refresh: Runnable) {
+        val deadline = synchronized(queueWatchers) {
+            controllers.mapNotNull { queueMetadata[it.sessionToken]?.takeIf { entry -> entry.waitingId != null }?.waitingAt }
+                .minOrNull()?.plus(queueGraceMs)
+        }
+        handler.removeCallbacks(refresh)
+        if (deadline != null) handler.postDelayed(refresh, (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
+    }
+
+    private fun expireQueueWaits(controllers: List<MediaController>) = synchronized(queueWatchers) {
+        val time = SystemClock.uptimeMillis()
+        controllers.forEach { controller ->
+            queueMetadata.computeIfPresent(controller.sessionToken) { _, previous ->
+                val id = previous.waitingId
+                if (id != null && time - previous.waitingAt >= queueGraceMs) previous.copy(id = id, waitingId = null) else previous
+            }
+        }
+    }
+
+    private class ObserverGuard(private val active: () -> Boolean) {
+        private val lock = Any()
+        private var closed = false
+
+        fun act(action: () -> Unit) = synchronized(lock) {
+            if (!closed && active()) action()
+        }
+
+        fun close(cleanup: () -> Unit) = synchronized(lock) {
+            closed = true
+            cleanup()
+        }
+    }
+
+    private fun queueRefresh(guard: ObserverGuard, controllers: () -> List<MediaController>, update: () -> Unit): Runnable {
+        lateinit var refresh: Runnable
+        refresh = Runnable {
+            guard.act {
+                expireQueueWaits(controllers())
+                update()
+                guard.act { scheduleQueueRefresh(controllers(), refresh) }
+            }
+        }
+        return refresh
+    }
+
+    private fun queueClock(controller: MediaController, state: PlaybackState, reported: PlaybackClock, matches: Boolean, at: Long): PlaybackClock =
+        synchronized(queueWatchers) {
+            val entry = queueMetadata[controller.sessionToken]
+            val previous = entry?.clock
+            val clock = retainedQueueClock(previous, state, reported, matches, at)
+            val changed = previous?.playing != clock.playing
+            if (entry != null) {
+                if (matches || changed) {
+                    queueMetadata[controller.sessionToken] = entry.copy(id = if (previous == null) state.activeQueueItemId else entry.id,
+                        clock = clock, waitingId = if (previous == null) null else entry.waitingId)
+                }
+            }
+            clock
+        }
+
+    private fun retainedQueueClock(previous: PlaybackClock?, state: PlaybackState, reported: PlaybackClock, matches: Boolean, at: Long): PlaybackClock {
+        if (matches || previous == null) return reported
+        if (state.state == PlaybackState.STATE_PLAYING) {
+            val time = now()
+            return previous.copy(positionMs = previous.positionAt(time), atMs = time, playing = true)
+        }
+        return if (previous.playing) previous.copy(positionMs = previous.positionAt(at), atMs = at, playing = false) else previous
+    }
     /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
     @Volatile
     private var moves = Any()
@@ -476,6 +629,7 @@ internal class MediaSessionPlayback(
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
         var renamed: List<Pair<MediaController, MediaController.Callback>> = emptyList()
+        val guard = ObserverGuard { isActive }
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
@@ -497,27 +651,37 @@ internal class MediaSessionPlayback(
                 trySend(followed?.let(::steadily))
             }
         }
-        fun pick(controllers: List<MediaController>) {
-            val playing = appFor(song, controllers, app, token, session)
-            if (playing?.sessionToken != followed?.sessionToken) {
-                followed?.unregisterCallback(callback)
-                modesWatched()
-                followed = playing
-                clocks = steadyClock(playing?.packageName)
-                playing?.registerCallback(callback, handler)
-                // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
-                modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
+        fun pick(controllers: List<MediaController>) = guard.act {
+            val playing = controllerToFollow(song, controllers, app, token, session)
+            guard.act {
+                if (playing?.sessionToken != followed?.sessionToken) {
+                    followed?.unregisterCallback(callback)
+                    modesWatched()
+                    followed = playing
+                    clocks = steadyClock(playing?.packageName)
+                    playing?.registerCallback(callback, handler)
+                    // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
+                    modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
+                }
+                trySend(playing?.let(::steadily))
             }
-            trySend(playing?.let(::steadily))
         }
+        val refreshQueue = queueRefresh(guard, { watched }) { pick(watched) }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
-        fun watch(controllers: List<MediaController>) {
-            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+        fun watch(controllers: List<MediaController>) = guard.act {
+            val before = renamed
+            renamed = emptyList()
+            unregisterQueues(before)
             watched = controllers
-            renamed = controllers.map { controller ->
+            try { controllers.forEach { controller ->
                 val callback = object : MediaController.Callback() {
-                    override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        controller.metadataArrived(metadata)
+                        pick(watched)
+                        scheduleQueueRefresh(watched, refreshQueue)
+                    }
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        controller.stateArrived(state)
                         clockLog.note("media_report", now) {
                             put("observer", clockObserver)
                             put("app", controller.packageName)
@@ -533,11 +697,13 @@ internal class MediaSessionPlayback(
                         }
                         // A session may first report playback state without changing its title or joining the active list again.
                         pick(watched)
+                        scheduleQueueRefresh(watched, refreshQueue)
                     }
                 }
                 controller.registerCallback(callback, handler)
-                controller to callback
-            }
+                watchQueue(controller.sessionToken)
+                renamed = renamed + (controller to callback)
+            } } finally { unwatchQueues(before) }
             pick(controllers)
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -548,13 +714,25 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
-            sessions.removeOnActiveSessionsChangedListener(changed)
-            renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
-            followed?.unregisterCallback(callback)
-            modesWatched()
-            clockLog.note("follow_end", now) { put("observer", clockObserver) }
+            guard.close {
+                sessions.removeOnActiveSessionsChangedListener(changed)
+                handler.removeCallbacks(refreshQueue)
+                renamed.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
+                followed?.unregisterCallback(callback)
+                modesWatched()
+                clockLog.note("follow_end", now) { put("observer", clockObserver) }
+            }
         }
     }.distinctUntilChanged()
+
+    private fun controllerToFollow(
+        song: MusicMetadata, controllers: List<MediaController>, app: String?, token: MediaSession.Token?, session: Int?
+    ): MediaController? {
+        val released = session?.let { number ->
+            app != null && token == null && !song.unnamed && controllers.none { sessionNumbers.peek(it.sessionToken) == number }
+        } == true
+        return if (released) appFor(song, controllers) else appFor(song, controllers, app, token, session)
+    }
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
     private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
@@ -577,7 +755,8 @@ internal class MediaSessionPlayback(
      */
     private fun MediaController.has(song: MusicMetadata, app: String?): Boolean {
         if (!song.unnamed) return plays(song)
-        val (title, artist) = calls()
+        val metadata = metadata
+        val (title, artist) = metadata.calls(said(this, snapshot = metadata))
         val said = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         return app != null && title == song.title && (artist == song.artist || !Songless.namesNoSong(said, artist, songName(said, artist)))
     }
@@ -586,18 +765,23 @@ internal class MediaSessionPlayback(
      * What it calls what it plays, as what names no song is shown and asked for by: its title, read as Crosstune
      * once read a song's, "Fake Song" from "Fake Song.mp3", "" with none; and its artist, as the app has it.
      */
-    private fun MediaController.calls(): Pair<String, String> {
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
-        val read = said(this)?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
-        return (read ?: title) to metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+    private fun MediaMetadata?.calls(named: MusicMetadata?): Pair<String, String> {
+        val title = this?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }.orEmpty()
+        val read = named?.takeIf { it.artist.isBlank() }?.title?.takeIf { it.isNotBlank() }
+        return (read ?: title) to this?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
     }
 
     /** What it plays, as what names no song is shown. */
     private fun MediaController.unnamed(): Unnamed {
-        val (title, artist) = calls()
-        val named = said(this)
+        val metadata = metadata
+        val named = said(this, snapshot = metadata)
+        val (title, artist) = metadata.calls(named)
+        val garden = packageName == RadioGarden.PACKAGE
+        val state = playbackState
+        val queueSong = if (garden) RadioGarden.queueSong(title, queueOf(this), state?.activeQueueItemId) else null
         return Unnamed(packageName, labelOf(packageName), title.ifEmpty { null }, metadata?.let { coverOf(it, sessionToken) }, artist,
-            where = place(), said = named != null, caption = named?.unnamed == true, reportsState = playbackState != null, session = sessionNumbers.of(sessionToken))
+            where = place(), said = named != null, caption = garden || named?.unnamed == true, reportsState = state != null,
+            session = sessionNumbers.of(sessionToken), queueSong = queueSong)
     }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?, session: Int?) = seekIn(song, positionMs, app, null, session)
@@ -653,7 +837,7 @@ internal class MediaSessionPlayback(
 
     override suspend fun resume(song: MusicMetadata, app: String?, session: Int?): Boolean {
         val controller = runCatching { appFor(song, app = app, session = session) }.getOrNull() ?: return false
-        return watchStart(controller, mustStart = true) { controller.clockCommand("play") { play() } }
+        return watchStart(controller, mustStart = true, holdMs = playsOnMs) { controller.clockCommand("play") { play() } }
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
@@ -740,28 +924,40 @@ internal class MediaSessionPlayback(
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
      * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
+     * Said to play, the last state it says within the next [holdMs] ms also has to be neither stopped nor failed, or it only plays in front.
      */
-    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, ask: () -> Unit): Boolean {
+    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, holdMs: Long = 0, ask: () -> Unit): Boolean {
         // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
         if (mustStart && asked.packageName in onlyInFront && asked.playbackState?.state != PlaybackState.STATE_PLAYING) return false
-        val verdict = CompletableDeferred<Boolean>()
+        val states = Channel<Int?>(Channel.UNLIMITED)
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                when (state?.state) {
-                    PlaybackState.STATE_PLAYING -> verdict.complete(true)
-                    PlaybackState.STATE_ERROR -> verdict.complete(false)
-                }
+                states.trySend(state?.state)
             }
         }
         // Listening before it's asked, so an answer that comes at once isn't missed.
         if (mustStart) asked.registerCallback(callback, handler)
         try {
             if (runCatching(ask).isFailure) return false
-            if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
-            return (withTimeoutOrNull(startMs) { verdict.await() } == true).also { if (!it) onlyInFront += asked.packageName }
+            if (!mustStart) return true
+            val said = states.receiveAsFlow()
+            val started = asked.playbackState?.state == PlaybackState.STATE_PLAYING ||
+                withTimeoutOrNull(startMs) { said.first { it == PlaybackState.STATE_PLAYING || it == PlaybackState.STATE_ERROR } } == PlaybackState.STATE_PLAYING
+            return (started && keptOn(said, holdMs)).also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
+    }
+
+    /**
+     * Whether the last state an app says within [holdMs] ms, after it said it plays, is neither stopped nor failed. [said]
+     * has the states after that one; none at all counts as playing on. Stopped soon after, as YouTube without Premium does
+     * from behind, it didn't play on. Stopped for a moment and playing again, it did.
+     */
+    private suspend fun keptOn(said: Flow<Int?>, holdMs: Long): Boolean {
+        var last: Int? = null
+        withTimeoutOrNull(holdMs) { said.collect { last = it } }
+        return last != PlaybackState.STATE_STOPPED && last != PlaybackState.STATE_ERROR
     }
 
     // Asked the way a voice assistant asks, which music apps answer without coming to the front.
@@ -843,10 +1039,6 @@ internal class MediaSessionPlayback(
 
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
-    override fun playsAloud(): Boolean =
-        !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
-            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).all { it.type in ROOM_OUTPUTS }
-
     private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
         covers.retainSessions(controllers.map { it.sessionToken }.toSet())
     }
@@ -906,7 +1098,7 @@ internal class MediaSessionPlayback(
                         val id = controller.playbackState?.activeQueueItemId?.takeIf { it != MediaSession.QueueItem.UNKNOWN_ID.toLong() }
                         val queue = queueOf(controller).orEmpty()
                         val previous = queue.getOrNull(queue.indexOfFirst { it.queueId == id } - 1)?.queueId
-                        AppPlays(song, id, ended, previous)
+                        AppPlays(song, id, ended, previous, playing = !ended && controller.playbackState?.state == PlaybackState.STATE_PLAYING)
                     }
             }
     }
@@ -956,7 +1148,9 @@ internal class MediaSessionPlayback(
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<Pair<MediaController, MediaController.Callback>> = emptyList()
+        val guard = ObserverGuard { isActive }
         fun update() { trySend(read()) }
+        val refreshQueue = queueRefresh(guard, { watched.map { it.first } }, ::update)
         val refreshCover = Runnable { if (isActive) update() }
         val coverChanges = launch {
             covers.updates.collect {
@@ -964,24 +1158,33 @@ internal class MediaSessionPlayback(
                 handler.post(refreshCover)
             }
         }
-        fun watch(controllers: List<MediaController>) {
-            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
-            watched = controllers.map { controller ->
+        fun watch(controllers: List<MediaController>) = guard.act {
+            val before = watched
+            watched = emptyList()
+            unregisterQueues(before)
+            try { controllers.forEach { controller ->
                 // Metadata can change while no screen was watching this session.
                 covers.forget(controller.sessionToken)
                 val callback = object : MediaController.Callback() {
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        controller.metadataArrived(metadata)
                         covers.forget(controller.sessionToken)
                         update()
+                        scheduleQueueRefresh(watched.map { it.first }, refreshQueue)
                     }
-                    override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        controller.stateArrived(state)
+                        update()
+                        scheduleQueueRefresh(watched.map { it.first }, refreshQueue)
+                    }
                     override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) = update()
                     override fun onSessionDestroyed() { covers.forget(controller.sessionToken); update() }
                     override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
                 }
                 controller.registerCallback(callback, handler)
-                controller to callback
-            }
+                watchQueue(controller.sessionToken)
+                watched = watched + (controller to callback)
+            } } finally { unwatchQueues(before) }
             update()
         }
         val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
@@ -997,16 +1200,20 @@ internal class MediaSessionPlayback(
         }.isSuccess
         if (!watching) update()
         awaitClose {
-            coverChanges.cancel()
-            handler.removeCallbacks(refreshCover)
-            sessions.removeOnActiveSessionsChangedListener(changed)
-            audio.unregisterAudioPlaybackCallback(sounding)
-            watched.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
+            guard.close {
+                coverChanges.cancel()
+                handler.removeCallbacks(refreshCover)
+                handler.removeCallbacks(refreshQueue)
+                sessions.removeOnActiveSessionsChangedListener(changed)
+                audio.unregisterAudioPlaybackCallback(sounding)
+                watched.forEach { (controller, callback) -> controller.unregisterCallback(callback); unwatchQueue(controller.sessionToken) }
+            }
         }
     }.distinctUntilChanged()
 
     /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null, forRecognition: Boolean = false): Heard.Song? {
+        if (controller.packageName == RadioGarden.PACKAGE) return null
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -1018,7 +1225,8 @@ internal class MediaSessionPlayback(
         val artwork = coverOf(metadata, controller.sessionToken)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
-        val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
+        val follows = following(controller, asked)
+        val clock = follows?.takeIf { !it.video }?.clock?.takeIf { it.playing }
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
         val duration = controller.lengthOf(metadata, asked)
@@ -1026,7 +1234,7 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri?.takeIf(String::isNotBlank) ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f, ad = follows?.ad == true)
     }
 
     /**
@@ -1036,7 +1244,8 @@ internal class MediaSessionPlayback(
      */
     private fun said(controller: MediaController, asked: Long? = null, snapshot: MediaMetadata? = controller.metadata): MusicMetadata? {
         val metadata = snapshot ?: return null
-        val named = controller.songName(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        val (said, by) = controller.names(metadata)
+        val named = controller.songName(said, by) ?: return null
         if (named.unnamed) return named.takeUnless { controller.isVideo() }
         val (title, artist) = named
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
@@ -1047,7 +1256,7 @@ internal class MediaSessionPlayback(
         return when {
             !controller.isVideo() -> MusicMetadata(
                 title, artist, lengthMs = controller.lengthOf(metadata, asked),
-                instrumentalAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.takeIf(SongNames::albumOfInstrumentals)
+                album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)?.ifBlank { null }
             )
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist)
             // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
@@ -1075,6 +1284,7 @@ internal class MediaSessionPlayback(
     private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
+        val matches = controller.clockMatches(state)
         // An app that doesn't say where it is gives nothing to keep the words in time with.
         if (state.position < 0) return null
         val app = labelOf(controller.packageName)
@@ -1083,7 +1293,8 @@ internal class MediaSessionPlayback(
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
         // Under an ad, the song waits at its start until the ad's over.
         val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
-        val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
+        val reported = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
+        val clock = queueClock(controller, state, reported, matches, at)
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
@@ -1177,10 +1388,10 @@ internal class MediaSessionPlayback(
     }
 
     private fun MediaController.plays(song: MusicMetadata): Boolean {
+        if (packageName == RadioGarden.PACKAGE) return false
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        val (title, artist) = names(playing)
         if (MetadataParsers.noArtist(artist)) return playsWithNoArtist(title, artist, song)
         return SongNames.names(title, artist, song)
     }
@@ -1211,6 +1422,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
 
+/** How long an app asked to play on from behind has to keep playing: YouTube without Premium stops 8 ms after it says it plays. */
+internal const val PLAYS_ON_MS = 1_000L
+
 
 /**
  * What [read] makes of each key, read once while kept: only the [kept] asked of last are kept. Its reads aren't
@@ -1222,9 +1436,6 @@ internal class KeptReads<K, V>(private val kept: Int, private val read: (K) -> V
 
     /** What a key read as, even null. */
     private class Read<V>(val value: V)
-
-    /** Observe a retained value without reading a new key or making this one more recent. */
-    fun peek(key: K): V? = synchronized(values) { values.entries.firstOrNull { it.key == key }?.value?.value }
 
     fun of(key: K): V {
         synchronized(values) { values[key] }?.let { return it.value }
@@ -1242,6 +1453,38 @@ private const val SONGS_READ_KEPT = 32
 
 /** How many sessions keep their numbers: more than a phone has apps playing at once. */
 private const val SESSIONS_KEPT = 32
+
+/** Each app's session numbers, by its application; see [sessionNumbersOf]. */
+private val sessionNumbersByApp = WeakHashMap<Context, SessionNumbers>()
+
+/**
+ * The session numbers of all of [context]'s app, not one numbering for each [MediaSessionPlayback]: the player
+ * hands its number on to the sleep timer, which follows with one of its own, and a number from another
+ * numbering named no app there, so the timer paused at once.
+ */
+private fun sessionNumbersOf(context: Context): SessionNumbers = synchronized(sessionNumbersByApp) {
+    sessionNumbersByApp.getOrPut(context.applicationContext) { SessionNumbers(SESSIONS_KEPT) }
+}
+
+/**
+ * Each session's number, by its token, the same in every follow of it; see [Following.session]. Only the [kept]
+ * numbered or asked of last keep theirs. Numbering is locked, unlike [KeptReads], as a session numbered twice at
+ * once would get two numbers, and whoever was handed the other one would find no app by it.
+ */
+internal class SessionNumbers(private val kept: Int) {
+    /** Each session's number, the one asked of least lately first. */
+    private val numbers = LinkedHashMap<MediaSession.Token, Int>(kept, LOAD_FACTOR, true)
+    private var numbered = 0
+
+    /** A session's number, without numbering it or making it the one asked of last. */
+    @Synchronized
+    fun peek(token: MediaSession.Token): Int? = numbers.entries.firstOrNull { it.key == token }?.value
+
+    @Synchronized
+    fun of(token: MediaSession.Token): Int = numbers.getOrPut(token) { numbered++ }.also {
+        if (numbers.size > kept) numbers.remove(numbers.keys.first())
+    }
+}
 
 /** How full [KeptReads]' map may get before it grows, as Java's own maps have it. */
 private const val LOAD_FACTOR = 0.75f
@@ -1297,23 +1540,6 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
-
-/**
- * Where the phone's music is heard in the room, or never goes: its own speaker and earpiece, a call, a TV
- * over HDMI, a car, a Bluetooth LE speaker. Any other output may be heard by its listener alone, so the
- * microphone isn't asked to hear it: headphones, a hearing aid, a USB or classic Bluetooth one, which can't
- * be told from headphones, a line out, a dock, or a kind a later Android adds.
- */
-private val ROOM_OUTPUTS = buildSet {
-    addAll(
-        listOf(
-            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_TELEPHONY,
-            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_BUS
-        )
-    )
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) addAll(listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE, AudioDeviceInfo.TYPE_REMOTE_SUBMIX))
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) addAll(listOf(AudioDeviceInfo.TYPE_HDMI_EARC, AudioDeviceInfo.TYPE_BLE_SPEAKER))
-}
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

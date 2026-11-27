@@ -28,6 +28,7 @@ on:
       - scripts/mutants-post.sh
       - scripts/mutants-post.test.sh
       - .github/workflows/mutants-weekly.yml
+      - .github/workflows/matcher.yml
 
 permissions:
   contents: read
@@ -76,6 +77,8 @@ jobs:
     needs: plan
     runs-on: ubuntu-26.04
     timeout-minutes: 300
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -85,15 +88,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          # Main's runs of CI save the caches; this one only reads them.
-          cache-read-only: true
+          gradle: read-only
 
       # Lived changes are findings for the issue; only a run that never got to its tally fails.
       - name: Mutation testing
@@ -111,35 +108,7 @@ jobs:
           if-no-files-found: ignore
 
   matcher:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          cache-read-only: true
-
-      - name: Matcher cases in full
-        run: ./gradlew :app:testPlayDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
-
-      - name: Upload what opened
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: matcher-cases
-          path: |
-            app/build/test-results/testPlayDebugUnitTest/
-            app/build/matcher-*-now.tsv
-          retention-days: 14
-          if-no-files-found: warn
+    uses: ./.github/workflows/matcher.yml
 
   report:
     needs: [plan, part, matcher]

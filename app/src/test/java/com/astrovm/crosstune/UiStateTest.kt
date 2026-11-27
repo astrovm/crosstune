@@ -25,21 +25,45 @@ class UiStateTest {
         assertFalse(tidal.copy(link = MusicLink(MusicService.TIDAL, ItemType.PLAYLIST, "1", "https://tidal.com/playlist/1")).canPlayAll)
         assertTrue(tidal.copy(selectedDestination = Destination.Service(MusicService.SPOTIFY), installed = setOf(MusicService.SPOTIFY)).canPlayAll)
         assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.AMAZON_MUSIC), installed = setOf(MusicService.AMAZON_MUSIC)).canPlayAll)
+        assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.PRESTO_MUSIC), installed = setOf(MusicService.PRESTO_MUSIC)).canPlayAll)
+    }
+
+    @Test
+    fun everyAppThatTakesAnAskedSongIsOfferedPlay() {
+        for (service in listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.AUDIOMACK, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) {
+            val state = UiState(
+                result = song, lyricsFor = song,
+                selectedDestination = Destination.Service(service), installed = setOf(service),
+            )
+            assertTrue(service.name, state.canPlayResult)
+            assertTrue(service.name, state.canPlayFromLyrics)
+        }
     }
 
     @Test
     fun aSongIsOfferedToPlayOnlyWhereItsAppPlaysOneAskedFor() {
         val youTubeMusic = UiState(result = song, selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC))
-        assertTrue(youTubeMusic.canPlayResult)
+        assertTrue(youTubeMusic.copy(phone = Phone.TV).canPlayResult)
+        assertTrue(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC, "app.morphe.android.apps.youtube.music")).canPlayResult)
+        // Spotify takes no song asked for, but plays the one it's opened on: its own link, as a Spotify link is, not a search.
+        val spotify = Destination.Service(MusicService.SPOTIFY)
+        val inSpotify = youTubeMusic.copy(selectedDestination = spotify, installed = setOf(MusicService.SPOTIFY))
+        assertTrue(inSpotify.canPlayResult)
+        assertFalse(inSpotify.copy(destinationUrls = mapOf(spotify to PreparedLink("https://open.spotify.com/search/Song", exact = false, matchingEnabled = true))).canPlayResult)
+        assertTrue(inSpotify.copy(destinationUrls = mapOf(spotify to PreparedLink("https://open.spotify.com/track/1", exact = true, matchingEnabled = true))).canPlayResult)
         // Bandcamp's app takes only a search, so asked to play it comes to the front on one and plays nothing.
         assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.BANDCAMP), installed = setOf(MusicService.BANDCAMP)).canPlayResult)
+        // Amazon Music has only a search too, and plays the artist's radio when asked.
+        assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.AMAZON_MUSIC), installed = setOf(MusicService.AMAZON_MUSIC)).canPlayResult)
+        // Presto Music's app opens only on a search, with nothing played.
+        assertFalse(youTubeMusic.copy(selectedDestination = Destination.Service(MusicService.PRESTO_MUSIC), installed = setOf(MusicService.PRESTO_MUSIC)).canPlayResult)
     }
 
     @Test
     fun theWordsCanStartTheSongOnlyOnceTheyAreItsAndNotFollowedInAnAppYet() {
         val ready = UiState(
             result = song, lyricsFor = song,
-            selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = setOf(MusicService.YOUTUBE_MUSIC)
+            selectedDestination = Destination.Service(MusicService.TIDAL), installed = setOf(MusicService.TIDAL)
         )
         assertTrue(ready.canPlayFromLyrics)
         assertFalse(ready.copy(lyricsFor = null).canPlayFromLyrics)

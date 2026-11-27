@@ -7,25 +7,30 @@
     perf.py start --runs 10 --build new=b.apk           # cold start, `am start -W`
 
 Each run prints one JSON line, and each build a summary (mean, spread) at the end. Pick the phone
-with ANDROID_SERIAL. It needs adb: ANDROID_HOME's, else ~/Android/Sdk's, else the one on the PATH.
+with ANDROID_SERIAL. It needs adb, which scripts/lib/adbtool.py finds: $ADB, the SDK's, or the one on the PATH.
 
 `jank` cold starts the app before each run, so the main screen shows only its Recent list, then
 swipes the same way each run: up the list and back down, a fling each, from the screen's own size.
-The phone's history is the content, so compare builds on one phone.
+The phone's history is the content, so compare builds on one phone. A list that doesn't scroll
+draws next to nothing, so a run with fewer frames than flings stops there.
 
 With --build, each run installs the builds in turn, keeping the app's data, so they take turns on
 a phone that warms up and cools down, rather than one build getting the cooler phone. The SDK's
-aapt2 checks a private copy of each APK before any install. Each run installs that checked copy. An APK that
-isn't debuggable is then compiled from its baseline profile, as Play has it after an install.
+aapt2 (Android SDK Build Tools) checks a private copy of each APK before any install, and each run installs that
+checked copy, only once it is confirmed as Crosstune Dev. An APK that
+isn't debuggable is then compiled from its baseline profile, as Play has it after an install. Builds that
+aren't debuggable need the same versionCode, as Android won't install an older one over a newer one: build the
+version before with this one's number to compare them. It stops before any install when they differ.
 A debug build runs most of its code in Android's interpreter, so measure a release-like build
-(`-PperfBuild :app:assemblePerf`) for what people's phones do.
+(`-PperfBuild :app:assemblePerf`, the minified release as "Crosstune Dev", signed with the debug key) for what
+people's phones do. Messages about the phone cooling down go to stderr. When Android gives no cold-start time, the
+command stops there, with no value made up for that run.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import statistics
@@ -36,31 +41,19 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+
 PACKAGE = "com.astrovm.crosstune.dev"
 ACTIVITY = f"{PACKAGE}/com.astrovm.crosstune.MainActivity"
 PROFILE_RECEIVER = f"{PACKAGE}/androidx.profileinstaller.ProfileInstallReceiver"
 USER_HZ = 100
 
 
-def sdk_roots() -> list[Path]:
-    configured = os.environ.get("ANDROID_HOME")
-    roots = [Path.home() / "Android/Sdk", Path.home() / "Library/Android/sdk"]
-    return [Path(configured), *roots] if configured else roots
-
-
-def adb_path() -> str:
-    for base in sdk_roots():
-        adb = base / "platform-tools/adb"
-        if adb.exists():
-            return str(adb)
-    found = shutil.which("adb")
-    if not found:
-        sys.exit("adb is missing: install the Android SDK's platform-tools")
-    return found
-
-
 def aapt2_path() -> str:
-    for sdk in sdk_roots():
+    # The named SDK first, then Android Studio's: Build Tools may be only in the one Studio keeps up to date.
+    places = adbtool.sdk_places()
+    for sdk in [*places, *(place for place in adbtool.studio_places() if place not in places)]:
         tools = sorted(sdk.glob("build-tools/*/aapt2"), reverse=True)
         if tools:
             return str(tools[0])
@@ -80,6 +73,25 @@ def check_apk(apk: Path, source: Path) -> None:
         sys.exit(f"Cannot install {source}: expected {PACKAGE}, found {package}")
 
 
+def version_of(apk: Path) -> tuple[str, bool]:
+    """Its version code, and whether it's debuggable."""
+    result = subprocess.run([aapt2_path(), "dump", "badging", str(apk)], check=False, capture_output=True, text=True)
+    code = re.search(r"versionCode='([0-9]+)'", result.stdout)
+    return (code.group(1) if code else "", "application-debuggable" in result.stdout.splitlines())
+
+
+def check_turns(builds: list[tuple[str, str]]) -> None:
+    """Builds that take turns all install over each other. Android takes an older version code over a newer one
+    only for a debuggable build, so a release-like one of the version before stopped at its second install."""
+    versions = {label: version_of(Path(apk)) for label, apk in builds}
+    if len({code for code, _ in versions.values()}) > 1 and not all(debuggable for _, debuggable in versions.values()):
+        listed = ", ".join(f"{label} {code or 'unknown'}" for label, (code, _) in versions.items())
+        sys.exit(
+            f"Cannot take turns between version codes {listed}: Android installs an older version over a newer one"
+            " only when it's debuggable. Build them with the same versionCode."
+        )
+
+
 def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
     builds = []
     for index, argument in enumerate(arguments):
@@ -93,11 +105,12 @@ def staged_builds(arguments: list[str], folder: Path) -> list[tuple[str, str]]:
             sys.exit(f"Cannot copy {source}: {error.strerror}")
         check_apk(staged, source)
         builds.append((label, str(staged)))
+    check_turns(builds)
     return builds
 
 
 def adb(*args: str) -> str:
-    return subprocess.run([adb_path(), *args], check=True, capture_output=True, text=True).stdout
+    return adbtool.run(*args, check=True, capture_output=True, text=True).stdout
 
 
 def shell(*args: str) -> str:
@@ -204,7 +217,15 @@ def jank(args: argparse.Namespace) -> dict:
         for _ in range(args.swipes):
             shell("input", "swipe", x, start, x, end, "150")
             time.sleep(0.9)
-    return gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    result = gfxinfo(shell("dumpsys", "gfxinfo", PACKAGE))
+    # A list that scrolls draws dozens of frames a fling. Fewer than one each means nothing moved, and
+    # the few frames there are would read as all janky.
+    if result["frames"] < args.swipes * 2:
+        sys.exit(
+            f"Only {result['frames']} frames were drawn over {args.swipes * 2} flings: the main screen didn't scroll."
+            " Open enough songs in Crosstune Dev for Recent to fill more than a screen."
+        )
+    return result
 
 
 def cpu(args: argparse.Namespace) -> dict:

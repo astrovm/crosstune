@@ -4,7 +4,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 
 <b>Fitur</b>
 <ul>
-<li>Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, dan Audiomack, lalu membukanya di salah satu aplikasi itu atau di Amazon Music dan Qobuz.</li>
+<li>Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack, dan Presto Music, lalu membukanya di salah satu aplikasi itu atau di Amazon Music dan Qobuz.</li>
 <li>Playlist dan album menampilkan lagunya: buka lagu mana pun di aplikasimu, salin atau bagikan daftarnya, atau putar semuanya, berurutan atau acak, di YouTube Music, YouTube, TIDAL, atau Spotify.</li>
 <li>Arahkan tiap layanan ke tujuan berbeda, misalnya link YouTube ke YouTube Music dan sisanya ke Apple Music.</li>
 <li>Tampilkan di Crosstune dulu: lagu diputar di aplikasi pilihanmu selagi kamu tetap di sini.</li>
@@ -22,4 +22,4 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 </ul>
 
 <b>Privasi</b>
-Tanpa akun, analitik, atau iklan. Riwayat tetap di perangkatmu. Judul, artis, dan sampul sebuah link hanya datang dari layanan asal link. Untuk membuka lagunya, judul dan artis juga dikirim ke pencarian Apple, Deezer, YouTube Music, YouTube, atau Bandcamp. Putar semua dan Acak mengirim judul dan artis ke YouTube Music, dan videonya ke YouTube. Untuk mengenali lagu, Crosstune memakai mikrofon hanya saat mendengar dan mengirim sidik jarinya ke Shazam, bukan rekamannya. Mengetik nama lagu mengirimnya ke pencarian Deezer dan Apple, dan lirik atau chord mengirim judul dan artis ke situs lirik dan chord (LRCLIB, YouTube Music, NetEase, Letras, Genius, Ultimate Guitar, Cifra Club, LaCuerda, U-FRET, J-Total, ChordWiki). Terjemahan dikirim ke MyMemory. Masuk ChatGPT, fitur AI mengirim judul, artis, lirik, serta pertanyaanmu ke OpenAI. Dengan izin mikrofon, lirik mendengar sebentar untuk mengingat jeda intro. Lirik juga menyesuaikan nyanyian di ponsel dan tak pernah dikirim. Tanpa lirik, atau jika judul atau LRCLIB bilang instrumental, lirik mendengar nyanyian di ponsel, tak dikirim. Laporan otomatis mati: hanya jika genre, judul, atau LRCLIB bilang instrumental.
+Tanpa akun, analitik, atau iklan. Riwayat tetap di perangkatmu. Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya, dan lirik diselaraskan dengan nyanyian di perangkatmu. Judul dan artis lagu dikirim ke layanan musik yang mencari dan membukanya, serta ke situs lirik, chord, dan terjemahan. Masuk ChatGPT, fitur AI mengirim lagu, liriknya, serta pertanyaanmu ke OpenAI. Satu-satunya server Crosstune menerima laporan masalah yang kamu kirim, dan laporan otomatis jika kamu menyalakannya. Server ini tidak menyimpan alamat IP dan menghapus setiap laporan setelah 180 hari. Semua layanan, dan isi setiap laporan: https://crosstune.cc/id/privacy/

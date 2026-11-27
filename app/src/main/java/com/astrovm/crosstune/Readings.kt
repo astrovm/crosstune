@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.icu.text.Transliterator
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.atilika.kuromoji.ipadic.Tokenizer
 import kotlin.math.abs
 
 /**
@@ -17,7 +16,7 @@ internal enum class Script(val glyph: String) {
 
 /**
  * What gave a word its reading, as a report on a wrong one names it by [key]: for Japanese, the
- * dictionaries on the phone, IPADIC and UniDic, JMdict's words of more than one kanji, Crosstune's own rules (二人 as ふたり, 側 as そば),
+ * dictionaries on the phone, IPADIC and UniDic, JMdict's words, Crosstune's own rules (二人 as ふたり, 側 as そば),
  * the lyrics' own reading in brackets, UtaTen's sung readings, ChatGPT's, or the user's own on a
  * kept line; for Chinese, Android's pinyin; for Korean, Crosstune's romaja; for the rest, Android's
  * Latin letters.
@@ -106,8 +105,16 @@ internal object Readings {
      * 10 for an old ほ said お in kana alone.
      * 11 for standalone old kana read with the built-in dictionary.
      * 12 for a suffix that follows a word it can't join, 等 after a verb, 桜 after a counter, and 千夜.
+     * 13 for any word in kana IPADIC starts on a small kana, じゅぎょう and いっしょ, and the small vowels that draw a word out, ありがとぉ.
+     * 14 for a drawn-out よ after a connective, まってよぉ, looked up as the ending particle.
+     * 15 for a long mark or a small vowel that draws out a word IPADIC split.
+     * 16 for a word before small っ that left the tokenizer with no way through.
+     * 17 to space the Japanese copula apart from the word it follows.
+     * 19 to distinguish interrogative 何だ from the interjection.
+     * 25 to keep なでなで together before particles and copulas.
+     * 26 to separate 何 or なん from explanatory なんだ.
      */
-    const val VERSION = 12
+    const val VERSION = 26
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -156,7 +163,7 @@ internal object Readings {
 
     private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
 
-    private val tokenizer by lazy { Tokenizer() }
+    private val tokenizer by lazy { SmallKanaTokenizer { oldKana } }
 
     private fun japanese(line: String): LineReading {
         val given = givenReadings(line)
@@ -182,68 +189,481 @@ internal object Readings {
     // counting something, as 2 in 2人, as its kanji, 二人 ふたり, not a number on its own: they stay as written.
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
-        val known = withSmallKana(okurigana(line, text, ipadicPieces(line, text)))
+        val known = okurigana(line, text, ipadicPieces(line, text))
         val other = uniDic
-        val read = saidAsWritten(modernPieces(other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
-        return if (other == null) wholeOldKanaWord(line, read) ?: read else read
+        val mixed = other?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
+        val read = saidAsWritten(modernPieces(splitLeadingLongMarks(line, text, mixed)))
+        return nanDa(clauseNan(repeatedKatakanaNanDa(particleBeforeMou(if (other == null) wholeOldKanaWord(line, read) ?: read else read))))
     }
 
-    /** Keep the small kana with its noun where the dictionaries can read both nouns around の. */
-    private fun withSmallKana(pieces: List<Piece>): List<Piece> {
-        if (pieces.none(Piece::startsWithUnreadSmallKana)) return pieces
-        val words = mutableListOf<Piece>()
-        for (piece in pieces) {
-            val pair = words.lastOrNull()?.let { before -> nounsWithSmallKana(before, piece) }
-            if (pair == null) {
-                words += piece
+    /** The tokenizer can make a single name out of repeated katakana calls. */
+    private fun repeatedKatakanaNanDa(pieces: List<Piece>): List<Piece> = buildList {
+        for (at in pieces.indices) {
+            val piece = pieces[at]
+            val after = pieces.getOrNull(at + 1)
+            val calls = katakanaCalls(piece.surface)
+            if (calls == null || nameParticle(after)) add(piece) else addAll(katakanaCallPieces(calls))
+        }
+    }
+
+    private fun katakanaCalls(surface: String): List<String>? {
+        if (!surface.startsWith("ナンダ")) return null
+        val parts = surface.split('・')
+        val calls = parts.all { it.isNotEmpty() && it.length % 3 == 0 && it.chunked(3).all { word -> word == "ナンダ" } }
+        return parts.takeIf { calls && parts.sumOf { it.length / 3 } >= 2 }
+    }
+
+    private fun katakanaCallPieces(parts: List<String>): List<Piece> = buildList {
+        for (part in parts) {
+            if (isNotEmpty()) add(Piece("・", "・", "記号", "一般", reader = Reader.RULES))
+            repeat(part.length / 3) { add(Piece("ナンダ", "なんだ", "感動詞", "*", reader = Reader.RULES)) }
+        }
+    }
+
+    /** After the call 何だ, IPADIC can take the particle よ and adverb もう for the verb よむ. */
+    private fun particleBeforeMou(pieces: List<Piece>): List<Piece> = buildList {
+        var skipUntil = 0
+        for (at in pieces.indices) {
+            if (at < skipUntil) continue
+            val piece = pieces[at]
+            if (pieces.particleBeforeMouAt(at)) {
+                add(Piece("よ", "よ", "助詞", "終助詞", reader = Reader.RULES))
+                add(Piece("もう", "もう", "副詞", "一般", spoken = "もー", reader = Reader.RULES))
+                skipUntil = at + 2
+            } else add(piece)
+        }
+    }
+
+    private fun List<Piece>.particleBeforeMouAt(at: Int): Boolean {
+        val verb = get(at)
+        val afterCall = getOrNull(at - 1)?.surface == "何だ" && verb.surface == "よも" && verb.base == "よむ"
+        return afterCall && getOrNull(at + 1)?.surface == "う" && getOrNull(at + 2)?.surface != "よ"
+    }
+
+    /** Clause marks can make the dictionaries read なんだ as な / ん / だ. */
+    private fun clauseNan(pieces: List<Piece>): List<Piece> = buildList {
+        var skipUntil = 0
+        for (at in pieces.indices) {
+            if (at < skipUntil) continue
+            val piece = pieces[at]
+            if (clauseNanAt(pieces, at)) {
+                add(Piece("なん", "なん", "名詞", "代名詞", reader = Reader.RULES))
+                skipUntil = at + 2
             } else {
-                words.removeAt(words.lastIndex)
-                words += pair
+                add(piece)
             }
         }
-        return words
     }
 
-    /** Kana alone can look like a verb and an unknown word, as かいし and ゃのけいひ. */
-    private fun nounsWithSmallKana(before: Piece, after: Piece): List<Piece>? {
-        if (!after.startsWithUnreadSmallKana || before.surface.any { it !in 'ぁ'..'ゖ' }) return null
-        val small = after.surface.takeWhile { it in SMALL_HIRAGANA }
-        val rest = after.surface.drop(small.length)
-        if (!rest.startsWith('の')) return null
-        val first = before.surface + small
-        val last = rest.drop(1)
-        val head = oldKana.today[first] ?: return null
-        val tail = oldKana.today[last] ?: return null
-        val tokens = tokenizer.tokenize("${head}の$tail")
-        val written = listOf(first, "の", last)
-        if (tokens.map { it.surface } != listOf(head, "の", tail) ||
-            tokens.map { it.partOfSpeechLevel1 } != listOf("名詞", "助詞", "名詞") ||
-            tokens.map { hiragana(it.reading.orEmpty()) } != written) return null
-        var end = before.end - before.surface.length
-        return tokens.zip(written) { token, kana ->
-            end += kana.length
-            Piece(kana, kana, token.partOfSpeechLevel1, token.partOfSpeechLevel2, token.baseForm,
-                drawnOutE(hiragana(token.pronunciation)), end, reader = Reader.JMDICT)
+    private fun clauseNanAt(pieces: List<Piece>, at: Int): Boolean {
+        val before = pieces.getOrNull(at - 1)?.surface ?: return false
+        val copula = pieces.getOrNull(at + 2)
+        val clauseMark = before.firstOrNull()?.let { it in ",!?" } == true && before.all { it in ",!?" }
+        return clauseMark && pieces[at].surface == "な" &&
+            pieces.getOrNull(at + 1)?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula
+    }
+
+    /** IPADIC can call 何だ an interjection after a topic; both dictionaries split an opening なんだ. */
+    private fun nanDa(pieces: List<Piece>): List<Piece> = finalNanjaParticle(buildList {
+        var skipUntil = 0
+        for (at in pieces.indices) {
+            if (at < skipUntil) continue
+            val piece = pieces[at]
+            val explanation = pieces.interrogativePiece(at)
+            if (explanation != null) {
+                addAll(explanation.first)
+                skipUntil = at + explanation.second
+                continue
+            }
+            val length = pieces.nanDaRewriteLength(at)
+            if (length > 0) {
+                addAll(pieces.repeatedNanDaPieces(at, length))
+                skipUntil = at + length
+                continue
+            }
+            val before = pieces.getOrNull(at - 1)
+            val after = pieces.getOrNull(at + 1)
+            val subject = pieces.nanDaHasSubject(at)
+            val question = nanDaQuestion(piece, before, after, subject)
+            val call = !subject && nanDaCall(pieces, at)
+            when {
+                piece.canSplitNanDa() && question -> {
+                    add(Piece(piece.surface.dropLast(1), "なん", "名詞", "代名詞", reader = Reader.RULES))
+                    add(Piece(piece.surface.takeLast(1), "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true))
+                }
+                call -> {
+                    add(Piece(piece.surface + pieces[at + 1].surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
+                    skipUntil = at + 2
+                }
+                else -> add(piece)
+            }
+        }
+    })
+
+    private val NANJA_FINAL_PARTICLES = setOf('な', 'よ', 'ね', 'さ', 'の')
+
+    private fun finalNanjaParticle(pieces: List<Piece>): List<Piece> = pieces.flatMapIndexed { at, piece ->
+        val head = pieces.getOrNull(at - 2)
+        val before = pieces.getOrNull(at - 1)
+        val explanation = head?.surface == "なん" && head.base == "なんだ" && before?.surface == "じゃ"
+        val attached = piece.surface.drop(1)
+        val particle = piece.surface.startsWith("い") && attached.all { it in NANJA_FINAL_PARTICLES }
+        if (explanation && particle && pieces.finalNanjaSuffix(at + 1)) {
+            ("い" + attached).map { Piece(it.toString(), it.toString(), "助詞", "終助詞", reader = Reader.RULES) }
+        } else listOf(piece)
+    }
+
+    private fun List<Piece>.finalNanjaSuffix(at: Int) = drop(at).takeWhile { it.kind != "記号" }
+        .all { it.kind == "助詞" && it.surface.all { c -> c in NANJA_FINAL_PARTICLES } }
+
+    /** Read the copula after 何なん as it would be read after a noun, even if the dictionary joined its pieces. */
+    private fun List<Piece>.interrogativePiece(at: Int): Pair<List<Piece>, Int>? {
+        if (getOrNull(at - 1)?.surface !in setOf("何", "なん")) return null
+        val suffix = drop(at).joinToString("") { it.surface }
+        if (!suffix.startsWith("なん")) return null
+        val copula = suffix.drop(2)
+        if (!copula.startsWith("だ") && !copula.startsWith("で") && !copula.startsWith("じゃ")) return null
+        val afterNoun = pieces("花" + copula)
+        if (afterNoun.firstOrNull()?.surface != "花") return null
+        val tail = afterNoun.drop(1)
+        val first = tail.firstOrNull() ?: return null
+        val de = first.surface == "で" && first.kind == "助詞"
+        if (!first.startsCopula && !first.surface.startsWith("じゃ") && !de) return null
+        if (tail.joinToString("") { it.surface } != copula) return null
+        val boundaries = drop(at).runningFold(0) { length, piece -> length + piece.surface.length }.drop(1)
+        var end = 2
+        val last = tail.indexOfFirst { piece ->
+            end += piece.surface.length
+            end in boundaries
+        }
+        if (last < 0) return null
+        val consumed = boundaries.indexOf(end) + 1
+        return (listOf(Piece("なん", "なん", "名詞", "代名詞", "なんだ", reader = Reader.RULES)) + tail.take(last + 1)) to consumed
+    }
+
+    private fun nanDaQuestion(piece: Piece, before: Piece?, after: Piece?, subject: Boolean): Boolean {
+        val nameBeforeParticle = piece.surface == "ナンダ" && nameParticle(after)
+        return !nameBeforeParticle && (subject || after?.surface in NAN_DA_PARTICLES || after?.surface in setOf("?", "？") ||
+            openingNanDaContinues(before, after))
+    }
+
+    private fun Piece.canSplitNanDa() = surface == "ナンダ" || surface in setOf("何だ", "何ダ") && kind == "感動詞"
+
+    private fun nameParticle(piece: Piece?) = piece?.kind == "助詞" && piece.surface !in NAN_DA_PARTICLES
+
+    private fun List<Piece>.repeatedNanDaPieces(at: Int, length: Int): List<Piece> {
+        val surface = subList(at, at + length).joinToString("") { it.surface }
+        if (!nanDaHasSubject(at)) return listOf(Piece(surface, "なんだ", "感動詞", "*", reader = Reader.RULES))
+        val head = surface.dropLast(1)
+        return listOf(
+            Piece(head, "なん", "名詞", "代名詞", reader = Reader.RULES),
+            Piece(surface.takeLast(1), "だ", "助動詞", "*", reader = Reader.RULES, startsCopula = true),
+        )
+    }
+
+    private fun List<Piece>.nanDaHasSubject(at: Int) = if (get(at).surface.startsWith("何")) {
+        beforeAdverbs(at)?.nanDaSubject() == true
+    } else {
+        beforeAdverbs(at)?.isNanDaTopic() == true
+    }
+
+    private fun Piece.nanDaSubject() = kind == "名詞" && surface.any(Char::isLetterOrDigit) || isNanDaTopic()
+
+    private fun Piece.isNanDaTopic() = kind == "助詞" && when (kana) {
+        "は", "も" -> subkind == "係助詞"
+        "が" -> subkind == "格助詞"
+        else -> false
+    }
+
+    private fun List<Piece>.beforeAdverbs(at: Int): Piece? {
+        val skipped = (at - 1 downTo 0).takeWhile { adverbOrComma(it) }
+        val before = getOrNull(at - skipped.size - 1)
+        if (before?.isNanDaTopic() == true) return before
+        return skipped.firstOrNull { get(it).nanDaComma() }?.let(::get) ?: before
+    }
+
+    private fun Piece.nanDaComma() = surface in setOf(",", "，", "、")
+
+    private val NAN_DA_PARTICLES = setOf("か", "よ", "ね", "カ", "ヨ", "ネ")
+
+    // Both dictionaries can tag 一体 as an ordinary noun.
+    private val NAN_DA_ADVERB_FALLBACKS = setOf("一体")
+
+    private fun List<Piece>.adverbOrComma(at: Int): Boolean {
+        val piece = get(at)
+        return piece.kind == "副詞" || piece.surface in NAN_DA_ADVERB_FALLBACKS || piece.nanDaComma()
+    }
+
+    private fun Piece?.endsNanDaCall() = this == null || surface.isBlank() ||
+        surface.firstOrNull()?.let { it in "、，,。．.!！；;：:」』）)】〉》］]｝}”’｣»›⟩〟" } == true
+
+    private fun openingNanDaContinues(before: Piece?, after: Piece?) =
+        nanDaOpening(before) && !after.endsNanDaCall()
+
+    private fun nanDaOpening(before: Piece?) =
+        before == null || before.surface in OPENING || before.surface in "、。，．,.！？!?；;：:…"
+
+    private fun List<Piece>.nanDaLength(at: Int): Int {
+        val head = getOrNull(at) ?: return 0
+        val next = getOrNull(at + 1)
+        val copula = getOrNull(at + 2)
+        val length = when {
+            head.surface in setOf("何だ", "何ダ", "なんだ", "なんダ", "ナンだ", "ナンダ") -> 1
+            head.surface in setOf("何", "なん", "ナン") && next?.surface in setOf("だ", "ダ") && next?.startsCopula == true -> 2
+            head.surface == "な" && next?.surface == "ん" && copula?.surface == "だ" && copula.startsCopula -> 3
+            else -> 0
+        }
+        return length.takeUnless { getOrNull(at + it)?.surface in NAN_DA_PARTICLES } ?: 0
+    }
+
+    private fun Piece.nanDaJoiner() = surface.firstOrNull()?.let { it in " \t　,，、～・" } == true && surface.all { it in " \t　,，、～・" }
+
+    private fun List<Piece>.nanDaRewriteLength(at: Int): Int {
+        val repeated = repeatedNanDaLength(at)
+        if (repeated > 0) return repeated
+        val before = beforeAdverbs(at)
+        return nanDaLength(at).takeIf { it == 3 && (nanDaHasSubject(at) || before?.kind == "名詞" && before.surface != "何") } ?: 0
+    }
+
+    private fun List<Piece>.repeatedNanDaLength(at: Int): Int {
+        val length = nanDaLength(at)
+        if (length == 0) return 0
+        val next = (at + length until size).firstOrNull { !get(it).nanDaJoiner() } ?: size
+        if (nanDaLength(next) > 0) return length
+        val before = (at - 1 downTo 0).firstOrNull { !get(it).nanDaJoiner() } ?: -1
+        return length.takeIf { (1..3).any { width -> nanDaLength(before - width + 1) == width } } ?: 0
+    }
+
+    private fun nanDaCall(pieces: List<Piece>, at: Int): Boolean {
+        val before = pieces.getOrNull(at - 1)
+        val after = pieces.getOrNull(at + 1)
+        val next = pieces.getOrNull(at + 2)
+        return pieces[at].surface in setOf("なん", "ナン") && after?.surface in setOf("だ", "ダ") && after?.startsCopula == true &&
+            nanDaOpening(before) && next.endsNanDaCall()
+    }
+
+    /**
+     * [line] as IPADIC splits [text], the line with its kanji made the dictionary's. Where small vowels draw out a
+     * word, せんせぃ or かわぃぃ, it's first read with them full size, せんせい and かわいい: where the dictionary knows
+     * that for one word, it's that word, as written. Elsewhere, ありがとぉ, the small vowels go with the word before,
+     * which keeps its reading.
+     */
+    private fun ipadicPieces(line: String, text: String): List<Piece> {
+        val draws = text.indices.filter { tokenizer.drawsOut(text, it) }.toSet()
+        val split = ipadicPieces(line, tokenizer.tokenize(text))
+        val drawn = drawnOut(text, rejoinDrawnWords(text, split, draws))
+        if (draws.isEmpty()) return drawn
+        val whole = tokenizer.tokenize(text.mapIndexed { at, c -> if (at in draws) c + 1 else c }.joinToString(""))
+        val pieces = ipadicPieces(line, whole)
+        val out = mutableListOf<Piece>()
+        var i = 0
+        var j = 0
+        // Both end where the text does, so they run out together.
+        while (i < drawn.size) {
+            val first = j
+            val a = mutableListOf(drawn[i++])
+            val b = mutableListOf(pieces[j++])
+            while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += drawn[i++] else b += pieces[j++]
+            // One word, so a word read right before, ない in しらないぃ, isn't split for another, しらな and いい. And a
+            // particle drawn out, よぉ in そうだよぉ, isn't the call よお: still a particle, ねえ in そうだねぇ, or another
+            // word, もう in もぅいいよ, where IPADIC took も for one, it is. Only a particle alone: IPADIC takes か and わ
+            // in かわぃぃ for particles, where かわいい is the word. And never first: no particle starts a line, so よぉ in
+            // よぉ、元気？ is the call.
+            val particle = i > 1 && drawnOutParticle(a, draws)
+            val word = whole[first].takeIf { j == first + 1 && it.isKnown && it.position !in draws && !(particle && it.partOfSpeechLevel1 == "感動詞") }
+            out += if (word != null && word.surface.indices.any { word.position + it in draws }) b else a
+        }
+        return out
+    }
+
+    /** Recognize a word IPADIC split at a long mark or at a small vowel that repeats a sound, as in だぁいすき. */
+    private fun rejoinDrawnWords(text: String, pieces: List<Piece>, draws: Set<Int>): List<Piece> {
+        if ('ー' !in text && draws.isEmpty()) return pieces
+        val out = ArrayList<Piece>(pieces.size)
+        var first = 0
+        while (first < pieces.size) {
+            val replacement = drawnWord(text, pieces, first, draws)
+            if (replacement == null) out += pieces[first] else out += replacement
+            val end = out.last().end
+            do { first++ } while (pieces[first - 1].end < end)
+        }
+        return out
+    }
+
+    /** The longest known kana word at this split, with the lyric's own vowels kept for romaji. */
+    private fun drawnWord(text: String, pieces: List<Piece>, first: Int, draws: Set<Int>): List<Piece>? {
+        val head = pieces[first]
+        val start = head.end - head.surface.length
+        drawnAuxiliaryHead(text, pieces, first, start)?.let { return listOf(it) }
+        // Keep the particle that follows a cry, as in おぉと叫ぶ, where おと would name a sound.
+        val cryWithParticle = head.kind == "感動詞" && pieces.getOrNull(first + 1)?.kind == "助詞"
+        val limit = drawnWordEnd(text, start)
+        val candidates = (first..pieces.lastIndex).asSequence().map(pieces::get)
+            .takeWhile { it.end <= limit }.drop(1)
+        return candidates.mapNotNull { last ->
+            val kana = text.substring(start, last.end)
+            val lookup = when {
+                'ー' in kana -> longMarkLookup(kana)
+                cryWithParticle -> null
+                else -> smallVowelLookup(kana, start, last, draws)
+            }
+            if (lookup != null) listOf(drawnNoun(kana, lookup, last.end)) else drawnNounWithCase(kana, last)
+        }.lastOrNull()
+    }
+
+    private fun drawnNoun(kana: String, lookup: String, end: Int) =
+        Piece(kana, kana, "名詞", "一般", lookup, end = end, reader = Reader.RULES)
+
+    /** IPADIC can read だに as one particle. Keep に separate when the preceding sounds name a noun, as in そーだにする. */
+    private fun drawnNounWithCase(kana: String, last: Piece): List<Piece>? {
+        if ('ー' !in kana || last.kind != "助詞" || last.surface.length < 2) return null
+        val noun = kana.dropLast(1)
+        val lookup = longMarkLookup(noun) ?: return null
+        val suffix = kana.takeLast(1)
+        val particle = tokenizer.tokenize(lookup + suffix).last()
+        if (particle.surface != suffix || !caseNeedsNoun(particle.partOfSpeechLevel2, suffix)) return null
+        return listOf(drawnNoun(noun, lookup, last.end - 1), Piece(suffix, suffix, "助詞", "格助詞", end = last.end, reader = Reader.RULES))
+    }
+
+    /** Keep そーだ as そうだ when だ ends a clause. A case particle such as を asks for a noun, but と can quote the clause. */
+    private fun drawnAuxiliaryHead(text: String, pieces: List<Piece>, first: Int, start: Int): Piece? {
+        val kana = text.substring(start, pieces[first].end).substringBefore('ー')
+        if (kana.length !in 1..2) return null
+        val firstMark = start + kana.length
+        val end = afterLongMarks(text, firstMark)
+        if (end == firstMark || !drawnAuxiliaryFollows(pieces, first + 1, end)) return null
+        if (kana.any { it !in 'ぁ'..'ゖ' }) return null
+        val vowels = LONG[romaji(kana).lastOrNull()] ?: return null
+        val word = vowels.firstNotNullOfOrNull { vowel ->
+            tokenizer.knownWord(kana + vowel)?.takeIf { it.partOfSpeechLevel1 in DRAWN_AUXILIARY_HEADS }
+        } ?: return null
+        val surface = text.substring(start, end)
+        return Piece(surface, surface, word.partOfSpeechLevel1, word.partOfSpeechLevel2, word.surface, end = end, reader = Reader.RULES)
+    }
+
+    private fun drawnAuxiliaryFollows(pieces: List<Piece>, from: Int, end: Int): Boolean {
+        val next = (from..pieces.lastIndex).firstOrNull { pieces[it].end > end } ?: return false
+        val auxiliary = pieces[next]
+        if (auxiliary.kind != "助動詞" || auxiliary.end - auxiliary.surface.length != end) return false
+        val particle = pieces.getOrNull(next + 1)
+        return !caseNeedsNoun(particle?.subkind, particle?.surface)
+    }
+
+    private fun caseNeedsNoun(subkind: String?, surface: String?) = subkind == "格助詞" && surface != "と"
+
+    /** Count a run of long marks as one letter when looking for a word in the dictionary. */
+    private fun drawnWordEnd(text: String, start: Int): Int {
+        var end = start
+        repeat(MAX_DRAWN_WORD) {
+            if (end == text.length || !isSaid(text[end])) return end
+            end = if (text[end] == 'ー') afterLongMarks(text, end) else end + 1
+        }
+        return end
+    }
+
+    private fun smallVowelLookup(kana: String, start: Int, last: Piece, draws: Set<Int>): String? {
+        // If the last piece is only a small vowel, the normal draw-out rule already keeps the word before it.
+        val plain = kana.filterIndexed { i, c ->
+            i == 0 || start + i !in draws || KANA[kana[i - 1]]?.lastOrNull() != KANA[c]?.lastOrNull()
+        }
+        if (plain == kana || last.surface.all { it in "ぁぃぅぇぉ" }) return null
+        return oldKana.today[plain] ?: plain.takeIf(tokenizer::isNoun)
+    }
+
+    private fun longMarkLookup(kana: String): String? {
+        if (kana.count { it != 'ー' } < 2 || kana.startsWith('ー')) return null
+        val spelling = buildString {
+            for (c in kana) if (c != 'ー' || lastOrNull() != 'ー') append(c)
+        }
+        if (spelling in DRAWN_WORDS) return spelling
+        val katakana = spelling.map { if (it in 'ぁ'..'ゖ') it + KATAKANA_TO_HIRAGANA else it }.joinToString("")
+        return katakana.takeIf(tokenizer::isNoun)
+    }
+
+    private val DRAWN_AUXILIARY_HEADS = setOf("副詞", "感動詞")
+    // IPADIC has no entry for these words, even in katakana.
+    private val DRAWN_WORDS = setOf("めんそーれ", "とぅもろー")
+    private const val MAX_DRAWN_WORD = 12
+
+    /** [a] is one particle, and a small vowel draws it out. */
+    private fun drawnOutParticle(a: List<Piece>, draws: Set<Int>) =
+        a.singleOrNull()?.let { piece -> piece.kind == "助詞" && piece.surface.indices.any { piece.end - piece.surface.length + it in draws } } == true
+
+    /** IPADIC can give a leading long mark to the next word, ーコーヒー, which needs its own lookup. */
+    private fun splitLeadingLongMarks(line: String, text: String, pieces: List<Piece>): List<Piece> {
+        if ('ー' !in text) return pieces
+        return buildList {
+            for (piece in pieces) {
+                val marks = piece.surface.indexOfFirst { it != 'ー' }
+                if (marks > 0) {
+                    val surface = piece.surface.take(marks)
+                    val end = piece.end - piece.surface.length + marks
+                    add(Piece(surface, surface, "名詞", "一般", end = end))
+                    val words = tokenizer.tokenize(text.substring(end, piece.end)).map { ipadicPiece(line, it, end) }
+                    addAll(drawnOut(text, words))
+                } else {
+                    add(piece)
+                }
+            }
         }
     }
 
-    private const val SMALL_HIRAGANA = "ぁぃぅぇぉっゃゅょゎ"
+    private fun afterLongMarks(text: String, start: Int): Int {
+        var end = start
+        while (text.getOrNull(end) == 'ー') end++
+        return end
+    }
 
-    /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
-    private fun ipadicPieces(line: String, text: String) = tokenizer.tokenize(text).map { token ->
-            // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
-            val reading = token.reading?.takeIf { it != "*" }
-            Piece(
-                line.substring(token.position, token.position + token.surface.length),
-                reading?.let(::hiragana) ?: token.surface,
-                token.partOfSpeechLevel1,
-                token.partOfSpeechLevel2,
-                token.baseForm?.takeIf { it != "*" } ?: token.surface,
-                token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
-                token.position + token.surface.length,
-                unread = reading == null
+    private fun ipadicPieces(line: String, tokens: List<com.atilika.kuromoji.ipadic.Token>) = tokens.map { ipadicPiece(line, it, 0) }
+
+    private fun ipadicPiece(line: String, token: com.atilika.kuromoji.ipadic.Token, offset: Int): Piece {
+        // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
+        val reading = token.reading?.takeIf { it != "*" }
+        val bridge = token as? SmallKanaTokenizer.BridgedToken
+        val ending = bridge?.ending?.let(::hiragana).orEmpty()
+        val start = offset + token.position
+        val end = start + token.surface.length
+        return Piece(
+            line.substring(start, end),
+            reading?.let { hiragana(it) + ending } ?: token.surface,
+            token.partOfSpeechLevel1,
+            token.partOfSpeechLevel2,
+            token.baseForm?.takeIf { it != "*" } ?: token.surface,
+            token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) + ending },
+            end,
+            unread = reading == null,
+            reader = if (token is SmallKanaTokenizer.JmdictToken || bridge?.jmdict == true) Reader.JMDICT else Reader.IPADIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
+        )
+    }
+
+    /**
+     * Small vowels that draw out the word in kana before them, ありがと and ぉ, go with it, as one word read as that one, and so does
+     * a small っ alone that cuts it short, かいしゃ and っ at the end of [text].
+     */
+    private fun drawnOut(text: String, pieces: List<Piece>) = pieces.fold(ArrayList<Piece>()) { out, piece ->
+        val before = out.lastOrNull()
+        val drawing = before != null && (
+            (piece.end - piece.surface.length until piece.end).all { tokenizer.drawsOut(text, it) } ||
+                SmallKanaTokenizer.cutsShort(text, piece.end - 1, piece.surface)
             )
+        // IPADIC can make ー a word of its own, すご and ー and ぃ: the ー draws out the word before as the vowel does.
+        val word = out.getOrNull(out.lastIndex - 1)?.takeIf { isKana(it.surface.last()) && before?.surface?.all { c -> c == 'ー' } == true }
+        when {
+            before == null || !drawing -> out += piece
+            word != null -> {
+                out.removeAt(out.lastIndex)
+                out[out.lastIndex] = word.drawnOutBy(before).drawnOutBy(piece)
+            }
+            else -> {
+                // The connective ends the verb: よ in まってよぉ is a particle, though IPADIC calls it よい's stem.
+                val ending = before.surface == "よ" && out.getOrNull(out.lastIndex - 1)?.subkind == "接続助詞"
+                val kept = if (ending) Piece("よ", "よ", "助詞", "終助詞", end = before.end, reader = Reader.RULES) else before
+                out[out.lastIndex] = kept.drawnOutBy(piece)
+            }
         }
+        out
+    }
 
     /**
      * [pieces] of the line, where it writes the kana after a kanji in katakana, 夜ニ紛レ or 届カナイ,
@@ -262,7 +682,7 @@ internal object Readings {
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += pieces[i++] else b += theirs[j++]
             // Theirs, once it can read the kana, replaces ours, which still can't.
-            out += if (a.any(Piece::missedKana) && b.none(Piece::missedKana)) b else a
+            out += if (a.any(Piece::missedKana) && b.none(Piece::missedKana) && a.last().surface != "ナンダ") b else a
         }
         return out
     }
@@ -410,7 +830,9 @@ internal object Readings {
             !ends || token.partOfSpeechLevel1 in NOUNS || (token.partOfSpeechLevel1 == "動詞" && "ワ行" in token.conjugationType)
         }
         val spelling = Furigana.Today(today, text.indices.toList(), changed, emptyList(), changed.first())
-        return tokens.map { todayPiece(listOf(it), spelling, text) }.takeIf { endings && grouped(it).size == 1 }
+        // A たり boundary must not make a rewritten candidate into a word, as in おとなふたり.
+        val tariBoundary = tokens.drop(1).any { it.surface in setOf("たり", "だり") && it.partOfSpeechLevel1 == "助詞" && it.partOfSpeechLevel2 != "接続助詞" }
+        return tokens.map { todayPiece(listOf(it), spelling, text) }.takeIf { endings && !tariBoundary && grouped(it).size == 1 }
     }
 
     /** What a noun made of an old verb is, as IPADIC names it: うたがひ is a noun, わりあひ an adverb. */
@@ -419,11 +841,20 @@ internal object Readings {
     /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
     private val tables = Any()
 
-    /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with ひ, ふ or ほ today, [modern]. */
-    internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
+    /** JMdict words for old-kana readings and tokenizer searches, and modern spellings that protect old-kana readings. */
+    internal class OldKana(
+        val today: Map<String, String>, val modern: Set<String>, small: Map<String, String> = emptyMap(),
+        val adjectives: Map<String, List<String>> = emptyMap()
+    ) {
         val modernWithHiOrFu = modern.filter { word -> (1..word.lastIndex).any { word[it] in "ひふ" } }.toSet()
         val longest = modern.maxOf { it.length }
         val longestToday = today.keys.maxOfOrNull { it.length } ?: 0
+        val search = small + today
+        val longestSearch = (search.keys + adjectives.keys).maxOfOrNull { it.length } ?: 0
+        val smallByPrefix = small.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
+        val adjectivesByPrefix = adjectives.keys.filter { it.length >= 2 }.groupBy { (it[0].code shl 16) or it[1].code }
+            .mapValues { (_, words) -> words.sortedByDescending { it.length } }
     }
 
     /**
@@ -437,8 +868,12 @@ internal object Readings {
         get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-        val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
-        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet())
+        val (adjectives, other) = lines.filterNot { it.startsWith('#') }.partition { it.startsWith('~') }
+        val (small, rest) = other.partition { it.startsWith('+') }
+        val (today, modern) = rest.partition { '\t' in it }
+        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet(),
+            small.associate { it.substringAfter('+').substringBefore('\t') to it.substringAfter('\t') },
+            adjectives.associate { it.substringAfter('~').substringBefore('\t') to it.split('\t').drop(1) })
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"
@@ -521,8 +956,16 @@ internal object Readings {
             said?.let(::hiragana),
             token.position + token.surface.length,
             unread = said == null,
-            reader = Reader.UNIDIC
+            reader = Reader.UNIDIC,
+            startsCopula = startsCopula(token.partOfSpeechLevel1, token.conjugationType, token.surface)
         )
+    }
+
+    /** The head of だ, だった or だろう, or a form of です. Not voiced past だ, or the copula's な, で or じゃ. */
+    fun startsCopula(kind: String, conjugation: String, surface: String) = kind == "助動詞" && when (conjugation) {
+        "特殊・ダ", "助動詞-ダ" -> surface.first() in "だダ"
+        "特殊・デス", "助動詞-デス" -> true
+        else -> false
     }
 
     /**
@@ -756,10 +1199,9 @@ internal object Readings {
         /** What read it. */
         val reader: Reader = Reader.IPADIC,
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
-        val today: String? = null
+        val today: String? = null,
+        val startsCopula: Boolean = false
     ) {
-        val startsWithUnreadSmallKana get() = unread && surface.firstOrNull()?.let { it in SMALL_HIRAGANA } == true
-
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
 
@@ -776,10 +1218,21 @@ internal object Readings {
         private val isNoun get() = kind == "名詞" && surface.any(Char::isLetterOrDigit)
 
         /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
-        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
+        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) =
+            Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today, startsCopula = startsCopula)
+
+        /**
+         * It, drawn out by the small vowels of [small], said as long as they make it. Where its last kana and a small
+         * vowel would read as a sound of their own, とぅ as tu, the vowel is read full size: ありがとぅ is arigatou.
+         */
+        fun drawnOutBy(small: Piece): Piece {
+            val drawn = if ("${kana.last()}${small.kana.first()}" in YOUON) small.kana.map { it + 1 }.joinToString("") else small.kana
+            return Piece(surface + small.surface, kana + drawn, kind, subkind, base, spoken?.plus(drawn), small.end, unread, reader, today, startsCopula)
+        }
 
         /** It read [kana], and said [said]. */
-        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
+        fun reading(kana: String, said: String) =
+            Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today, startsCopula = startsCopula)
 
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
@@ -790,6 +1243,21 @@ internal object Readings {
         private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
+    /** Read whole pieces after だり as after 高い; a particle may span several original pieces. */
+    private fun adjectiveParticles(pieces: List<Piece>, start: Int): Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? {
+        val suffix = StringBuilder()
+        var found: Pair<Int, List<com.atilika.kuromoji.ipadic.Token>>? = null
+        val candidates = pieces.drop(start).take(8).takeWhile { it.surface.all(Char::isLetter) }
+        for ((index, piece) in candidates.withIndex()) {
+            suffix.append(if (index == 0) piece.surface.drop(1) else piece.surface)
+            val tokens = tokenizer.tokenize("高い" + suffix)
+            if (tokens.first().surface == "高い" && tokens.drop(1).all { it.partOfSpeechLevel1 == "助詞" }) {
+                found = index + 1 to tokens.drop(1)
+            }
+        }
+        return found
+    }
+
     /**
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん, also
      * written 2人. Kept to numbers of people, the ones lyrics are full of, and 一 before a counter,
@@ -798,7 +1266,9 @@ internal object Readings {
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
+        var skipUntil = 0
         for ((index, piece) in pieces.withIndex()) {
+            if (index < skipUntil) continue
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             // 分 after a number after 寸 or 割 is a tenth of it, ぶ: 四寸四分, 五割五分. Elsewhere, minutes.
@@ -810,13 +1280,112 @@ internal object Readings {
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
             val next = pieces.getOrNull(index + 1)
+            val splitTari = last?.takeIf { it.kind == "連体詞" && it.surface.endsWith("んだ") }
+                ?.takeIf { piece.surface == "り" && piece.kind == "助動詞" }
+                ?.surface?.dropLast(1)?.let { surface ->
+                    voicedTariStem(listOf(Piece(surface, surface, "名詞", "一般")))?.let { surface to it.second }
+                }
+            // IPADIC takes 返し in 投げ返したり for a noun suffix, including its voiced noun reading.
+            val verbSuffix = if (last?.kind == "動詞" && piece.subkind == "接尾" && next?.kana in setOf("たり", "だり")) {
+                tokenizer.knownWord(piece.surface)?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading != null && it.reading != "*" }
+            } else null
+            val inflected = last?.let { inflectedCompound(it, piece, next) }
             // A suffix said with a voice after a word it can't be part of is the noun it is alone: いつか日, 一度星.
             val apart = last?.takeIf { standsApart(it, piece) }?.let { alone(piece.surface) }
             // A noun said with a voice after a number and a counter: 千本桜 せんぼんざくら, 二枚刃 にまいば.
             val afterCount = last?.takeIf { piece.surface in COUNTED_VOICED && endsInCount(it, out.getOrNull(out.lastIndex - 1)) }
             val classical = classical(piece, next)
             val minutes = minutes(piece, next)
+            // The dictionaries can attach a particle to either half of なでなで.
+            val repeatedTail = if (last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" &&
+                piece.surface.startsWith("で")) piece.surface.drop(1) else ""
+            val tailParticles = repeatedTail.takeIf { it.isNotEmpty() }?.let(::pieces)?.takeIf { it.all { p -> p.kind == "助詞" } }
+            // The dictionaries can take と for a form of とる, but verb endings belong to the verb.
+            val mistakenParticle = piece.surface == "と" && piece.base == "とる"
+            val canBeParticle = piece.kind !in setOf("動詞", "助動詞") || mistakenParticle
+            val repeatedParticles = if (last?.surface == "なで" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && canBeParticle) {
+                listOf(pieces(piece.surface), pieces("花" + piece.surface).drop(1)).firstOrNull { parts ->
+                    parts.isNotEmpty() && parts.all { it.kind == "助詞" } && parts.joinToString("") { it.surface } == piece.surface
+                }
+            } else null
+            // A sentence-final が can be labelled as a conjunction, though it follows the noun.
+            val nounBefore = last?.surface == "なでなで" && last.reader == Reader.RULES
+            val nounCopula = if (nounBefore && piece.kind == "助動詞" && piece.base in setOf("だ", "です")) {
+                val afterNoun = pieces("花" + pieces.drop(index).joinToString("") { it.surface }).drop(1)
+                afterNoun.firstOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助動詞" }
+            } else null
+            val nounParticle = if (nounBefore && piece.kind == "助詞" && piece.subkind == "接続助詞") {
+                pieces("花" + piece.surface).drop(1).singleOrNull()?.takeIf { it.surface == piece.surface && it.kind == "助詞" }
+            } else null
+            val adjectiveEnd = if (last?.surface == "だり" && piece.surface.startsWith("い")) {
+                adjectiveParticles(pieces, index)
+            } else null
             when {
+                tailParticles != null -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += tailParticles
+                }
+                repeatedParticles != null -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                    out += repeatedParticles
+                }
+                nounParticle != null -> out += nounParticle
+                nounCopula != null -> out += nounCopula
+                // だりい is a colloquial だるい, but だり after a predicate is a separate verb ending.
+                last?.surface == "だり" && piece.surface.startsWith("い") &&
+                    out.getOrNull(out.lastIndex - 1)?.let { it.kind !in setOf("動詞", "形容詞", "助動詞") ||
+                        (it.kind == "助動詞" && it.surface == "で" && it.base == "だ") } != false &&
+                    adjectiveEnd != null -> {
+                    val base = tokenizer.knownWord("だるい")?.takeIf { it.partOfSpeechLevel1 == "形容詞" }?.surface ?: "だりい"
+                    out[out.lastIndex] = Piece("だりい", "だりい", "形容詞", "自立", base, reader = Reader.RULES)
+                    out += adjectiveEnd.second.map { token ->
+                        Piece(token.surface, hiragana(token.reading), "助詞", token.partOfSpeechLevel2, reader = Reader.RULES)
+                    }
+                    skipUntil = index + adjectiveEnd.first
+                }
+                verbSuffix != null -> out += piece.read(hiragana(verbSuffix.reading), "動詞", "非自立")
+                splitTari != null -> {
+                    val (surface, base) = splitTari
+                    out[out.lastIndex] = Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    out += Piece("だり", "だり", "助詞", "並立助詞", reader = Reader.RULES)
+                }
+                piece.kana == "だり" && piece.kind in setOf("助詞", "助動詞") -> {
+                    val candidate = if (last?.mistakenTariVerb() == true) {
+                        out.dropLast(1) + last.read(last.kana, "名詞", "一般")
+                    } else out
+                    val stem = voicedTariStem(candidate)
+                    if (stem != null) {
+                        val (count, base) = stem
+                        val surface = out.takeLast(count).joinToString("") { it.surface }
+                        repeat(count) { out.removeAt(out.lastIndex) }
+                        out += Piece(surface, surface, "動詞", "自立", base, reader = Reader.RULES)
+                    } else if (last?.mistakenTariVerb() == true) {
+                        out[out.lastIndex] = last.read(last.kana, "名詞", "一般")
+                    }
+                    out += piece
+                }
+                // The dictionaries can take 一撫で or 撫で撫で + する for な + です.
+                piece.surface == "でし" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface in setOf("ひと", "なで") &&
+                    (next?.kind == "助動詞" || (next?.kind == "助詞" && next.subkind == "接続助詞")) -> {
+                    out.removeAt(out.lastIndex)
+                    val noun = out.last().surface + "なで"
+                    out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
+                    out += Piece("し", "し", "動詞", "自立", "する", reader = Reader.RULES)
+                }
+                // The passive される can instead leave な and で as particles.
+                piece.surface == "で" && last?.surface == "な" && out.getOrNull(out.lastIndex - 1)?.surface == "なで" && (next?.base == "する" || next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))) -> {
+                    out.removeAt(out.lastIndex)
+                    out[out.lastIndex] = Piece("なでなで", "なでなで", "名詞", "一般", reader = Reader.RULES)
+                }
+                // Before する or a particle, IPADIC can split these nouns into なでる pieces.
+                piece.surface == "なで" && last != null &&
+                    ((last.surface in setOf("ひと", "なで") && next?.base == "する") || (last.surface == "なで" && (next?.kind == "助詞" || (next?.kind == "助動詞" && next.base in setOf("だ", "です", "や"))))) -> {
+                    val noun = last.surface + piece.surface
+                    out[out.lastIndex] = Piece(noun, noun, "名詞", "一般", reader = Reader.RULES)
+                }
+                inflected != null -> out[out.lastIndex] = inflected
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
                 tenth -> out += piece.read("ぶ")
@@ -857,7 +1426,7 @@ internal object Readings {
                     out += piece
                 }
                 // 何 before d, t or n is なん: 何でも, 何だ, 何と, 何て, 何の, 何なの.
-                last?.surface == "何" && last.kana == "なに" && piece.surface.first() in "でだどとての" + "な" -> {
+                last?.surface == "何" && last.kana == "なに" && piece.surface.first() in "でだどとてのなデダドトテノナ" -> {
                     out[out.lastIndex] = last.read("なん")
                     out += piece
                 }
@@ -867,6 +1436,41 @@ internal object Readings {
             }
         }
         return listedWords(out)
+    }
+
+    private fun Piece.mistakenTariVerb() = kind == "動詞" && surface.endsWith('ん') && base.last() !in "むぶぬ"
+
+    /** A kana stem split as nouns can still be the voiced form of a known verb. */
+    private fun voicedTariStem(pieces: List<Piece>): Pair<Int, String>? {
+        if (pieces.lastOrNull()?.surface?.endsWith('ん') != true || pieces.last().kind == "動詞") return null
+        val suffix = pieces.takeLastWhile { piece -> piece.kind != "動詞" && piece.surface.all { it in 'ぁ'..'ん' } }
+        for (count in suffix.size downTo 1) {
+            val stem = suffix.takeLast(count).joinToString("") { it.surface }
+            if (stem.length < 2) continue
+            val candidates = "むぶぬ".mapNotNull { ending ->
+                val base = stem.dropLast(1) + ending
+                // IPADIC writes 死ぬ in kanji and splits its spelling in kana as し + ぬ.
+                val written = if (base == "しぬ") "死ぬ" else base
+                val verb = tokenizer.knownWord(written)
+                val cost = verb?.takeIf { it.partOfSpeechLevel1 == "動詞" && it.reading?.let(::hiragana) == base }
+                    ?.let { tokenizer.knownWordCost(written, it) }
+                cost?.let { base to it }
+            }
+            val lowest = candidates.minOfOrNull { it.second } ?: continue
+            return count to (candidates.filter { it.second == lowest }.singleOrNull()?.first ?: stem)
+        }
+        return null
+    }
+
+    /** A compound noun can hide two verbs before そう, as 溺れ死 and に in 溺れ死にそう. */
+    private fun inflectedCompound(before: Piece, ending: Piece, after: Piece?): Piece? {
+        if (before.kind != "名詞" || !isHan(before.surface.last())) return null
+        if (ending.kind !in GRAMMAR || after?.surface != "そう") return null
+        val left = tokenizer.knownWord(before.surface.dropLast(1)) ?: return null
+        val right = tokenizer.knownWord(before.surface.takeLast(1) + ending.surface) ?: return null
+        if (left.partOfSpeechLevel1 != "動詞" || right.partOfSpeechLevel1 != "動詞") return null
+        val kana = listOf(left.reading, right.reading).takeIf { parts -> parts.all { it != null && it != "*" } } ?: return null
+        return Piece(before.surface + ending.surface, kana.joinToString("") { hiragana(it) }, "動詞", "自立", reader = Reader.RULES)
     }
 
     /**
@@ -958,7 +1562,7 @@ internal object Readings {
     }
 
     /**
-     * Words of two kanji or more that JMdict reads one way only, and the dictionaries on the phone read
+     * Words of two kanji or more, and single-kanji る forms, that JMdict reads one way only and the phone reads
      * another, 体中 からだじゅう for からだちゅう, kept in [LISTED]: made by `scripts/readingsaudit`, see
      * CONTRIBUTING.md. Read once, when a line first needs them, whatever threads ask at once; null to read them
      * again, empty to read without them.
@@ -978,8 +1582,9 @@ internal object Readings {
      * make one: 体 and 中 are 体中, からだじゅう, and 一番 and 星 are 一番星, いちばんぼし. A verb is
      * looked up as the dictionary writes it, 肉付く for 肉付いた. Only whole pieces, so 一人舞 is not taken
      * out of 一人舞う; never starting or ending in a particle, so 今日は stays きょうは; and never one piece
-     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ; nor
-     * a number that starts a longer word, 一重 of 一重項: see [numberGoesOn].
+     * alone when the dictionary knows it, as 上野 うえの, which JMdict has only as こうずけ. An unread kanji followed by
+     * る or るる can use its one JMdict reading. Never take a number that starts a longer word, 一重 of 一重項;
+     * see [numberGoesOn].
      */
     private fun listedWords(pieces: List<Piece>): List<Piece> {
         val table = listed.orEmpty()
@@ -987,7 +1592,7 @@ internal object Readings {
         val out = mutableListOf<Piece>()
         var at = 0
         while (at < pieces.size) {
-            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 2).firstNotNullOfOrNull { count ->
+            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 1).firstNotNullOfOrNull { count ->
                 listedAs(pieces.subList(at, at + count), table)?.takeUnless { numberGoesOn(pieces, at, count) }?.let { count to it }
             }
             if (found == null) out += pieces[at++] else {
@@ -1016,13 +1621,19 @@ internal object Readings {
     private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
         val last = word.last()
         val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
-        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
+        if (!isHan(word[0].surface[0]) || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
-        if (surface.count(::isHan) < 2) return null
+        val unreadRu = word.any { it.unknown } && surface.drop(1) in setOf("る", "るる")
+        if (!listedShape(word, surface, unreadRu)) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
         if (kana == word.joinToString("") { it.kana }) return null
-        return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)
+        val kind = if (unreadRu) "動詞" else last.kind
+        val subkind = if (unreadRu) "自立" else last.subkind
+        return Piece(surface, kana, kind, subkind, reader = Reader.JMDICT)
     }
+
+    private fun listedShape(word: List<Piece>, surface: String, unreadRu: Boolean): Boolean =
+        unreadRu || (word.last().kind !in GRAMMAR && word.size > 1 && surface.count(::isHan) >= 2)
 
     /**
      * How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form:
@@ -1364,35 +1975,119 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> = grouped(pieces).map { word -> word.joinToString("", transform = kana) }
+    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> {
+        val index = pieces.withIndex().associate { (at, piece) -> piece to at }
+        val words = ArrayList<String>()
+        var before: Piece? = null
+        for (word in grouped(pieces)) {
+            val text = word.joinToString("", transform = kana)
+            // A word that ends on っ doubles the consonant that starts the next, so they're one: いっ and しゅん are isshun.
+            // Not across a space the line has, あっ あっ, nor before a vowel, あっあっ: there it only cuts the word short.
+            val touching = before != null && index[before] == index[word.first()]?.minus(1)
+            if (touching && words.last().lastOrNull()?.let { it in "っッ" } == true && text.firstOrNull()?.let(::isConsonant) == true) {
+                words[words.lastIndex] += text
+            } else {
+                words += text
+            }
+            before = word.last()
+        }
+        return words
+    }
+
+    /** Kana that start with a consonant, which a small っ before them doubles: not a vowel, ん, ー, a mark that repeats a kana, or a small kana. */
+    private fun isConsonant(kana: Char) = isKana(kana) && kana !in "あいうえおアイウエオんンー・ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ"
 
     /** The line [pieces] make in romaji, as it's said or [typed], with a space at most between words. */
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
         romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
+
+    /** Both dictionaries can take でし + て for the copula in あとでして, where it is really で + して. */
+    private fun Piece.ambiguousDeshite(after: Piece?) = kana == "でし" && after?.kana == "て" && after.subkind == "接続助詞"
+
+    /** At the start of a phrase or after a subject or topic, なん can ask 何. After まで or から it can explain. */
+    private fun Piece.beforeExplanatoryNan(): Boolean {
+        if (surface.none(Char::isLetterOrDigit)) return false
+        return !isNanDaTopic()
+    }
+
+    /** Keep fixed phrases and dependent forms such as そうだ, ようだ, のだ and んだ as they were grouped. */
+    private fun Piece.keepsCopula(before: Piece?): Boolean {
+        if (kind in COPULA_PHRASE_KINDS || base in COPULA_PHRASE_STEMS) return true
+        // 様 read よう is like ようだ, but the honorific 様 read さま belongs to the preceding name.
+        if (base == "様") return subkind == "非自立" || subkind == "助動詞語幹"
+        return surface in setOf("なん", "ナン") && before?.beforeExplanatoryNan() == true
+    }
+
+    private val COPULA_PHRASE_KINDS = setOf("副詞", "感動詞", "フィラー")
+    private val COPULA_PHRASE_STEMS = setOf("そう", "よう", "みたい", "の", "ん")
+
+    /** A connective て or で belongs to the predicate before it. */
+    private fun followsPredicateTe(previous: Piece?, before: Piece?) =
+        previous?.kind == "助詞" && previous.subkind == "接続助詞" && previous.kana in setOf("て", "で") &&
+            before?.kind in setOf("動詞", "形容詞", "助動詞")
+
+    private fun Piece.isEnding(tari: Boolean, afterTe: Boolean, previous: Piece?) =
+        if (tari) afterTe || previous?.kind in setOf("動詞", "形容詞", "助動詞") else
+            (kind == "助動詞" && kana != "なら") || (kind == "助詞" && subkind == "接続助詞" && kana != "から") ||
+                (kind == "動詞" && subkind == "非自立") || subkind == "接尾"
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
         val words = mutableListOf<MutableList<Piece>>()
         var previous: Piece? = null
         var opened = false
-        for (piece in pieces) {
+        var orphan = false
+        var straightQuotes = 0
+        for ((at, piece) in pieces.withIndex()) {
             if (piece.surface.isBlank()) {
                 previous = null
+                orphan = false
                 continue
             }
             val opening = piece.surface in OPENING
-            val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
-                (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
+            // Both dictionaries can tag たり as a particle, but it is part of the preceding predicate.
+            val tari = piece.kana in setOf("たり", "だり") &&
+                (piece.kind in setOf("助詞", "助動詞") || (piece.surface in setOf("タリ", "ダリ") && previous?.kind == "動詞"))
+            val afterTe = tari && followsPredicateTe(previous, pieces.getOrNull(at - 2))
+            val ending = piece.isEnding(tari, afterTe, previous)
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
             // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
             // before it, also one the dictionary takes for a word, as "!" in "Shock!".
             val english = previous != null && isEnglish(previous.surface) && isEnglish(piece.surface)
-            val attaches = previous != null && (opened || english || ((piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening) || (ending && previous.kind != "助詞"))
-            if (attaches) words.last() += piece else words += mutableListOf(piece)
+            val longMark = piece.surface.all { it == 'ー' } && previous?.surface?.last()?.let { isKana(it) && it.isLetter() } == true
+            val mark = (piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening
+            val withPrevious = opened || english || longMark || mark
+            // A split long mark ends the word it draws out. 好き after 食べるー is a new word.
+            // A から without a preceding word can start a noun: keep its ending, then split the next particle.
+            val orphanEnding = orphan && previous?.kana == "から" && piece.kind == "助動詞"
+            val afterOrphan = orphan && previous?.kind == "助動詞" && piece.kind == "助詞"
+            val copula = piece.startsCopula && !piece.ambiguousDeshite(pieces.getOrNull(at + 1))
+            val beforeCopula = if (previous?.surface in setOf("なん", "ナン")) pieces.beforeNanCopula(at - 1) else null
+            val separateCopula = copula && !orphanEnding && previous?.keepsCopula(beforeCopula) != true
+            val continuesEnding = ending && !afterOrphan && !separateCopula
+            val continuesWord = continuesEnding && (previous?.kind != "助詞" || orphanEnding || afterTe) && previous?.surface?.any { it != 'ー' } == true
+            // An opening mark or clause break starts a phrase; a closing quote keeps the word before it.
+            val phraseMark = previous != null && (previous.surface in OPENING || previous.surface in "、。，．,.！？!?；;：:…" ||
+                (previous.surface == "\"" && straightQuotes % 2 == 1) ||
+                (previous.surface == "'" && words.lastOrNull()?.none { it.surface.any(Char::isLetterOrDigit) } == true))
+            val explanatoryJa = previous?.surface == "なん" && previous.base == "なんだ" && piece.surface == "じゃ"
+            val join = previous != null && (withPrevious || continuesWord || explanatoryJa)
+            if (join) words.last() += piece else words += mutableListOf(piece)
+            orphan = if (orphanEnding && join) true else piece.kana == "から" && piece.kind == "助詞" &&
+                (previous == null || previous.kind == "助詞" || phraseMark ||
+                    (previous.surface == "の" && previous.kind == "名詞" && previous.subkind == "非自立"))
             opened = opening
+            straightQuotes += piece.surface.count { it == '"' }
             previous = piece
         }
         return words
+    }
+
+    private fun List<Piece>.beforeNanCopula(at: Int): Piece? {
+        val before = beforeAdverbs(at)
+        if (before?.startsCopula == true && getOrNull(at - 2)?.surface in setOf("なん", "ナン")) return null
+        if (before?.surface !in setOf("～", "・")) return before
+        return beforeAdverbs(at - 1)?.takeIf { it.kind == "名詞" } ?: before
     }
 
     /** Latin letters, digits and apostrophes, as English is written in Japanese lyrics. */
@@ -1580,7 +2275,7 @@ internal object Readings {
         return words
     }
 
-    private const val OPENING = "「『（(【〈《“"
+    private const val OPENING = "「『（(【〈《“［[‘〔｛{〖〘〚｢«‹⟨〝"
 
     /** What only spaces words in Japanese, a wide space and the ・ of アスファルト・レディ: a space in romaji. */
     private val LATIN_MARKS = mapOf('　' to ' ', '・' to ' ')
@@ -1745,7 +2440,12 @@ internal object Readings {
             val syllable = two?.let(YOUON::get)?.also { i += 2 } ?: (if (typed && hira[i] == 'を') "wo" else KANA[hira[i]])?.also { i++ }
             if (syllable == null) {
                 when (val c = hira[i]) {
-                    'っ' -> double = true
+                    'っ' -> {
+                        // A small っ cuts the sound off before these marks and has no consonant to double.
+                        val end = afterLongMarks(hira, i + 1)
+                        double = end == i + 1
+                        i = end - 1
+                    }
                     'ー' -> out.lastOrNull { it in "aeiou" }?.let(out::append)
                     else -> out.append(LATIN_MARKS[c] ?: c)
                 }
@@ -1793,6 +2493,9 @@ internal object Readings {
         val small = listOf('ゃ' to "a", 'ゅ' to "u", 'ょ' to "o")
         listOf("き" to "ky", "ぎ" to "gy", "し" to "sh", "じ" to "j", "ち" to "ch", "ぢ" to "j", "に" to "ny", "ひ" to "hy", "び" to "by", "ぴ" to "py", "み" to "my", "り" to "ry")
             .forEach { (kana, start) -> small.forEach { (s, vowel) -> put(kana + s, start + vowel) } }
+        // A small ぇ after the い row in cries and slang: ひぇー hyee, ぴぇん pyen.
+        listOf("き" to "ky", "ぎ" to "gy", "に" to "ny", "ひ" to "hy", "び" to "by", "ぴ" to "py", "み" to "my", "り" to "ry")
+            .forEach { (kana, start) -> put(kana + "ぇ", start + "e") }
         put("ふぁ", "fa"); put("ふぃ", "fi"); put("ふぇ", "fe"); put("ふぉ", "fo")
         put("てぃ", "ti"); put("でぃ", "di"); put("うぃ", "wi"); put("うぇ", "we"); put("ゔぁ", "va")
         // The rest katakana writes words from other languages with: イェーガー, シェル, ジェット, チェック, ウォーク, ヴィーナス.

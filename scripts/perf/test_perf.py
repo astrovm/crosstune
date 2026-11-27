@@ -57,7 +57,10 @@ FAKE_AAPT2 = r"""#!/bin/sh
 case "$*" in
   "dump packagename "*production.apk) echo com.astrovm.crosstune ;;
   "dump packagename "*unknown.apk) exit 1 ;;
-  "dump packagename "*) cat "$3" ;;
+  "dump packagename "*) sed -n 1p "$3" ;;
+  "dump badging "*)
+    code=$(sed -n 2p "$3"); echo "package: name='$(sed -n 1p "$3")' versionCode='${code:-1}'"
+    if grep -qx debuggable "$3"; then echo application-debuggable; fi ;;
   *) exit 2 ;;
 esac
 """
@@ -88,7 +91,7 @@ class PerfTest(unittest.TestCase):
         (home / "unknown.apk").touch()
         self.home_path = home
         self.env = mock.patch.dict(os.environ, {
-            "ANDROID_HOME": str(home), "FAKE": str(home),
+            "ANDROID_HOME": str(home), "ADB": "", "FAKE": str(home),
             "STAT_APP_0": STAT.format(u=100, s=50), "STAT_MAIN_0": STAT.format(u=10, s=5),
             "STAT_APP_1": STAT.format(u=500, s=250), "STAT_MAIN_1": STAT.format(u=60, s=15),
         })
@@ -117,6 +120,16 @@ class PerfTest(unittest.TestCase):
         log = self.home_path / "asked"
         return log.read_text().splitlines() if log.exists() else []
 
+    def test_aapt2_comes_from_android_studios_sdk_when_the_named_one_has_none(self):
+        studio = self.home_path / "studio"
+        aapt2 = studio / "Android/Sdk/build-tools/36.0.0/aapt2"
+        aapt2.parent.mkdir(parents=True)
+        aapt2.touch()
+        # Both names an SDK can go by, as CI's runner sets ANDROID_SDK_ROOT to an SDK that has its own aapt2.
+        named = {"ANDROID_HOME": str(self.home_path / "empty"), "ANDROID_SDK_ROOT": str(self.home_path / "empty")}
+        with mock.patch.dict(os.environ, {**named, "HOME": str(studio)}):
+            self.assertEqual(str(aapt2), perf.aapt2_path())
+
     def test_jank_reads_the_frames_since_the_reset_and_sums_up_each_build(self):
         lines = self.run_perf("jank", "--runs", "2", "--label", "main")
         run = lines[0]
@@ -138,10 +151,18 @@ class PerfTest(unittest.TestCase):
         self.assertLess(asked.index("shell am force-stop com.astrovm.crosstune.dev"), reset)
         self.assertLess(reset, asked.index("shell input swipe 360 1158 360 514 150"))
 
-    def test_jank_without_numbers_says_none(self):
-        (self.home_path / "gfxinfo").write_text("No process found\n")
-        run = self.run_perf("jank", "--runs", "1")[0]
+    def test_gfxinfo_without_numbers_says_none(self):
+        run = perf.gfxinfo("No process found\n")
         self.assertEqual((0, 0, 0.0, 0), (run["frames"], run["janky"], run["janky_pct"], run["p90_ms"]))
+
+    def test_jank_on_a_screen_that_did_not_scroll_stops_rather_than_read_it_as_all_janky(self):
+        (self.home_path / "gfxinfo").write_text(GFXINFO.replace("Total frames rendered: 1000", "Total frames rendered: 15"))
+        with self.assertRaisesRegex(SystemExit, "Only 15 frames were drawn over 16 flings"):
+            self.run_perf("jank", "--runs", "1")
+
+    def test_jank_with_a_frame_for_each_fling_counts(self):
+        (self.home_path / "gfxinfo").write_text(GFXINFO.replace("Total frames rendered: 1000", "Total frames rendered: 16"))
+        self.assertEqual(16, self.run_perf("jank", "--runs", "1")[0]["frames"])
 
     def test_builds_take_turns_and_one_not_debuggable_is_compiled_from_its_profile(self):
         lines = self.run_perf("start", "--runs", "2", "--build", "old=a.apk", "--build", "new=b.apk")
@@ -168,6 +189,26 @@ class PerfTest(unittest.TestCase):
             with self.subTest(apk=apk), self.assertRaisesRegex(SystemExit, apk):
                 self.run_perf("start", "--runs", "1", "--build", "dev=a.apk", "--build", f"other={apk}")
         self.assertEqual([], self.asked())
+
+    def test_release_like_builds_of_two_version_codes_stop_before_any_install(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\n")
+        with self.assertRaisesRegex(SystemExit, "old 2270100, new 2280000"):
+            self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual([], self.asked())
+
+    def test_a_newer_build_that_is_not_debuggable_stops_an_older_debuggable_one(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\ndebuggable\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\n")
+        with self.assertRaisesRegex(SystemExit, "Build them with the same versionCode"):
+            self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual([], self.asked())
+
+    def test_debuggable_builds_of_two_version_codes_take_turns(self):
+        (self.home_path / "old.apk").write_text("com.astrovm.crosstune.dev\n2270100\ndebuggable\n")
+        (self.home_path / "new.apk").write_text("com.astrovm.crosstune.dev\n2280000\ndebuggable\n")
+        lines = self.run_perf("start", "--runs", "1", "--build", "old=old.apk", "--build", "new=new.apk")
+        self.assertEqual(["old", "new"], [line["label"] for line in lines[:2]])
 
     def test_each_install_reads_the_validated_copy_after_the_source_changes(self):
         apk = self.home_path / "a.apk"
@@ -264,13 +305,6 @@ class PerfTest(unittest.TestCase):
             self.run_perf("start", "--runs", "1", "--settle", "1")
         self.assertEqual([10, 1], self.slept)
         self.assertIn("no battery temperature", log.getvalue())
-
-    def test_adb_comes_from_the_path_without_an_sdk(self):
-        with mock.patch.dict(os.environ, {"ANDROID_HOME": ""}), mock.patch.object(perf.Path, "home", return_value=Path("/nowhere")):
-            with mock.patch.object(perf.shutil, "which", return_value="/usr/bin/adb"):
-                self.assertEqual("/usr/bin/adb", perf.adb_path())
-            with mock.patch.object(perf.shutil, "which", return_value=None), self.assertRaises(SystemExit):
-                perf.adb_path()
 
 
 if __name__ == "__main__":

@@ -3,6 +3,9 @@ package com.astrovm.crosstune
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.activity.compose.setContent
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -24,12 +27,14 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -41,7 +46,12 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 
 /** The timed words lined up to the singing heard in what the phone plays. */
 @RunWith(RobolectricTestRunner::class)
@@ -61,8 +71,15 @@ class SingingTest {
     /** Put back after, so other tests hear as the app does. */
     private val realSinging = MainActivity.singingFactory
 
-    /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed. */
-    private val lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
+    /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed; a test may give more. */
+    private var lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
+
+    /** Lyrics answers matched in step with the screen, as Unconfined does, counting each match it's asked for. */
+    private val matched = AtomicInteger()
+    private val matching = object : CoroutineDispatcher() {
+        override fun isDispatchNeeded(context: CoroutineContext): Boolean = false.also { matched.incrementAndGet() }
+        override fun dispatch(context: CoroutineContext, block: Runnable) = block.run()
+    }
 
     /** When the music app's clock started, which is when the singing was heard from too, and where in the song. */
     private var startedAt = 0L
@@ -73,6 +90,7 @@ class SingingTest {
         MainActivity.httpClientFactory = { fake.client() }
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
+        MainActivity.lyricsMatchingDispatcher = matching
         MainActivity.shellFactory = { emptyList() }
         MainActivity.checksForUpdates = { false }
         MainActivity.playbackFactory = { playback }
@@ -97,6 +115,7 @@ class SingingTest {
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
+        MainActivity.lyricsMatchingDispatcher = null
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.playbackFactory = ::MediaSessionPlayback
@@ -120,7 +139,7 @@ class SingingTest {
 
     /** LRCLIB has the six lines, three seconds apart or at [times] seconds, timed for a recording [seconds] long, when it says. */
     private fun lyricsTimedFor(seconds: Int?, times: List<Int> = lines.indices.map { it * 3 }) {
-        val synced = lines.zip(times) { line, at -> "[00:%02d.00] %s".format(at, line) }.joinToString("\n")
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.00] %s".format(at / 60, at % 60, line) }.joinToString("\n")
         val duration = seconds?.let { "\"duration\":$it," }.orEmpty()
         fake.handler = { request ->
             FakeSpotify.html(
@@ -319,6 +338,37 @@ class SingingTest {
     }
 
     @Test
+    fun confirmedFarHearingKeepsItsReportUntilTheLyricsReopen() {
+        TimingLog.clear()
+        heardFarOffTwice(FAR_MS)
+        waitUntil { model().uiState.lyricsSynced && model().uiState.reportOffer }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("clock sure false"))
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+    }
+
+    @Test
+    fun farHearingWithASureClockKeepsItsReportUntilTheLyricsReopen() {
+        TimingLog.clear()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 0)
+        passes(500)
+        waitUntil { model().uiState.lyricsSynced && model().uiState.reportOffer }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("clock sure true"))
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+    }
+
+    @Test
     fun pickedUpPartwayWordsHeardFarOffAreKeptForNextTime() {
         // Timed for another take, the words are seconds off: far more than the app's clock can be behind.
         heardFarOffTwice(FAR_MS)
@@ -328,6 +378,32 @@ class SingingTest {
         assertTrue(prefs().contains("lyrics_sync"))
         // The app's clock may still be a little behind, so the singing is heard again next time.
         assertFalse(prefs().contains("sung_heard"))
+    }
+
+    @Test
+    fun twoDifferentOffsetsInOnePlayDoNotUseCrossPlayTolerance() {
+        TimingLog.clear()
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A distant star is shining", "The morning comes again", "We walk into the daylight")
+        val times = listOf(4, 7, 10, 32, 35, 38, 41, 44, 47)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            when (singing.hears) {
+                1 -> sungAt(times, times.map { -3_540L })
+                2 -> sungAt(times, times.map { -2_170L })
+                else -> awaitCancellation()
+            }
+        }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        assertEquals(-3_540L, LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines)?.offsetMs)
+        passes(30_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("sung -2170 off"))
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
     }
 
     /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is, or its first [seconds]. */
@@ -783,6 +859,1062 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayOneWhileHeardFurtherOffThanNearLinesAreLookedAtMovesThemThisTimeOnly() {
+        // As Bizarre Love Triangle went, YouTube Music's words timed for another take: one while heard 22.8 s
+        // off. That far off, the lines heard are found only where by far the most words agree across the
+        // whole song, so they move at once, but for this time only: a chorus may be timed otherwise there.
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 12_000L }) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        // The next while hears the words as far off, where they're shown now: they're kept so, a problem found.
+        passes(40_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(times.map { it * 1_000L + 12_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(prefs().contains("lyrics_sync"))
+        waitUntil { fake.requestedUrls.count { it == ReportSender.URL } == 1 }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    /**
+     * Lines sung [keptMs] after they're timed, and kept so, picked up 3 s in, the first while hearing the
+     * chorus, lines 3 to 5, 25 s before it's sung, where lines 1 and 2 are: then where it's sung, or [laterMs] after they're timed.
+     */
+    private fun chorusHeardFarFromWhereItsSung(keptMs: Long = 0, laterMs: Long = keptMs): List<Int> {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, if (whiles == 0) listOf(100_000L, 100_000L, 100_000L, keptMs - 25_000L, keptMs - 25_000L, keptMs - 25_000L) else times.map { laterMs }).also { whiles++ } }
+        if (keptMs == 0L) openLyrics() else keptOff(times, keptMs)
+        plays(positionMs = 3_000)
+        // Kept later, the first line shown is later too, and it's heard from just before it.
+        if (keptMs > 0) passes(2_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L + keptMs }
+        return times
+    }
+
+    @Test
+    fun pickedUpPartwayOneChorusHeardFarFromWhereItsSungIsntKept() {
+        // Found where by far the most words agree, but the chorus is sung again where the words time it.
+        chorusHeardFarFromWhereItsSung()
+        composeRule.waitForIdle()
+        // A later while still has a chance to put the words back.
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun closingAfterOneWrongChorusDoesNotKeepItsMove() {
+        val times = chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun oneWrongChorusNineSecondsEarlyDoesNotMoveOrKeepTheSheet() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            Sung(startedAt, lines.drop(3).flatMapIndexed { line, text ->
+                text.split(' ').mapIndexed { word, piece -> HeardWord(piece, 1_000L + line * 3_000L + SungAlignment.HEARD_LATE_MS + word * 300L) }
+            })
+        }
+        openLyrics()
+        plays(positionMs = 20_000)
+        passes(10_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun oneWrongChorusNineSecondsLateDoesNotMoveOrKeepTheSheet() {
+        val times = listOf(2, 5, 8, 11, 14, 17)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            Sung(startedAt, lines.take(3).flatMapIndexed { line, text ->
+                text.split(' ').mapIndexed { word, piece -> HeardWord(piece, 1_000L + line * 3_000L + SungAlignment.HEARD_LATE_MS + word * 300L) }
+            })
+        }
+        openLyrics()
+        plays(positionMs = 10_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun twoDistinctPhrasesOfARepeatedChorusDoNotMoveTheSheet() {
+        lines = listOf(
+            "scarlet rivers carry lanterns under starlight", "silver mountains gather thunder beyond morning",
+            "quiet meadows shelter sparrows beside water", "distant clocks turn endlessly around noon",
+            "broken windows shine across empty streets", "golden leaves drift silently over hills"
+        )
+        val times = listOf(2, 5, 8, 11, 14, 17)
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            Sung(startedAt, lines.take(2).flatMapIndexed { line, text ->
+                listOf(HeardWord("noise", 1_000L + line * 3_000L + SungAlignment.HEARD_LATE_MS)) +
+                    text.split(' ').drop(1).mapIndexed { word, piece ->
+                        HeardWord(piece, 1_300L + line * 3_000L + SungAlignment.HEARD_LATE_MS + word * 300L)
+                    }
+            })
+        }
+        openLyrics()
+        plays(positionMs = 10_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun pickedUpLateOneWhileHeardFarEarlierIsReportedWithoutKeepingIt() {
+        val times = listOf(60, 63, 66, 90, 93, 96)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        assertFalse(model().uiState.reportOffer)
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+        assertTrue(offerShown())
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun changingTheSheetWithoutListeningDiscardsItsOldPendingHearing() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        openLyrics()
+        plays(playing = false)
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val sheet = model().uiState.lyricLines
+        val oldSheet = sheet.dropLast(1)
+        val store = LyricsSyncStore(prefs())
+        store.rememberPending(song, oldSheet, PendingShift(22_000, 40_000, 60_000))
+        assertTrue(store.pending(song, oldSheet) != null)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == sheet.size }
+        assertNull(store.pending(song, oldSheet))
+    }
+
+    @Test
+    fun aFarHearingIsConfirmedByAnotherPartAfterReopening() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        assertTrue("The song must identify its recording: ${model().uiState.lyricsFor}", RecordingKey.identifiesRecording(checkNotNull(model().uiState.lyricsFor)))
+        assertTrue("The first hearing must be retained", prefs().contains("lyrics_sync_pending"))
+        plays(positionMs = 61_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(90_000L, model().uiState.lyricLines[3].timeMs)
+        val original = model().uiState.lyricLines
+        val song = checkNotNull(model().uiState.lyricsFor)
+        assertEquals(-27_400L, LyricsSyncStore(prefs()).pending(song, original)?.offsetMs)
+        val pending = checkNotNull(LyricsSyncStore(prefs()).pending(song, original))
+        assertTrue("A hearing starts at or after the player position", pending.fromMs >= 61_000L)
+        assertEquals(SingingListener.SECONDS * 1_000L, pending.toMs - pending.fromMs)
+        plays(positionMs = 101_000)
+        passes(1_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.lyricsSynced)
+        assertTrue(prefs().contains("lyrics_sync"))
+        assertEquals(102_600L, model().uiState.lyricLines[9].timeMs)
+        assertNull(LyricsSyncStore(prefs()).pending(song, original))
+    }
+
+    @Test
+    fun hearingTheSameFarWindowAfterReopeningDoesNotConfirmIt() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = listOf(60, 63, 66, 90, 93, 96)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun overlappingHearingsAtDoubleSpeedDoNotConfirm() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(-27_400, 61_000, 101_000))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = {
+            val words = (9..11).flatMap { index ->
+                lines[index].split(' ').mapIndexed { word, text ->
+                    val at = (times[index] * 1_000L - 27_400 - 91_000) / 2 + SungAlignment.HEARD_LATE_MS / 2 + word * 150L
+                    HeardWord(text, at)
+                }
+            }
+            Sung(startedAt, words)
+        }
+        plays(positionMs = 91_000, speed = 2f)
+        passes(1_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun consecutiveHearingsAtDoubleSpeedDoNotOverlap() {
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here")
+        lyricsTimedFor(null, listOf(4, 7, 10, 32, 35, 38, 52, 55, 58))
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), emptyList()) }
+        openLyrics()
+        plays(positionMs = 3_000, speed = 2f)
+        waitUntil { singing.hears == 1 }
+        passes(11_000)
+        assertEquals(1, singing.hears)
+        passes(10_000)
+        waitUntil { singing.hears >= 2 }
+    }
+
+    @Test
+    fun farHearingsThatDifferByMoreThanTheirUncertaintyDoNotConfirm() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -24_000L }) }
+        plays(positionMs = 101_000)
+        passes(1_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun farHearingsAtTheUncertaintyBoundaryDoNotConfirm() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(-30_825, 61_000, 81_000))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        plays(positionMs = 101_000)
+        passes(3_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun aHearingWithNoSongTimeCannotConfirmAStoredShift() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = listOf("filler first", "filler second", "filler third", "bright lanterns follow rivers over quiet golden mountains", "filler fifth", "filler sixth")
+        val times = listOf(101, 104, 107, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val words = lines[3].split(' ').mapIndexed { index, text -> HeardWord(text, index * 300L) }
+        val hearing = Sung(0L, words)
+        val off = checkNotNull(SungAlignment.shiftMs(hearing, { 101_000L }, model().uiState.lyricLines))
+        LyricsSyncStore(prefs()).rememberPending(song, model().uiState.lyricLines, PendingShift(off, 61_000, 81_000))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { if (singing.hears > 1) awaitCancellation() else Sung(startedAt, words) }
+        plays(positionMs = 101_000, speed = 0f)
+        passes(1_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun oldPendingEvidenceCannotOverrideWordsTimedByHand() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        openLyrics()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val original = model().uiState.lyricLines
+        composeRule.runOnIdle { model().nudgeSync(1_000) }
+        LyricsSyncStore(prefs()).rememberPending(song, original, PendingShift(-27_400, 61_000, 81_000))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        plays(positionMs = 101_000)
+        passes(3_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.lyricsSynced)
+        assertTrue(LyricsSyncStore(prefs()).byHand(song, original))
+        plays(positionMs = 101_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(131_000L, model().uiState.lyricLines[9].timeMs)
+    }
+
+    @Test
+    fun aLaterNearHearingDiscardsUnconfirmedFarEvidence() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        lines = lines + listOf("A different verse begins", "Its words are elsewhere", "Another line is here", "Over hills we wander", "All the stars are shining", "Home is where we go")
+        val times = listOf(60, 63, 66, 90, 93, 96, 103, 106, 109, 130, 133, 136)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        openLyrics()
+        plays(positionMs = 61_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 62_600L }
+        plays(positionMs = 61_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { 0L }) }
+        plays(positionMs = 130_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        plays(positionMs = 130_000, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        singing.answer = { sungAt(times, times.map { -27_400L }) }
+        plays(positionMs = 101_000)
+        passes(1_000)
+        waitUntil { singing.hears >= 3 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun recordedJapaneseHearingLeavesTheCurrentPlayUnchangedAndDoesNotSave() {
+        // Plastic Love, heard from 53.505 s: the phone model's saved 54 s window and the sheet
+        // selected with the recording's length. Unrelated lines keep their times but use filler words.
+        val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
+        val nearby = mapOf(1 to "恋のプログラムを 狂わせないでね", 2 to "出逢いと別れ 上手に打ち込んで", 3 to "時間がくれば終わる don't hurry", 4 to "愛に傷ついた あの日からずっと")
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }.joinToString("\n")
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":309,"syncedLyrics":"$synced"}]""" else """{"title":"Demo","author_name":"Band"}""")
+        }
+        singing.answer = {
+            val heard = listOf(1120L to "僕は背ないでね", 4360L to "目会いとは", 6240L to "ファレッツ", 8000L to "衝突にく", 10780L to "自動で", 13660L to "時間が来るレッファ", 16500L to "オーブーの光り")
+            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + 495) })
+        }
+        openLyrics()
+        plays(positionMs = 53_505)
+        passes(2_500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(47_620L, model().uiState.lyricLines[2].timeMs)
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun twoRecordedJapaneseHearingsConfirmTheSameShiftAfterReopening() {
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = listOf(30490, 39910, 47620, 57100, 67930, 77360, 85200, 94520, 105320, 114750, 123720, 133360, 139560, 159210, 168690, 177550, 187480, 194590, 204250, 212140, 221540, 232040, 241540, 250980, 260140, 269710, 278970)
+        val nearby = mapOf(
+            1 to "恋のプログラムを 狂わせないでね", 2 to "出逢いと別れ 上手に打ち込んで", 3 to "時間がくれば終わる don't hurry", 4 to "愛に傷ついた あの日からずっと",
+            14 to "彼に似てるわなぜか 思い出と重なり合う", 15 to "グラスを落として急に 涙ぐんでもわけは", 16 to "尋ねないでね", 17 to "夜更けの高速で 眠りにつくころ"
+        )
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        val synced = lines.zip(times) { line, at -> "[%02d:%02d.%02d] %s".format(at / 60_000, at / 1000 % 60, at % 1000 / 10, line) }.joinToString("\n")
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":309,"syncedLyrics":"$synced"}]""" else """{"title":"Demo","author_name":"Band"}""")
+        }
+        singing.answer = {
+            val heard = if (singing.hears == 1) {
+                listOf(1120L to "僕は背ないでね", 4360L to "目会いとは", 6240L to "ファレッツ", 8000L to "衝突にく", 10780L to "自動で", 13660L to "時間が来るレッファ", 16500L to "オーブーの光り")
+            } else {
+                listOf(1540L to "ドラスを教えて", 5220L to "切るに", 6680L to "何だっても", 9780L to "貯けは", 12040L to "数えないでね")
+            }
+            val heardAt = if (singing.hears == 1) startedAt else startedAt + 7_000
+            Sung(heardAt, heard.map { (at, text) -> HeardWord(text, at + if (singing.hears == 1) 495 else 0) })
+        }
+        openLyrics()
+        plays(positionMs = 53_505)
+        passes(2_500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertEquals(9_647L, LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines)?.offsetMs)
+        plays(positionMs = 53_505, playing = false)
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 180_000)
+        passes(1_000)
+        assertEquals(1, singing.hears)
+        passes(7_000)
+        waitUntil { singing.hears >= 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun recordedFarHearingWaitsForConfirmationAfterClosing() {
+        // The saved 39 s hearing of Bizarre Love Triangle, with unrelated lines replaced by filler.
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = listOf(0, 10, 13, 17, 19, 21, 26, 29, 33, 35, 37, 42, 58, 61, 66, 69, 74, 91, 94, 98, 100, 102, 106, 110, 114, 116, 118, 123, 139, 142, 147, 151, 155, 159, 163, 167)
+        val nearby = mapOf(1 to "Every time I think of you", 2 to "I feel shot right through with a bolt of blue", 3 to "It's no problem of mine", 4 to "But it's a problem I find", 5 to "Living a life that I can't leave behind", 6 to "But there's no sense in telling me", 7 to "The wisdom of the fool won't set you free", 8 to "But that's the way that it goes")
+        lines = times.indices.map { nearby[it] ?: "filler$it" }
+        lyricsTimedFor(null, times)
+        singing.answer = {
+            if (singing.hears > 1) awaitCancellation()
+            val heard = listOf(1580L to "It's", 2220L to "no", 2660L to "problem,", 3300L to "it's", 3760L to "no", 3760L to "problem,", 3780L to "it's", 4160L to "a", 4540L to "problem,", 5080L to "it's", 5780L to "fine", 6360L to "Live", 6600L to "in", 6820L to "a", 7240L to "life", 7600L to "that", 7900L to "I", 8280L to "can't", 8720L to "leave", 9020L to "you", 10220L to "head", 10780L to "There's", 11080L to "no", 11660L to "steps", 12240L to "in", 12980L to "standing", 14060L to "There's", 14600L to "no")
+            Sung(startedAt, heard.map { (at, text) -> HeardWord(text, at + 485) })
+        }
+        openLyrics()
+        plays(positionMs = 38_515)
+        passes(20_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertTrue("Expected the far hearing to move the line, got ${model().uiState.lyricLines[3].timeMs} ms", model().uiState.lyricLines[3].timeMs > 30_000L)
+        assertTrue("The recorded far hearing must be retained", prefs().contains("lyrics_sync_pending"))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(prefs().contains("lyrics_sync"))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(17_000L, model().uiState.lyricLines[3].timeMs)
+        assertTrue(LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines) != null)
+    }
+
+    @Test
+    fun aLoneFarWhileIsReportedOnLeavingOnlyOnceItsWholeAnswerIsIn() {
+        val times = listOf(2, 4, 6, 30, 32, 34)
+        lyricsTimedFor(null, times)
+        val whole = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { -25_000L }, SingingListener.FIRST_SECONDS) }
+        singing.answer = { whole.await() }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 4_000)
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        whole.complete(sungAt(times, times.map { -25_000L }))
+        composeRule.waitForIdle()
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertTrue(sent.getJSONObject("song").getString("log").contains("sung -25000 off, clock sure false"))
+        assertFalse(prefs().contains("lyrics_sync"))
+        passes(40_000)
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aFarWhilesFirstSecondsAloneArentReportedWhenTheAppStops() {
+        val times = listOf(2, 4, 6, 30, 32, 34)
+        lyricsTimedFor(null, times)
+        singing.early = { sungAt(times, times.map { -25_000L }, SingingListener.FIRST_SECONDS) }
+        singing.answer = { awaitCancellation() }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 4_000)
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        composeRule.settle(checkNotNull(controller) { "Expected controller to be non-null" }.get())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        assertFalse(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun closingUnconfirmedFarWordsDoesntUseUpTheReportOffer() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        // Opening the same words again can still offer once their far match survives the play.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        singing.answer = { sungAt(times, times.map { -25_000L }) }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+    }
+
+    @Test
+    fun farReportDueWhenTheAppGoesOutOfSightIsKeptBeforeClosing() {
+        chorusHeardFarFromWhereItsSung()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun farReportDueWhenPlaybackRestartsIsKeptBeforeClosing() {
+        chorusHeardFarFromWhereItsSung()
+        val song = checkNotNull(model().uiState.lyricsFor)
+        plays(positionMs = 0)
+        composeRule.waitForIdle()
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertTrue(AutoReports(prefs()).owes(song, SongProblem.SUNG_OFF))
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun closingFarWordsOffersTheirReportWhenTheyOpenAgain() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertFalse(offerShown())
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+        // The report kept when the lyrics closed must survive a later, different timing log.
+        TimingLog.clear()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertTrue(sent.getJSONObject("song").getString("log").contains("sung -25000 off"))
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
+    }
+
+    @Test
+    fun decliningADeferredFarReportDeletesIt() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        composeRule.runOnIdle { model().allowAutoReports(false) }
+        composeRule.runOnIdle { model().dismissLyrics(); model().showLyrics() }
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        assertFalse(AutoReports(prefs()).owes(checkNotNull(model().uiState.lyricsFor), SongProblem.SUNG_OFF))
+    }
+
+    @Test
+    fun deferredFarReportSurvivesTheActivityClosing() {
+        chorusHeardFarFromWhereItsSung()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        controller?.destroyAndSettle()
+        controller = null
+        openLyrics()
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF) }
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun pickedUpPartwayLinesMovedByOneWrongWhileGoBackByOneRightOne() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "player:recording"), null)
+        val times = chorusHeardFarFromWhereItsSung()
+        assertTrue(prefs().contains("lyrics_sync_pending"))
+        // Moved back in the app a little later, the next while hears the first lines where they're timed: one while undoes it.
+        passes(5_000)
+        plays(positionMs = 3_000)
+        // Heard from just before the next line shown.
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 30_000L }
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertNull(LyricsSyncStore(prefs()).pending(checkNotNull(model().uiState.lyricsFor), model().uiState.lyricLines))
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(offerShown())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesMovedByOneWrongWhileDontGoBackByOneHeardJustFarEnoughFromWhereTheyreKept() {
+        // Heard 2 s from where the words are kept is off, as anywhere here: that while doesn't say the move was wrong.
+        chorusHeardFarFromWhereItsSung(laterMs = MainViewModel.WORDS_OFF_MS)
+        passes(5_000)
+        plays(positionMs = 3_000)
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[1].timeMs == 5_000L + MainViewModel.WORDS_OFF_MS }
+        // Found far off itself, it moves the lines it heard this time only: the rest aren't put back where they're kept.
+        assertTrue(model().uiState.lyricLines[3].timeMs < 30_000L)
+        assertFalse(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun farWhilesThatDriftWithoutPuttingTheWordsBackReportOnceOnLeaving() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 12_000L else 18_600L }).also { whiles++ } }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
+        passes(40_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        // The later while is 6.6 s further off: it neither keeps nor puts back the first move.
+        assertEquals(42_000L, model().uiState.lyricLines[3].timeMs)
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        assertFalse(prefs().contains("lyrics_sync"))
+        val next = MusicMetadata("Next", "Other band")
+        composeRule.runOnIdle {
+            playback.onThePhone = Heard.Song(next, null)
+            playback.playing.value = null
+        }
+        waitUntil { model().uiState.lyricsFor == next }
+        waitUntil { fake.requestedUrls.count { it == ReportSender.URL } == 1 }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertEquals("Demo", sent.getJSONObject("song").getString("title"))
+        composeRule.runOnIdle { model().pauseFollowingNext(); model().dismissLyrics() }
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aLoneFarWhileIsReportedWhenTheSongPlaysAgainFromTheStart() {
+        val times = listOf(2, 4, 6, 30, 32, 34)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.early = { if (whiles == 0) sungAt(times, times.map { -25_000L }, SingingListener.FIRST_SECONDS) else null }
+        singing.answer = { if (whiles++ == 0) sungAt(times, times.map { -25_000L }) else awaitCancellation() }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 4_000)
+        passes(500)
+        waitUntil { singing.hears == 1 && whiles == 1 && model().uiState.lyricLines[3].timeMs == 5_000L }
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        // Played again from the start, nothing put the words back in the play that ended.
+        plays(positionMs = 0)
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertEquals(30_000L, model().uiState.lyricLines[3].timeMs)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aFarWhileHeardAgainPastFirstSecondsThatPutTheWordsBackIsReportedOnLeaving() {
+        // Lines every 3 s, each with words of its own. The first while hears every line 25 s early, so they move
+        // there. The next while's first seconds hear lines where they're kept, which puts them back for now, but the
+        // whole while hears them 25 s early again, where they were shown: the same far move, so it's still reported.
+        lines = List(40) { line -> "aeiou".map { vowel -> "b$vowel${'a' + line % 26}${if (line >= 26) "z" else ""}" }.joinToString(" ") }
+        val times = List(40) { line -> 2 + line * 3 }
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        val second = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { if (whiles == 0) -25_000L else 0L }, SingingListener.FIRST_SECONDS) }
+        singing.answer = { if (whiles++ == 0) sungAt(times, times.map { -25_000L }) else second.await() }
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        plays(positionMs = 4_000)
+        passes(500)
+        waitUntil { singing.hears == 1 && whiles == 1 && model().uiState.lyricLines[10].timeMs == 7_000L }
+        while (whiles < 2) passes(1_000)
+        // Its first seconds heard where the words are timed: back there for now.
+        waitUntil { model().uiState.lyricLines[10].timeMs == 32_000L }
+        second.complete(sungAt(times, times.map { -25_000L }))
+        waitUntil { model().uiState.lyricLines[10].timeMs == 7_000L }
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesKeptOffMovedByOneWrongWhileGoBackToWhereTheyreKept() {
+        val times = chorusHeardFarFromWhereItsSung(keptMs = 3_000)
+        assertFalse(model().uiState.reportOffer)
+        // Moved back in the app, the next while hears the first lines where they're kept, 3 s after they're timed.
+        passes(5_000)
+        plays(positionMs = 3_000)
+        passes(5_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 33_000L }
+        assertEquals(times.map { it * 1_000L + 3_000L }, model().uiState.lyricLines.map { it.timeMs })
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
+    fun pickedUpPartwayOneWhileHeardJustAsFarOffAsNearLinesAreLookedAtLeavesThem() {
+        // Heard ten seconds off, it's found near where they're timed, where words can match by chance too: one while doesn't move them.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { SungAlignment.MAX_SHIFT_MS }) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun pickedUpPartwayTwoWhilesHeardFarOffASecondApartDontAgreeThatNear() {
+        // Eight seconds off, words drift no more than a second through the song, and these two are a second apart.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 9_000L else 8_000L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        passes(30_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun pickedUpPartwayAWhilesFirstSecondsDontAgreeWithTheRestOfItButTheNextWhileDoes() {
+        // Moved 12 s by one while found far off, then heard 1.9 s further still, lines close enough
+        // together for its first seconds to tell where they are before the rest of it is in.
+        lines = lines + listOf("Bright stars above us", "Carry me home again", "Whisper softly forever")
+        val times = listOf(2, 5, 8, 30, 32, 34, 60, 62, 64)
+        lyricsTimedFor(null, times)
+        val offMs = { if (singing.hears == 1) 12_000L else 13_900L }
+        singing.answer = { sungAt(times, times.map { offMs() }) }
+        singing.early = { if (singing.hears == 1) null else sungAt(times, times.map { offMs() }, SingingListener.FIRST_SECONDS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[1].timeMs == 17_000L }
+        passes(40_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 43_900L }
+        composeRule.waitForIdle()
+        // Those first seconds are the same while as the rest of it, so they don't agree with it.
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        // The next while hears them as far off: two whiles agree, and they're kept so.
+        passes(33_000)
+        waitUntil { singing.hears == 3 && model().uiState.lyricsSynced }
+        assertEquals(times.mapIndexed { line, at -> at * 1_000L + if (line < 3) 12_000L else 13_900L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun pickedUpPartwayTwoWhilesHeardFarOffAgreeTheFurtherTheMoreTheyDrift() {
+        // Words timed for another take drift through the song: a second apart, nearly ten seconds off, they agree.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, times.map { if (whiles == 0) 9_800L else 8_800L }).also { whiles++ } }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 38_800L }
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    /** The words at [times] seconds kept [offMs] later than timed, as a play before heard them, then open. */
+    private fun keptOff(times: List<Int>, offMs: Long) {
+        LyricsSyncStore(prefs()).save(MusicMetadata("Demo", "Band"), lines.zip(times) { line, at -> LyricLine(at * 1_000L, line) }, listOf(SyncPoint(times.first() * 1_000L, times.first() * 1_000L + offMs)))
+        openLyrics()
+        waitUntil { model().uiState.lyricsSynced }
+    }
+
+    @Test
+    fun pickedUpPartwayOneWhileHeardFarFromWordsKeptFarOffDoesntMoveThem() {
+        // Kept 40 s off, one while hears them 5.7 s further: no more than an eighth of how far off they are,
+        // but still one while alone, as the one Never Gonna Give You Up was wrongly heard by, 5.35 s off.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        keptOff(times, 40_000)
+        val kept = prefs().getString("lyrics_sync", null)
+        singing.answer = { sungAt(times, times.map { 45_700L }) }
+        plays(positionMs = 43_000)
+        // Heard from just before the next line shown.
+        passes(2_000)
+        waitUntil { singing.hears >= 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 40_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(kept, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun pickedUpPartwayLinesKeptFarOffArentMovedByOneWhileHeardALittleFurther() {
+        // Kept 20 s later, here by hand, then picked up there: one while hears them 2.5 s further still.
+        // No more than an eighth of how far off they're kept, but one while alone never moves them, however
+        // they were kept: a while once did, about as far off as words kept far off drift.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 22_500L }) }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(20_000) }
+        val byHand = prefs().getString("lyrics_sync", null)
+        plays(positionMs = 23_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 20_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(byHand, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun aVideoPickedUpPartwayPutInTimeByHandIsntMovedByOneWhile() {
+        // A video's one while far off is enough to move words found as they are, but not words put in time by hand.
+        shazamAnswers(180_000)
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 3_000L }) }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        val byHand = prefs().getString("lyrics_sync", null)
+        plays(positionMs = 3_000, video = true)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 500L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(byHand, prefs().getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun aVideoPutInTimeByHandIsntMovedByOneWhileOnceItsWordsAreOpenedAgain() {
+        // Put in time by hand, then left: opened again another time, they're still the person's timing.
+        shazamAnswers(180_000, 180_000)
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 3_000L }) }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        controller?.destroyAndSettle()
+        openLyrics()
+        val byHand = prefs().getString("lyrics_sync", null)
+        plays(positionMs = 3_000, video = true)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L + 500L }, model().uiState.lyricLines.map { it.timeMs })
+        assertEquals(byHand, prefs().getString("lyrics_sync", null))
+    }
+
+    /**
+     * The remix's own words, three seconds apart; under the song's bare name, two copies that agree with each other, ten
+     * seconds later, once [copies] says they answer, each answered once [held] lets it.
+     */
+    private fun remixWithCopies(copies: () -> Boolean, held: () -> Unit = {}) {
+        fun answer(title: String, shiftMs: Int, seconds: Int?): String {
+            val synced = lines.mapIndexed { index, line -> "[00:%05.2f] %s".format(Locale.ROOT, (index * 3_000 + shiftMs) / 1000.0, line) }.joinToString("\\n")
+            return """{"trackName":"$title","artistName":"Band",${seconds?.let { "\"duration\":$it," }.orEmpty()}"syncedLyrics":"$synced"}"""
+        }
+        fake.handler = { request ->
+            val url = request.url
+            FakeSpotify.html(
+                request,
+                when {
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "Demo (2018 Remix)" -> "[${answer("Demo (2018 Remix)", 0, null)}]"
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "Demo" && copies() ->
+                        held().let { "[${answer("Demo", 10_000, 200)},${answer("Demo", 10_600, 201)}]" }
+                    url.host == "lrclib.net" -> "[]"
+                    url.host == "music.163.com" -> """{"result":{"songs":[]}}"""
+                    url.host.endsWith("youtube.com") -> """{"title":"Demo (2018 Remix)","author_name":"Band"}"""
+                    else -> """{"results":[]}"""
+                }
+            )
+        }
+    }
+
+    /** The words kept by the lookups for good, as they are once they're timed anew or kept as they were. */
+    private fun keptForGood() = File(app.cacheDir, "lyrics.json").let { it.isFile && "Sing to me tonight" in it.readText() && "provisional" !in it.readText() }
+
+    @Test
+    fun wordsPutInTimeByHandArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
+        var copies = false
+        remixWithCopies({ copies })
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        waitUntil { !model().findingWords }
+        val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
+        val found = model().uiState.lyricLines
+        assertEquals(times, found.map { it.timeMs })
+        // Put in time by hand with Shazam's gap alone, which saves no points, only that they were (Issue #1164).
+        LyricsSyncStore(prefs()).save(song, found, emptyList(), byHand = true)
+        controller?.destroyAndSettle()
+        // Looked up again, as after the lookups change, and now the copies answer; they're not even asked.
+        // Once the first lookup finishes, closing the screen keeps its words too. Clear both to force another lookup.
+        assertTrue(File(app.cacheDir, "kept_words.json").isFile)
+        File(app.cacheDir, "kept_words.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        copies = true
+        val asked = fake.requestedUrls.size
+        matched.set(0)
+        openLyrics()
+        waitUntil(::keptForGood)
+        // Matched where the test set, in step with the screen, not on the shared pool a busy machine fills.
+        assertTrue(matched.get() > 0)
+        assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(fake.requestedUrls.drop(asked).none { "track_name=Demo&" in it })
+        // And kept so: opened again once the words as shown aren't kept any more, as after the readings change, they're the
+        // same lines, so the mark that they were timed by hand still holds.
+        controller?.destroyAndSettle()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics()
+        assertEquals(times, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(LyricsSyncStore(prefs()).byHand(song, model().uiState.lyricLines))
+    }
+
+    @Test
+    fun wordsPutInTimeByTheSingingArentTimedAnewByCopiesFoundWhenLookedUpAgain() {
+        var copies = false
+        remixWithCopies({ copies })
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        waitUntil { !model().findingWords }
+        val song = checkNotNull(model().uiState.lyricsFor) { "Expected the words' song" }
+        val found = model().uiState.lyricLines
+        // The singing put the first line a second later, which keeps a point and no hand mark.
+        LyricsSyncStore(prefs()).save(song, found, listOf(SyncPoint(0, 1_000)))
+        controller?.destroyAndSettle()
+        // Once the first lookup finishes, closing the screen keeps its words too. Clear both to force another lookup.
+        assertTrue(File(app.cacheDir, "kept_words.json").isFile)
+        File(app.cacheDir, "kept_words.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        copies = true
+        // Only what's asked once the words are opened again counts: the first lookup asked for the bare title too.
+        val asked = fake.requestedUrls.size
+        matched.set(0)
+        openLyrics()
+        waitUntil { fake.requestedUrls.drop(asked).any { "track_name=Demo&" in it } && keptForGood() }
+        composeRule.waitForIdle()
+        assertTrue(matched.get() > 0)
+        // The copies are looked for, as these lines aren't timed by hand, but the shown ones keep where the singing put them.
+        assertEquals(times.map { it + 1_000 }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun aLookupRefreshRestoresHandTimingWhenItFindsTheSameTimestampsAgain() {
+        remixWithCopies({ true })
+        openLyrics()
+        waitUntil { !model().findingWords && keptForGood() }
+        val song = checkNotNull(model().uiState.lyricsFor)
+        val retimed = model().uiState.lyricLines
+        assertEquals(10_000L, retimed.first().timeMs)
+        val corrected = retimed.map { it.timeMs + 1_500 }
+        LyricsSyncStore(prefs()).save(song, retimed, listOf(SyncPoint(10_000, corrected.first())), byHand = true)
+        checkNotNull(controller).destroyAndSettle()
+        controller = null
+
+        // A refresh asks for the original timestamps first. The copies then give back the sheet we corrected.
+        File(app.cacheDir, "kept_words.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        openLyrics()
+        waitUntil { !model().findingWords && keptForGood() }
+        assertEquals(corrected, model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(model().uiState.lyricsSynced)
+    }
+
+    @Test
+    fun wordsPutInTimeByHandWhileCopiesAreLookedForStayAsTheyAre() {
+        val asked = CountDownLatch(1)
+        val answer = CountDownLatch(1)
+        remixWithCopies({ true }) {
+            asked.countDown()
+            answer.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        }
+        val times = lines.indices.map { it * 3_000L }
+        openLyrics()
+        // The copies are asked for once the words show; they're put in time by hand before they answer.
+        waitUntil { asked.count == 0L }
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        answer.countDown()
+        waitUntil(::keptForGood)
+        composeRule.waitForIdle()
+        assertEquals(times.map { it + 500 }, model().uiState.lyricLines.map { it.timeMs })
+        // Kept so, with the lines that timing is kept for.
+        controller?.destroyAndSettle()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics()
+        assertEquals(times.map { it + 500 }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun pickedUpPartwayOneChorusHeardAsTheNextIsntKeptByTheNextHeardNearTheOneAfter() {
+        // Three choruses, 30 s apart, timed right, each sung a little differently. The first is heard as the
+        // second's words, so the lines move 30 s early; where the second is sung, the third is shown now,
+        // and their first words are the same, so it would agree. It's heard where the words are kept first.
+        lines = listOf(
+            "Bright stars above us", "Carry me home again", "Whisper softly forever",
+            "Rivers run through valleys", "Mountains stand so tall", "Oceans meet the shore",
+            "Rivers fade into dust", "Mountains fall like rain", "Oceans dry and gone",
+        )
+        val times = listOf(10, 12, 14, 40, 42, 44, 70, 72, 74)
+        lyricsTimedFor(null, times)
+        var whiles = 0
+        singing.answer = { sungAt(times, if (whiles == 0) times.mapIndexed { line, _ -> if (line in 3..5) -30_000L else 100_000L } else times.map { 0L }).also { whiles++ } }
+        // The second while's first seconds hear the second chorus too.
+        singing.early = { if (whiles == 1) sungAt(times, times.map { 0L }, SingingListener.FIRST_SECONDS) else null }
+        openLyrics()
+        plays(positionMs = 8_000)
+        // Heard from just before the first chorus.
+        passes(1_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[6].timeMs == 40_000L }
+        passes(40_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("lyrics_sync"))
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(offerShown())
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
     fun linesHeardALittleLaterDontTakeTheLitLineBack() {
         // As on the Samsung: a line just lit, then the singing heard puts the lines a second and a half later.
         // The line lit stays lit till its new time, not the one before it again for a moment.
@@ -791,6 +1923,7 @@ class SingingTest {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }
         openLyrics()
+        TimingLog.clear()
         plays(positionMs = 3_000)
         waitUntil { singing.hears == 1 }
         passes(2_300)
@@ -802,6 +1935,27 @@ class SingingTest {
         composeRule.waitForIdle()
         passes(1_000)
         assertFalse(TimingLog.lastMinute(), Regex("lit 0 ").containsMatchIn(TimingLog.lastMinute()))
+    }
+
+    @Test
+    fun theFirstHeardLineGoesDarkAfterItEnds() {
+        openLyrics()
+        val following = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), 1f, true), "YouTube Music", canSeek = true)
+        val lines = listOf(LyricLine(0, "A line", endMs = 2_000))
+        composeRule.runOnIdle { checkNotNull(controller).get().setContent { Text(rememberSungLine(lines, following, byEar = true).toString()) } }
+        composeRule.onNodeWithText("0").assertExists()
+        waitUntil { composeRule.onAllNodesWithText("-1").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aLineMovedExactlyTwoSecondsAheadReturnsToThePreviousLine() {
+        openLyrics()
+        val following = Following(PlaybackClock(6_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true)
+        val lines = mutableStateOf(listOf(LyricLine(2_000, "First"), LyricLine(5_000, "Second")))
+        composeRule.runOnIdle { checkNotNull(controller).get().setContent { Text(rememberSungLine(lines.value, following, byEar = false).toString()) } }
+        composeRule.onNodeWithText("1").assertExists()
+        composeRule.runOnIdle { lines.value = listOf(LyricLine(2_000, "First"), LyricLine(8_000, "Second")) }
+        composeRule.onNodeWithText("0").assertExists()
     }
 
     @Test
@@ -1411,6 +2565,27 @@ class SingingTest {
     }
 
     @Test
+    fun linesHeardOnlyByTheirFirstWordsMoveFromTheFirstLineSungSinceHearingStarted() {
+        // A seventh line, so three are heard after one sung just before the second hearing starts.
+        lines = lines + "Shadows fall away"
+        val times = listOf(2, 5, 8, 30, 33, 36, 39)
+        lyricsTimedFor(null, times)
+        // The first three heard a second late; the second hearing, from 29.5 s, tells only the first words of the last three,
+        // 1.8 s sooner than they're shown. The fourth, shown at 31 s, was sung at 29.2 s, before it: the fifth is the first heard.
+        singing.answer = {
+            if (singing.hears == 1) sungAt(times, times.map { 1_000L })
+            else heardFirstWords(29_500, (4..6).associateWith { times[it] * 1_000L - 800 })
+        }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 9_000L }
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[4].timeMs != 34_000L }
+        // The fifth is where it's sung, and those between it and the third stretch to meet it.
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 29_416L, 32_200L, 35_200L, 38_200L), model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
     fun hearingStartsNowWhereALineJustPastIsTheFirstOfThoseLeftToHear() {
         // At 1.5 seconds in, the line at 0 is just as far past as hearing starts before a line, so the first words are heard now,
         // not from before the line at 4. A clock that barely moves, so where it is stays put.
@@ -1546,18 +2721,6 @@ class SingingTest {
             listens++
             return next.receive()
         }
-    }
-
-    /** projectM, when it can't start. */
-    private object NoMilkdrop : Milkdrop {
-        override fun open(width: Int, height: Int) = false
-        override fun size(width: Int, height: Int) = Unit
-        override fun show(preset: String, smooth: Boolean) = false
-        override fun hear(samples: ByteArray, count: Int) = Unit
-        override fun draw() = Unit
-        override fun darken(shade: Float, ceiling: Float) = Unit
-        override fun finish() = Unit
-        override fun close() = Unit
     }
 
     private companion object {

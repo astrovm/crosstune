@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AppOpsManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -108,9 +109,6 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         PixelFormat.OPAQUE
     )
 
-    /** Whether it covers another app, rather than float the words over it. */
-    private var covering = false
-
     /**
      * Locked, the words let every touch through, so a small button of their own, beside them, still
      * takes one: the way out that's always there, notification or not.
@@ -146,11 +144,21 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     /** Whether the words' buttons are out, from a tap on them, until another, or one anywhere else. */
     private val controls = mutableStateOf(false)
 
+    /**
+     * Showing over other apps taken back while the words or the cover show, with ADB or another app's shell: Android
+     * takes the window away without telling the service, so it closes here and Crosstune is told. Android calls it on
+     * its own thread.
+     */
+    private val overlayAllowed = AppOpsManager.OnOpChangedListener { _, _ ->
+        lifecycleScope.launch { if (!Settings.canDrawOverlays(this@FloatingLyricsService)) close() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         savedState.performAttach()
         savedState.performRestore(null)
         registry.currentState = Lifecycle.State.CREATED
+        getSystemService(AppOpsManager::class.java).startWatchingMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, packageName, overlayAllowed)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -171,7 +179,15 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 val cover = intent?.getBooleanExtra(EXTRA_COVER, false) == true
                 // Floated from the screen covering an app, the words float over it instead.
                 if (covering && !cover) uncover()
-                if (host == null) stopSelf() else if (view == null) if (cover) cover(host) else show(host)
+                when {
+                    host == null -> stopSelf()
+                    view != null -> Unit
+                    !cover -> show(host)
+                    host.state.coveringApp -> cover(host)
+                    // Let go of already, before Android got here, the app it was for comes out from under it as it is, unless
+                    // Crosstune was left since and the words float over it instead.
+                    stopSelfResult(startId) -> host.closed()
+                }
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
             else -> close()
@@ -507,10 +523,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     }
 
     override fun onDestroy() {
+        getSystemService(AppOpsManager::class.java).stopWatchingMode(overlayAllowed)
         hideUnlock()
         hideCloseTarget()
         view?.let(windows::removeView)
         view = null
+        covering = false
         registry.currentState = Lifecycle.State.DESTROYED
         super.onDestroy()
     }
@@ -518,6 +536,9 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     internal companion object {
         /** Set while there's a screen to float out of; the words close without one. */
         var host: FloatingHost? = null
+
+        /** Whether it covers another app, rather than float the words over it, so Crosstune lets go of a cover only. */
+        var covering = false
 
         const val ACTION_UNLOCK = "com.astrovm.crosstune.floating.UNLOCK"
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"

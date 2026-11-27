@@ -9,7 +9,6 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -49,8 +48,7 @@ internal class MusicBrainz(
             return null
         }
         // An answer of none is kept too, so the song gets the same facts, or none, every time.
-        cache.put(key, facts?.let { JSONObject().put("year", it.year).put("album", it.album).toString() }.orEmpty())
-        cache.save()
+        cache.keep(key, facts?.let { JSONObject().put("year", it.year).put("album", it.album).toString() }.orEmpty())
         return facts
     }
 
@@ -68,8 +66,7 @@ internal class MusicBrainz(
         } catch (_: JSONException) {
             return null
         }
-        cache.put(key, id.orEmpty())
-        cache.save()
+        cache.keep(key, id.orEmpty())
         return id
     }
 
@@ -118,7 +115,7 @@ internal class MusicBrainz(
      */
     private fun isTheSong(recording: JSONObject, title: String, wanted: Set<String>): Boolean {
         val releases = recording.optJSONArray("releases").objects()
-        val live = releases.isNotEmpty() && releases.all { release -> "Live" in strings(release.optJSONObject("release-group")?.optJSONArray("secondary-types")) }
+        val live = releases.isNotEmpty() && releases.all { release -> "Live" in release.optJSONObject("release-group")?.optJSONArray("secondary-types").strings() }
         return !live && yearOf(recording.optString("first-release-date")) != null &&
             SongNames.same(recording.optString("title"), title) && credited(recording).any(wanted::contains)
     }
@@ -146,7 +143,7 @@ internal class MusicBrainz(
             .addQueryParameter("limit", "100")
             .build()
         val albums = get(url).optJSONArray("releases").objects().mapNotNull { it.optJSONObject("release-group") }
-            .filter { it.optString("primary-type") == "Album" && strings(it.optJSONArray("secondary-types")).isEmpty() }
+            .filter { it.optString("primary-type") == "Album" && it.optJSONArray("secondary-types").strings().isEmpty() }
             .distinctBy { it.optString("id") }
             .filter { group -> yearOf(group.optString("first-release-date"))?.let { it in year..year + 1 } == true }
         val first = albums.minOfOrNull { it.getString("first-release-date") } ?: return null
@@ -155,8 +152,6 @@ internal class MusicBrainz(
 
     /** [text] as a phrase in a search; quotes and backslashes are all that mean anything inside one. */
     private fun quoted(text: String) = "\"${text.replace("\"", "").replace("\\", "")}\""
-
-    private fun strings(array: JSONArray?): List<String> = array?.let { list -> (0 until list.length()).map(list::optString) }.orEmpty()
 
     private fun yearOf(date: String): Int? = date.take(YEAR_DIGITS).takeIf { it.length == YEAR_DIGITS }?.toIntOrNull()
 

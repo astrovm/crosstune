@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONException
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -22,8 +21,7 @@ import kotlin.coroutines.CoroutineContext
  * played again needs no lookups. Keeps the newest [MAX_ENTRIES] in [file], and past them, as many
  * again of those used on [OFTEN_DAYS] days or more, so a song played often stays even after many
  * new ones. What's looked up for a song kept offline, inside [Pinning], is never dropped until the
- * song is let go. Only what was found is kept: a song that wasn't, maybe just offline, is looked up
- * again next time.
+ * song is let go. A caller can also keep what it needs to retry an answer after a restart.
  */
 internal class LookupCache(
     private val file: File,
@@ -88,6 +86,15 @@ internal class LookupCache(
         }
     }
 
+    /** [put], then [save] at once: for an answer that took asking for. */
+    suspend fun keep(key: String, value: String) {
+        put(key, value)
+        save()
+    }
+
+    /** What's kept for [key], or else what [ask] answers, kept when it says anything; null when it says nothing. */
+    suspend inline fun getOrAsk(key: String, ask: () -> String?): String? = get(key) ?: ask()?.also { if (it.isNotEmpty()) keep(key, it) }
+
     /** Discard a checked answer if another lookup has not replaced it. */
     suspend fun discard(key: String, value: String) = loaded().let { entries ->
         synchronized(entries) {
@@ -127,20 +134,30 @@ internal class LookupCache(
     /** Writes what changed since the last save, all at once rather than after every song. */
     fun save() {
         val entries = entries ?: return
-        val lists = synchronized(entries) {
+        synchronized(entries) {
             if (!changed) return
             changed = false
             fun json(of: List<Map.Entry<String, Entry>>) =
                 JSONArray().apply { of.forEach { (key, entry) -> put(JSONArray().put(key).put(entry.value).put(entry.days).put(entry.lastDay).put(JSONArray(entry.pins.toList()))) } }.toString()
-            if (pinnedFile == file) {
+            val lists = if (pinnedFile == file) {
                 mapOf(file to json(entries.entries.toList()))
             } else {
                 val (pinned, loose) = entries.entries.partition { it.value.pins.isNotEmpty() }
                 mapOf(file to json(loose), pinnedFile to json(pinned))
             }
+            pending.set(lists)
         }
-        pending.set(lists)
-        writes.launch { writing.withLock { pending.getAndSet(null)?.forEach { (file, json) -> write(file, json) } } }
+        writes.launch { writePending() }
+    }
+
+    /** Records a retry before the caller hands the song off to another app. */
+    suspend fun flush() {
+        save()
+        withContext(ioDispatcher) { writePending() }
+    }
+
+    private suspend fun writePending() = writing.withLock {
+        pending.getAndSet(null)?.forEach { (file, json) -> write(file, json) }
     }
 
     private fun write(file: File, json: String) {
@@ -165,18 +182,15 @@ internal class LookupCache(
     }
 
     private fun read(file: File, entries: LinkedHashMap<String, Entry>) {
-        try {
+        // Unreadable, it starts over.
+        answeredOr(Unit) {
             if (!file.isFile) return
             val list = JSONArray(file.readText())
             // Saved before days were counted, each was used on one, today.
             (0 until list.length()).mapNotNull(list::optJSONArray).forEach { entry ->
-                val pins = entry.optJSONArray(4)?.let { ids -> (0 until ids.length()).map(ids::optString).toSet() }.orEmpty()
+                val pins = entry.optJSONArray(4).strings().toSet()
                 entries[entry.optString(0)] = Entry(entry.optString(1), entry.optInt(2, 1), entry.optLong(3, today()), pins)
             }
-        } catch (_: IOException) {
-            // Unreadable, it starts over.
-        } catch (_: JSONException) {
-            // Unreadable, it starts over.
         }
     }
 

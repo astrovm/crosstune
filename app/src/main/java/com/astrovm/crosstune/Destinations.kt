@@ -68,18 +68,19 @@ internal sealed class Destination {
 
 /**
  * Persists the default destination, per-source rules, custom destinations and the sites web
- * frontends open on. Frontend apps and patched builds are offered only while [isInstalled].
+ * frontends open on. Frontend apps and patched builds are offered only while [isInstalled], and
+ * builds Crosstune has no name for while [found] by the links they open; see [LinkState.apps].
  */
 internal class DestinationStore(
     private val preferences: SharedPreferences,
+    private val found: () -> List<String> = { emptyList() },
     private val isInstalled: (String) -> Boolean = { true }
 ) {
 
     fun customDestinations(): List<Destination.Custom> {
         val stored = preferences.getString(KEY_CUSTOM, null) ?: return emptyList()
         val array = runCatching { JSONArray(stored) }.getOrNull() ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index ->
-            val item = array.optJSONObject(index) ?: return@mapNotNull null
+        return array.objects().mapNotNull { item ->
             val id = item.optString("id").ifEmpty { return@mapNotNull null }
             val name = item.optString("name").ifEmpty { return@mapNotNull null }
             val template = item.optString("template").takeIf(Destination::isValidTemplate) ?: return@mapNotNull null
@@ -89,9 +90,20 @@ internal class DestinationStore(
 
     fun allDestinations(): List<Destination> = services() + frontends() + customDestinations()
 
-    /** Each service, then the builds patched from it that are installed, each an app of its own. */
-    private fun services(): List<Destination.Service> = MusicService.entries.flatMap { service ->
-        listOf(Destination.Service(service)) + service.builds.filter(isInstalled).map { Destination.Service(service, it) }
+    /**
+     * Each service, then the builds patched from it that are installed, each an app of its own: those Crosstune
+     * knows by name, then those [found] by the links they open. Without its own app, a service opens in such a
+     * build, so that build alone stands for it, e.g. YouTube's TV app on a TV, rather than two rows that open the
+     * same app.
+     */
+    private fun services(): List<Destination.Service> {
+        val found = found()
+        return MusicService.entries.flatMap { service ->
+            // Asked again here, as what was found may be from before it was uninstalled.
+            val unnamed = found.filter { it !in service.packageNames && MusicService.ofPackage(it) == service && isInstalled(it) }
+            val builds = (service.builds.filter(isInstalled) + unnamed).map { Destination.Service(service, it) }
+            if (builds.isNotEmpty() && !isInstalled(service.packageName)) builds else listOf(Destination.Service(service)) + builds
+        }
     }
 
     private fun frontends(): List<Destination.Alternative> {
@@ -145,28 +157,45 @@ internal class DestinationStore(
      * given, so reading every choice at once can share one list.
      */
     fun defaultDestination(all: List<Destination> = allDestinations()): Destination =
-        find(preferences.getString(KEY_DEFAULT, null), all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
+        find(preferences.getString(KEY_DEFAULT, null), all) ?: find(MusicService.YOUTUBE_MUSIC.name, all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
+
+    /**
+     * With none picked, the first music app on the phone, YouTube, mostly videos, last. Android is asked here, which
+     * is quick, rather than after its slow look at links, so it's the same however soon after starting it's asked.
+     * So a build known only by the links it opens, which that look finds, is never offered.
+     */
+    fun offered(all: List<Destination> = allDestinations()): Destination.Service? {
+        val onPhone = all.asSequence().filterIsInstance<Destination.Service>()
+            .filter { it.build?.let { build -> build in it.service.appPackages } ?: it.service.appPackages.any(isInstalled) }
+        return onPhone.firstOrNull { it.service != MusicService.YOUTUBE } ?: onPhone.firstOrNull()
+    }
 
     /** False until the user picks a default, e.g. during first-run setup. */
     fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null
 
-    fun setDefault(destination: Destination) {
-        preferences.edit { putString(KEY_DEFAULT, destination.key) }
-    }
+    fun setDefault(destination: Destination) = choose(KEY_DEFAULT, destination)
 
     /** The destination chosen for links from [source], or null to use the default. */
     fun rule(source: MusicService, all: List<Destination> = allDestinations()): Destination? =
         find(preferences.getString(ruleKey(source), null), all)
 
-    fun setRule(source: MusicService, destination: Destination?) {
-        preferences.edit {
-            if (destination == null) remove(ruleKey(source)) else putString(ruleKey(source), destination.key)
-        }
+    fun setRule(source: MusicService, destination: Destination?) = choose(ruleKey(source), destination)
+
+    /**
+     * Saves [destination] under [key], or forgets it when null. The build standing in for a service chosen
+     * before, chosen again, keeps the service's key, so its own app takes over once installed.
+     */
+    private fun choose(key: String, destination: Destination?) {
+        val saved = preferences.getString(key, null)
+        if (destination is Destination.Service && saved == destination.service.name && find(saved, allDestinations()) == destination) return
+        preferences.edit { if (destination == null) remove(key) else putString(key, destination.key) }
     }
 
-    // A build that was chosen and is gone falls back to its service.
+    // A build that was chosen and is gone falls back to its service, and a service without its own app to the build that stands for it.
     private fun find(key: String?, all: List<Destination>): Destination? = key?.let { wanted ->
-        all.firstOrNull { it.key == wanted } ?: all.firstOrNull { it.key == wanted.substringBefore(Destination.BUILD_SEPARATOR) }
+        val service = wanted.substringBefore(Destination.BUILD_SEPARATOR)
+        all.firstOrNull { it.key == wanted } ?: all.firstOrNull { it.key == service }
+            ?: all.firstOrNull { it is Destination.Service && it.service.name == service }
     }
 
     private fun saveCustom(list: List<Destination.Custom>) {
@@ -181,11 +210,7 @@ internal class DestinationStore(
     fun rule(frontend: Frontend, all: List<Destination> = allDestinations()): Destination? =
         find(preferences.getString(frontendRuleKey(frontend), null), all)
 
-    fun setRule(frontend: Frontend, destination: Destination?) {
-        preferences.edit {
-            if (destination == null) remove(frontendRuleKey(frontend)) else putString(frontendRuleKey(frontend), destination.key)
-        }
-    }
+    fun setRule(frontend: Frontend, destination: Destination?) = choose(frontendRuleKey(frontend), destination)
 
     private fun frontendRuleKey(frontend: Frontend) = "rule_frontend_${frontend.name}"
 

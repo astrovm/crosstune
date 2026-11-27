@@ -8,10 +8,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
 class LeadTimingTest {
     private val prefs = ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("video-test", Context.MODE_PRIVATE).apply { edit().clear().commit() }
     private val song = MusicMetadata("Demo", "Band", recordingId = "app:video")
@@ -149,6 +147,25 @@ class LeadTimingTest {
         assertEquals(10_000L, heard(30_000, 40_000))
         repeat(7) { heard(40_000 + it * 10_000L) }
         assertEquals(10_000L, heard(120_000))
+    }
+
+    @Test fun aVideoLeadCanBeConfirmedAcrossTheStartOfTheLyricRecording() {
+        fun confirmed(lastPosition: Long, middleLead: Long): Long? {
+            val timing = LeadTiming()
+            fun heard(position: Long, lead: Long): Long? {
+                val at = 20_000L + position
+                return timing.heard(PlaybackClock(position + lead, at), PlaybackClock(position, at))
+            }
+
+            // A fingerprint corrected for a different intro can be before the lyric clock reaches zero.
+            assertNull(heard(-4_000, 5_000))
+            assertNull(heard(0, middleLead))
+            return heard(lastPosition, 5_000)
+        }
+
+        assertEquals(5_000L, confirmed(4_000, 6_500))
+        assertNull(confirmed(3_999, 6_500))
+        assertNull(confirmed(4_000, 6_501))
     }
 
     @Test fun aKeptIntroPastFiveMinutesEitherWayIsNotTrusted() {

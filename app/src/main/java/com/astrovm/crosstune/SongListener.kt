@@ -10,17 +10,13 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -46,7 +42,8 @@ internal sealed interface Heard {
      * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
      * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
      * the music app playing it on the phone, by package. [inRoom] when only the microphone heard it, with
-     * nothing to tell it from another song playing in the room.
+     * nothing to tell it from another song playing in the room. [ad] while the app plays an ad under the
+     * song's name, as free YouTube Music does, so it isn't playing the song yet.
      */
     data class Song(
         val metadata: MusicMetadata,
@@ -56,7 +53,8 @@ internal sealed interface Heard {
         val matchId: String? = null,
         val app: String? = null,
         val speed: Float = 1f,
-        val inRoom: Boolean = false
+        val inRoom: Boolean = false,
+        val ad: Boolean = false
     ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
@@ -132,16 +130,12 @@ internal class Shazam(
     }
 
     /** Not known, e.g. offline, the song is still named, as only its words need it. */
-    private suspend fun lengthOf(id: String): Long? = try {
+    private suspend fun lengthOf(id: String): Long? = answeredOr(null) {
         val url = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder().addQueryParameter("id", id).build()
         client.newCall(Request.Builder().url(url).build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) return@answer null
             JSONObject(response.body.stringAtMost()).optJSONArray("results")?.optJSONObject(0)?.optLong("trackTimeMillis")?.takeIf { it > 0 }
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     private fun body(uri: String): JSONObject {
@@ -164,7 +158,7 @@ internal class Shazam(
         val track = JSONObject(body).optJSONObject("track") ?: return Heard.Nothing
         val title = track.optString("title").takeIf { it.isNotBlank() } ?: return Heard.Nothing
         val actions = track.optJSONObject("hub")?.optJSONArray("actions") ?: JSONArray()
-        val appleMusicId = (0 until actions.length()).mapNotNull(actions::optJSONObject)
+        val appleMusicId = actions.objects()
             .firstOrNull { it.optString("type") == "applemusicplay" }.text("id")
         val metadata = MusicMetadata(
             title = title,
@@ -379,9 +373,8 @@ internal fun interface SongHearing {
     /**
      * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
      * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
-     * With [whileAloud], the microphone stops once the phone no longer plays out loud.
      */
-    suspend fun listenToPlaying(byMicrophone: Boolean = true, whileAloud: Boolean = false): Heard = listen()
+    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
 }
 
 /**
@@ -422,12 +415,10 @@ internal class PlayingFirst(
         return Around(phone, if (phone == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else null)
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
+    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
         val heard = played.listen()
         if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
-        // Through headphones or muted, the microphone hears nothing of it: no more use than none at all.
-        val room = (if (whileAloud) aloud() else hearing.listen()) ?: return heard
-        return roomForPlaying(room)
+        return roomForPlaying(hearing.listen())
     }
 
     private fun roomForPlaying(room: Heard): Heard {
@@ -435,17 +426,6 @@ internal class PlayingFirst(
         // With no song named to tell, the one heard may be either.
         val playing = playback.songForRecognition()?.metadata ?: return (room as? Heard.Song)?.copy(inRoom = true) ?: room
         return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
-    }
-
-    /** What the microphone hears while the phone plays out loud, or null once it doesn't, as when headphones are plugged in. */
-    private suspend fun aloud(): Heard? = coroutineScope {
-        val listening = async { hearing.listen() }
-        val quiet = launch { while (playback.playsAloud()) delay(ALOUD_CHECK_MS) }
-        select<Heard?> { listening.onAwait { it }; quiet.onJoin { null } }.also { coroutineContext.cancelChildren() }
-    }
-
-    companion object {
-        const val ALOUD_CHECK_MS = 1_000L
     }
 }
 

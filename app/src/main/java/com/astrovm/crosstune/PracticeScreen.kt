@@ -208,7 +208,7 @@ private fun Card(
                 // Tapped, it turns: a button with a name for TalkBack, as Show answer is.
                 .then(
                     if (practice.turned || preview != null) Modifier
-                    else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
+                    else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.extraLarge), onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                 )
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {

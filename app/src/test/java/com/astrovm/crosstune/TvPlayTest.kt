@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.AppOpsManager
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -18,20 +19,26 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.isEnabled
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,7 +65,7 @@ import org.robolectric.shadows.ShadowWindowManagerImpl
 class TvPlayTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
@@ -71,6 +78,7 @@ class TvPlayTest {
         running = emptySet()
     }
     private val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+    private val morpheMusic = "app.morphe.android.apps.youtube.music"
     private val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
     private val lines = "[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"
 
@@ -109,9 +117,13 @@ class TvPlayTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.hearingFactory = null
         FloatingLyricsService.host = null
+        FloatingLyricsService.covering = false
         ShadowSettings.setCanDrawOverlays(false)
     }
+
+    private fun model() = ViewModelProvider(checkNotNull(controller).get())[MainViewModel::class.java]
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
@@ -125,7 +137,8 @@ class TvPlayTest {
 
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun onPlayer() = shown(string(R.string.lyrics_play)) || shown(string(R.string.lyrics_pause))
+    // The now-playing bar has a pause button too, so the player is told by its cover.
+    private fun onPlayer() = composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty()
 
     private fun click(text: String) {
         // Pressed as the remote does, which reaches what's below the TV's edge too, scrolling to it.
@@ -134,15 +147,29 @@ class TvPlayTest {
     }
 
     /** The song's card, shown as a link shared to Crosstune is. */
-    private fun launch() {
+    private fun launch(action: String = play) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
-        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodes((hasContentDescription(action) or hasText(action)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun playing() {
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true, appPackage = MusicService.YOUTUBE_TV)
+    }
+
+    private class Listening : SongHearing {
+        val started = CompletableDeferred<Unit>()
+        val stopped = CompletableDeferred<Unit>()
+
+        override suspend fun listen(): Heard {
+            started.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                stopped.complete(Unit)
+            }
+        }
     }
 
     /** What watched what plays once Crosstune was behind YouTube, before its cover came up. */
@@ -215,6 +242,172 @@ class TvPlayTest {
     }
 
     @Test
+    fun onATvBackFromTheWordsLandsOnPauseAndFromThePlayerOnPlay() {
+        launch()
+        val floating = playCovered()
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where nothing takes focus.
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        // Back from the words, the remote is on the player's main button, rather than nowhere.
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_pause)) and hasClickAction()).assertIsFocused()
+        // Back from the player, it's on the card's Play, the way the user came.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromTheStepsPlayShowsFirstLandsOnPlay() {
+        ShadowSettings.setCanDrawOverlays(false)
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val playOnCard = composeRule.onNode(hasContentDescription(play) and hasClickAction())
+        playOnCard.requestFocus()
+        playOnCard.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        playOnCard.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackLandsOnPlayWhenTheRemoteWasLastOnAButtonThatOpensNoScreen() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val playOnCard = composeRule.onNode(hasContentDescription(play) and hasClickAction())
+        // Past settings, then on the link field, which opens no screen: settings is no longer where it was.
+        composeRule.onNode(hasContentDescription(string(R.string.settings_button))).requestFocus()
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)).requestFocus()
+        composeRule.runOnIdle { model().openFixes() }
+        waitUntil { !shown(play) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { shown(play) }
+        composeRule.waitForIdle()
+        playOnCard.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackLeavesTheRemoteInADialogThatShowsAgain() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val settings = composeRule.onNode(hasContentDescription(string(R.string.settings_button)))
+        settings.requestFocus()
+        settings.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { !shown(play) }
+        // Songs looked up by name while away: their sheet shows on the main screen come back to, and keeps the remote.
+        composeRule.runOnIdle { model().searchSongs("moon") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { shown(string(R.string.song_search_title)) }
+        composeRule.waitForIdle()
+        assertTrue(inDialog())
+        settings.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvTheWordsClosedUnderTheirSheetGiveTheRemoteBackToTheButtonThatOpenedThem() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // Their sheet about the song is up as something else closes them, as a link that comes in does.
+        click(string(R.string.lyrics_about_song))
+        waitUntil { inDialog() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+    }
+
+    @Test
+    fun onATvADialogUpOnTheScreenComeBackGivesTheRemoteBackWhereItWasOnceItsPutAway() {
+        launch()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        // The apps to open it in, asked for meanwhile: they show over the card come back to, and keep the remote.
+        composeRule.runOnIdle { model().playerOpenWith() }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") && shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        assertTrue(inDialog())
+        // Put away, with nothing of its own to give the remote to, it goes back to what opened the words.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsFocused()
+        // Given back once, it's done: moved on, the next dialog put away doesn't take the remote back to the words.
+        val settings = composeRule.onNode(hasContentDescription(string(R.string.settings_button)))
+        settings.requestFocus()
+        composeRule.runOnIdle { model().playerOpenWith() }
+        waitUntil { shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onAPhoneBackFromTheWordsPutsNothingBackInFocus() {
+        phone = Phone.PIXEL
+        launch(action = string(R.string.lyrics_button))
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val words = composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasClickAction())
+        words.requestFocus()
+        words.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { shown("Demo two") }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        waitUntil { !shown("Demo two") }
+        composeRule.waitForIdle()
+        // A phone is touched: what it was on is no place to be put back.
+        words.assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvBackFromPracticeOverTheWordsLeavesTheRemoteOnThem() {
+        prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        launch()
+        val floating = playCovered()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo two") }
+        click(string(R.string.lyrics_study))
+        click(string(R.string.practice_song))
+        waitUntil { !shown("Demo two") }
+        pressBack(floating.get())
+        waitUntil { shown("Demo two") }
+        composeRule.waitForIdle()
+        // Practice is drawn in the words' place, the same screen, so nothing closes: the remote goes back to Study, which
+        // opened it, not the bar's first button (Issue #1137).
+        assertEquals(1, composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().size)
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_study))).assertIsFocused()
+    }
+
+    @Test
+    fun chooseAppListsYouTubesTvAppOnceAsTheOnlyYouTubeThere() {
+        launch()
+        // YouTube's own app isn't on a TV, so YouTube there is its TV app, one row, not that and the app it stands in for.
+        click(string(R.string.choose_app_button))
+        assertEquals(1, composeRule.onAllNodes(hasText(string(R.string.target_youtube))).fetchSemanticsNodes().size)
+        composeRule.onAllNodes(hasText(string(R.string.target_youtube)))[0].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // Picked, the menu closes: YouTube is only the chip's name now, not a row too.
+        assertEquals(1, composeRule.onAllNodes(hasText(string(R.string.target_youtube))).fetchSemanticsNodes().size)
+        // Picked, the song opens in that TV app.
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube)))
+    }
+
+    @Test
     fun backOnTheCoversMainScreenTheBarShowsWhatYouTubePlaysAndOpensItsPlayer() {
         launch()
         val floating = playCovered()
@@ -241,6 +434,35 @@ class TvPlayTest {
         pressBack(floating.get())
         waitUntil { shadowOf(floating.get()).isStoppedBySelf }
         waitUntil { playback.nowPlayingWatchers == 0 }
+        // Android hasn't destroyed the service yet. The activity must not stop it a second time.
+        assertTrue(FloatingLyricsService.covering)
+        assertNull(shadowOf(app).nextStoppedService)
+    }
+
+    @Test
+    fun onATvBackFromThePlayerTheBarOpenedLandsOnTheBar() {
+        launch()
+        val floating = playCovered()
+        playback.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, app = MusicService.YOUTUBE_TV)
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        playing()
+        waitUntil { shown("Demo one") }
+        pressBack(floating.get())
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() && composeRule.onAllNodes(hasTestTag(NOW_PLAYING_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        // Back from the player the card's Play opened, the remote is on Play, with the bar under it.
+        composeRule.onNode(hasContentDescription(play) and hasClickAction()).assertIsFocused()
+        // Opened from the bar, back from the player it's on the bar.
+        val bar = composeRule.onNode(hasTestTag(NOW_PLAYING_TAG))
+        bar.requestFocus()
+        bar.performKeyInput { pressKey(Key.DirectionCenter) }
+        waitUntil { onPlayer() }
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        composeRule.waitForIdle()
+        bar.assertIsFocused()
     }
 
     @Test
@@ -290,6 +512,84 @@ class TvPlayTest {
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         playCovered()
         assertEquals(youTubeMusic to link, playback.opened.single())
+    }
+
+    @Test
+    fun anAppThatNeverPlaysComesOutFromUnderTheCoverToSayWhy() {
+        val listening = Listening()
+        MainActivity.hearingFactory = { listening }
+        launch()
+        model().listenAlong()
+        waitUntil { listening.started.isCompleted }
+        playCovered()
+        assertFalse(listening.stopped.isCompleted)
+        // Signed out, it shows that instead of playing: Crosstune lets go of it, behind it as it is.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS + 1_000))
+        composeRule.waitForIdle()
+        assertEquals(FloatingLyricsService::class.java.name, checkNotNull(shadowOf(app).nextStoppedService.component) { "Expected a stopped service" }.className)
+        assertFalse(model().uiState.coveringApp)
+        assertNull(model().uiState.player)
+        assertTrue(listening.stopped.isCompleted)
+        // It's paused out of sight, not turned off for when Crosstune comes back.
+        assertTrue(model().uiState.listeningAlong)
+    }
+
+    @Test
+    fun wordsFloatingWhenACoverIsAskedForStayOnceTheAppPlaysNothing() {
+        launch()
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val cover = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        ShadowSettings.setCanDrawOverlays(true)
+        // The words float already, so the service keeps them rather than cover the app.
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, Intent(app, FloatingLyricsService::class.java)).create().startCommand(0, 1)
+        floating.get().onStartCommand(cover, 0, 2)
+        composeRule.waitForIdle()
+        assertFalse(FloatingLyricsService.covering)
+        // The app plays nothing, and Crosstune lets go of it, but the words it never covered stay.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS + 1_000))
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.coveringApp)
+        assertNull(shadowOf(app).nextStoppedService)
+        assertTrue(overlays(floating.get()).isNotEmpty())
+    }
+
+    @Test
+    fun downFromTheAppChipLandsOnPlay() {
+        launch()
+        val chip = composeRule.onNode(hasTestTag(DEFAULT_MENU_TAG))
+        chip.requestFocus()
+        chip.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription(play))[0].assertIsFocused()
+    }
+
+    @Test
+    fun aCoverLetGoOfBeforeItCameUpNeverComesUp() {
+        val listening = Listening()
+        MainActivity.hearingFactory = { listening }
+        launch()
+        model().listenAlong()
+        waitUntil { listening.started.isCompleted }
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val cover = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        ShadowSettings.setCanDrawOverlays(true)
+        // The app couldn't be brought in front after all, faster than Android started the cover.
+        model().uncover()
+        Snapshot.sendApplyNotifications()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertFalse(listening.stopped.isCompleted)
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, cover).create().startCommand(0, 1)
+        composeRule.settle(checkNotNull(controller).get())
+        assertTrue(listening.stopped.isCompleted)
+        assertFalse(FloatingLyricsService.covering)
+        assertTrue(overlays(floating.get()).isEmpty())
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
     }
 
     @Test
@@ -412,6 +712,31 @@ class TvPlayTest {
     }
 
     @Test
+    fun openingAnotherAppLetsGoOfACoverThatHasntComeUpYet() {
+        launch()
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val cover = shadowOf(app).nextStartedService
+        assertTrue(model().uiState.coveringApp)
+        assertFalse(FloatingLyricsService.covering)
+        val activity = checkNotNull(controller).get()
+        activity.startActivity(Intent(Settings.ACTION_SETTINGS))
+        assertEquals(Settings.ACTION_SETTINGS, shadowOf(app).nextStartedActivity.action)
+        assertFalse(model().uiState.coveringApp)
+
+        // Android may deliver the cover after the new app is in front.
+        checkNotNull(controller).pause().stop()
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, cover).create().startCommand(0, 1)
+        try {
+            composeRule.settle(activity)
+            assertTrue(overlays(floating.get()).isEmpty())
+            assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        } finally {
+            floating.destroy()
+        }
+    }
+
+    @Test
     fun turnedTheCoverStillTakesTheWholeScreen() {
         launch()
         val floating = playCovered()
@@ -428,9 +753,31 @@ class TvPlayTest {
         assertTrue(overlays(floating.get()).isEmpty())
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
         // Crosstune is told, so it stops watching what plays for a cover that isn't there. What's left is the
-        // player's own follow of the song it opened, three watchers.
-        assertTrue(watchersBehindTheCover > 3)
-        waitUntil { playback.nowPlayingWatchers == 3 }
+        // player's own follow of the song it opened, three watchers, and the wait for YouTube to play anything, one.
+        assertTrue(watchersBehindTheCover > 4)
+        waitUntil { playback.nowPlayingWatchers == 4 }
+    }
+
+    @Test
+    fun withShowingOverOtherAppsTakenBackUnderTheCoverTheCoverCloses() {
+        launch()
+        val floating = playCovered()
+        assertEquals(1, overlays(floating.get()).size)
+        val appOps = shadowOf(app.getSystemService(AppOpsManager::class.java))
+        val uid = app.applicationInfo.uid
+        // Another app's permission changing, or Crosstune's staying allowed, leaves the cover as it is.
+        appOps.setMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, uid, app.packageName, AppOpsManager.MODE_ALLOWED)
+        composeRule.waitForIdle()
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        // Taken back with ADB while the cover shows: Settings can't, as it takes the cover's place first.
+        ShadowSettings.setCanDrawOverlays(false)
+        appOps.setMode(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, uid, app.packageName, AppOpsManager.MODE_ERRORED)
+        composeRule.waitForIdle()
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+        // Crosstune is told, so it stops watching what plays for a cover that isn't there.
+        waitUntil { playback.nowPlayingWatchers == 4 }
+        floating.destroy()
+        assertTrue(overlays(floating.get()).isEmpty())
     }
 
     @Test
@@ -452,12 +799,12 @@ class TvPlayTest {
     @Test
     fun onAPhoneThePlayersPlayDoesntOpenTheAppItCantAsk() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         launch()
         click(play)
         waitUntil { playback.opened.size == 1 }
         // The phone's own app plays it, as it's installed.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
         playback.playing.value = null
         composeRule.waitForIdle()
@@ -467,12 +814,12 @@ class TvPlayTest {
     }
 
     /**
-     * On a phone, Play pressed in an app that only plays in front, as YouTube Music without Premium: running, it's asked
+     * On a phone, Play pressed in an app that only plays in front: running, it's asked
      * from behind, where it won't, so it opens on the song.
      */
     private fun playInFront() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         playback.startsInBackground = false
         launch()
@@ -493,7 +840,7 @@ class TvPlayTest {
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).width)
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).height)
         // Once it plays there, its words show over it, and Crosstune stays behind.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { shown("Demo one") }
         assertEquals(0, playback.cameBack)
         // Back goes back through Crosstune, then leaves it to the app, which plays on.
@@ -504,7 +851,7 @@ class TvPlayTest {
     fun onAPhoneNotAllowedToShowOverAppsAnAppThatOnlyPlaysInFrontIsLeftThere() {
         ShadowSettings.setCanDrawOverlays(false)
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         playback.startsInBackground = false
         launch()
@@ -515,19 +862,19 @@ class TvPlayTest {
         checkNotNull(controller) { "Expected controller to be non-null" }.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         waitUntil { playback.opened.size == 1 }
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNull(shadowOf(app).peekNextStartedService())
         assertEquals(0, playback.cameBack)
     }
 
-    /** On a phone, Play pressed on a song paused in an app that only plays in front, as YouTube Music without Premium. */
+    /** On a phone, Play pressed on a song paused in an app that only plays in front. */
     private fun playOnPaused() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.startsInBackground = false
-        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         launch()
         click(play)
     }
@@ -555,7 +902,7 @@ class TvPlayTest {
     @Test
     fun onAPhoneAnAppOpenedOnTheSongThatStopsOnceLeftIsBroughtBackCovered() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         // Not running, it can't be asked from behind, so it's opened on the song, not known yet to play only in front.
         playback.running = emptySet()
         playback.startsInBackground = false
@@ -563,15 +910,38 @@ class TvPlayTest {
         click(play)
         waitUntil { playback.opened.size == 1 }
         // Crosstune comes back once it plays there, not as soon as it shows the song: YouTube Music, left before it starts, never does.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(0, playback.cameBack)
         assertNull(shadowOf(app).peekNextStartedService())
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
+        // On to an ad under the song's name, it plays on, if not the song: nothing to bring back.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic, ad = true)
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(playback.plays.isEmpty())
         // Left, it stops, as it only plays in front: it's brought back there, covered, to play on.
-        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
+        waitUntil { playback.broughtToFront.size == 1 }
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+    }
+
+    @Test
+    fun onAPhoneAnAppThatLetsGoOfTheSongOnceLeftIsBroughtBackCoveredToo() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
+        playback.running = emptySet()
+        playback.startsInBackground = false
+        launch()
+        click(play)
+        waitUntil { playback.opened.size == 1 }
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
+        waitUntil { playback.cameBack == 1 }
+        // Left, YouTube without Premium stops altogether, with nothing paused to follow.
+        playback.playing.value = null
         waitUntil { playback.broughtToFront.size == 1 }
         waitUntil { shadowOf(app).peekNextStartedService() != null }
         assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
@@ -580,16 +950,16 @@ class TvPlayTest {
     @Test
     fun onAPhoneAnAppOpenedOnTheSongThatPlaysOnOnceLeftIsLeftToIt() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = emptySet()
         launch()
         click(play)
         waitUntil { playback.opened.size == 1 }
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         waitUntil { playback.cameBack == 1 }
         // Paused from Crosstune, it isn't taken for one that stopped once left.
         click(string(R.string.lyrics_pause))
-        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = morpheMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(listOf(false), playback.plays)
@@ -599,25 +969,58 @@ class TvPlayTest {
     @Test
     fun onAPhoneTheSongPlayingInAnotherBuildOfTheAppAskedIsntTakenForIt() {
         phone = Phone.OTHER
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morpheMusic, "YouTube Music"))
         playback.running = null
         // Another build of YouTube Music plays it, not the one asked, which is on the phone.
-        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YT Music Morphe", canSeek = true, appPackage = "app.morphe.android.apps.youtube.music")
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
         launch()
         click(play)
         waitUntil { playback.songsAsked.isNotEmpty() }
         // Not seen to play there, the app asked is opened on the song.
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
         waitUntil { playback.opened.isNotEmpty() }
-        assertEquals(listOf(youTubeMusic to link), playback.opened)
+        assertEquals(listOf(morpheMusic to link), playback.opened)
     }
 
     @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
-        assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
         // Its phone app isn't on a TV, so YouTube's TV app stands in for it.
         assertTrue(sameApp(youTubeMusic, MusicService.YOUTUBE_TV, app::hasApp))
         assertFalse(MusicService.YOUTUBE_TV in MusicService.SPOTIFY.appPackages)
+    }
+
+    @Test
+    fun onATvThePlayerFollowsTheYouTubeSessionItResumed() {
+        val tv = MusicService.YOUTUBE_TV
+        val session = 23
+        val paused = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false),
+            "YouTube", canSeek = true, appPackage = tv, session = session)
+        playback.playing.value = paused
+        playback.onPlay = { _, playing -> playback.playing.value = paused.copy(clock = paused.clock.copy(playing = playing)) }
+        launch()
+        val official = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        composeRule.runOnIdle {
+            assertFalse(app.hasApp(youTubeMusic))
+            assertEquals(official, model().uiState.resultDestination)
+        }
+        click(play)
+        waitUntil { playback.plays.isNotEmpty() && onPlayer() }
+        assertEquals(listOf(true), playback.plays)
+        assertEquals(listOf(tv), playback.playedApps)
+        assertEquals(listOf(session), playback.playedSessions)
+        val pause = string(R.string.lyrics_pause)
+        waitUntil { shown(pause) }
+        composeRule.runOnIdle {
+            val player = checkNotNull(model().uiState.player)
+            assertEquals(tv, player.app)
+            assertEquals(session, player.session)
+            assertEquals(true, player.following?.clock?.playing)
+        }
+        assertTrue(session in playback.followedSessions)
+        click(pause)
+        assertEquals(listOf(true, false), playback.plays)
+        assertEquals(listOf(session, session), playback.playedSessions)
+        assertTrue(playback.opened.isEmpty())
     }
 
     @Test
@@ -638,7 +1041,7 @@ class TvPlayTest {
     @Test
     fun onAPhoneTheWordsBarIsLeftAlone() {
         phone = Phone.OTHER
-        launch()
+        launch(action = string(R.string.lyrics_button))
         click(string(R.string.lyrics_button))
         waitUntil { shown("Demo one") }
         val learn = composeRule.onNode(hasContentDescription(string(R.string.lyrics_learn)))

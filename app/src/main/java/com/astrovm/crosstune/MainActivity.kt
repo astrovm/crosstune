@@ -56,7 +56,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -116,6 +115,7 @@ class MainActivity : ComponentActivity() {
                         client,
                         packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                         busyPauseMs = lyricsBusyPauseMs,
+                        matching = lyricsMatchingDispatcher ?: Dispatchers.Default.limitedParallelism(1),
                         cache = cache("lyrics.json", maxEntries = 300),
                         youTubeMusicSong = { song -> matcher.find(MusicService.YOUTUBE_MUSIC, song)?.substringAfter("watch?v=", "")?.ifEmpty { null } }
                     ),
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     LinkInterception(applicationContext),
                     artwork,
                     hearingFactory?.invoke().let { hearing ->
-                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(CleanFirst(cleanSoundFactory(this@MainActivity), PlayedSound(soundTapFactory, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))), Shazam(client)))
+                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(playedHearing(this@MainActivity), Shazam(client)))
                     },
                     systemDispatcher,
                     listenAlongPauseMs,
@@ -184,7 +184,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
-    private var floatingOverApps = false
+    private var floatingOverApps by mutableStateOf(false)
+
+    /** Whether this screen asked to cover another app, until it's closed or let go. */
+    private var coverUp = false
 
     /** Set when the words floated as this screen came back in sight, till it's touched: a link it only hands on floats them again. */
     private var floatedWhenBack = false
@@ -221,6 +224,7 @@ class MainActivity : ComponentActivity() {
         override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {
+            coverUp = false
             floatingOverApps = false
             viewModel.uncover()
             viewModel.pauseListeningAlong()
@@ -408,6 +412,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var lookupDispatcher: CoroutineDispatcher = Dispatchers.IO
 
+        /** Where lyrics answers and their timing are compared; tests keep that work in step with the screen. */
+        @VisibleForTesting
+        internal var lyricsMatchingDispatcher: CoroutineDispatcher? = null
+
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
@@ -577,6 +585,13 @@ class MainActivity : ComponentActivity() {
         internal var cleanSoundFactory: (Context) -> Microphone? = ::PlaybackCapture
 
         /**
+         * How Shazam and the singing each hear what a music app plays: its own sound when it lets that be
+         * heard, else the visuals' tap. One recipe for both, and for `CaptureCheck`, which measures it on a phone.
+         */
+        internal fun playedHearing(context: Context): Microphone =
+            CleanFirst(cleanSoundFactory(context), PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)))
+
+        /**
          * What hears the words sung in what the phone plays: whisper.cpp's model, fetched once on an
          * unmetered network into files kept out of backups. None on a phone with little memory, e.g. a
          * TV's 2 GB, where it would push the music app out.
@@ -586,7 +601,7 @@ class MainActivity : ComponentActivity() {
             val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }
             val model = WhisperModel(client, File(context.noBackupFilesDir, "whisper"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })
             SingingListener(
-                CleanFirst(cleanSoundFactory(context), PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))),
+                playedHearing(context),
                 model::file,
                 NativeWhisper::open,
                 fetch = model::fetchAnyway,
@@ -643,11 +658,12 @@ class MainActivity : ComponentActivity() {
         }
 
         val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
-        // What plays is watched while the screen is in sight: in front, or covering the app a song plays in, as
-        // on a TV, where it's the cover's window and this activity is stopped behind that app (Issue #1105).
+        // What plays is watched while the screen is in sight, including when words cover another app.
+        // Floating radio words also need fresh queue text, even while this activity is stopped.
         lifecycleScope.launch {
-            combine(lifecycle.currentStateFlow, snapshotFlow { viewModel.uiState.coveringApp }) { state, covering ->
-                covering || state.isAtLeast(Lifecycle.State.RESUMED)
+            val lyricsInSight = snapshotFlow { viewModel.uiState.coveringApp || (floatingOverApps && viewModel.followingRadioLyrics) }
+            combine(lifecycle.currentStateFlow, lyricsInSight) { state, inSight ->
+                inSight || state.isAtLeast(Lifecycle.State.RESUMED)
             }.distinctUntilChanged().collectLatest { inSight -> if (inSight) viewModel.watchPlayingNow() }
         }
         lifecycleScope.launch {
@@ -696,9 +712,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Out of sight too: a song's app opens over Crosstune, which then covers it.
+        // Out of sight too: a song's app opens over Crosstune, which then covers it, and comes out from under it once let go.
         lifecycleScope.launch {
-            snapshotFlow { viewModel.uiState.coveringApp }.filter { it }.collect { cover() }
+            snapshotFlow { viewModel.uiState.coveringApp }.collect { if (it) cover() else if (coverUp) letGo() }
         }
         // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
         lifecycleScope.launch {
@@ -846,7 +862,7 @@ class MainActivity : ComponentActivity() {
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,
-        onSearchAnyway = viewModel::searchAnyway,
+        onSearchResult = viewModel::searchResult,
         onNotFoundActionChange = viewModel::selectNotFoundAction,
         onTakeNotFoundOffer = viewModel::takeNotFoundOffer,
         onDismissNotFoundOffer = viewModel::dismissNotFoundOffer,
@@ -1082,6 +1098,7 @@ class MainActivity : ComponentActivity() {
     private fun floatNow() {
         if (viewModel.uiState.lyricsFor == null) return
         floatedWhenBack = false
+        coverUp = false
         floatingOverApps = true
         viewModel.uncover()
         FloatingLyricsService.start(this, floatingHost)
@@ -1090,16 +1107,28 @@ class MainActivity : ComponentActivity() {
 
     /** The whole screen covers the app a song plays in, which goes on playing under it. */
     private fun cover() {
+        // Floating the words already, the service keeps them rather than cover the app: it says whether it covers.
+        coverUp = true
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost, whole = true)
     }
 
+    /**
+     * The app covered comes out from under the cover, as one that plays nothing does, to say why. A cover not up yet
+     * doesn't come up, and words the service floated on rather than cover the app stay.
+     */
+    private fun letGo() {
+        if (!FloatingLyricsService.covering) {
+            coverUp = false
+            return viewModel.uncover()
+        }
+        FloatingLyricsService.stop(this)
+        floatingHost.closed()
+    }
+
     /** Opened from the screen covering another app, an app would show under it, so it goes first. */
     override fun startActivity(intent: Intent, options: Bundle?) {
-        if (viewModel.uiState.coveringApp) {
-            FloatingLyricsService.stop(this)
-            floatingHost.closed()
-        }
+        if (viewModel.uiState.coveringApp) letGo()
         super.startActivity(intent, options)
     }
 
@@ -1116,6 +1145,7 @@ class MainActivity : ComponentActivity() {
             floatedWhenBack = true
             FloatingLyricsService.stop(this)
         }
+        coverUp = false
         floatingOverApps = false
         viewModel.uncover()
         viewModel.resumeListeningAlong()

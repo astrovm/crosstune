@@ -21,6 +21,36 @@ class DestinationStoreTest {
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
+    fun withNonePickedTheFirstMusicAppOnThePhoneIsOfferedAndYouTubeLast() {
+        fun offered(vararg installed: String) = DestinationStore(preferences) { it in installed }.offered()
+        val youtube = MusicService.YOUTUBE.packageName
+        assertEquals(deezer, offered(youtube, MusicService.DEEZER.packageName))
+        assertEquals(Destination.Service(MusicService.SPOTIFY), offered(MusicService.DEEZER.packageName, MusicService.SPOTIFY.packageName))
+        // YouTube, mostly videos, only when it's all there is.
+        assertEquals(Destination.Service(MusicService.YOUTUBE), offered(youtube))
+        // A patched build stands for its service without the service's own app.
+        val morphe = "app.morphe.android.apps.youtube.music"
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC, morphe), offered(youtube, morphe))
+        // On a TV, YouTube Music plays in YouTube's TV app, so it's offered for that.
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), offered(MusicService.YOUTUBE_TV))
+        assertNull(offered())
+        // A build known only by the links it opens is found late, so it isn't offered, before or after.
+        val piko = "app.piko.android.apps.youtube.music"
+        val late = DestinationStore(preferences, { listOf(piko) }) { it == piko || it == MusicService.DEEZER.packageName }
+        assertEquals(deezer, late.offered())
+    }
+
+    @Test
+    fun aBuildIsToldFromItsServicesAppByAWordOfItsOwn() {
+        assertEquals("TV", MusicService.buildName(MusicService.YOUTUBE_TV))
+        assertEquals("ReVanced", MusicService.buildName("app.revanced.android.youtube"))
+        assertEquals("RVX", MusicService.buildName("app.rvx.android.apps.youtube.music"))
+        assertEquals("Morphe", MusicService.buildName("app.morphe.android.youtube"))
+        // One no list knows goes by its patcher's part of the package.
+        assertEquals("Piko", MusicService.buildName("app.piko.android.youtube"))
+    }
+
+    @Test
     fun frontendAppsAreOfferedOnlyWhenInstalledAndWebFrontendsOnTheirSite() {
         val onlyNewPipe = DestinationStore(preferences) { it == "org.schabi.newpipe" }
         val alternatives = onlyNewPipe.allDestinations().filterIsInstance<Destination.Alternative>()
@@ -47,6 +77,34 @@ class DestinationStoreTest {
     }
 
     @Test
+    fun aBuildFoundByTheLinksItOpensIsAnAppOfItsOwnAsTheBuildsWithANameAre() {
+        val piko = "app.piko.android.apps.youtube.music"
+        val pikoYouTube = "app.piko.android.youtube"
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val installed = mutableSetOf(piko, pikoYouTube, morphe)
+        // Morphe's is found by its links too, and is still one row; Spotify's own app is no build.
+        val found = DestinationStore(preferences, { listOf(piko, morphe, pikoYouTube, MusicService.SPOTIFY.packageName) }) { it in installed }
+        fun rows(service: MusicService) = found.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == service }
+        val inPiko = Destination.Service(MusicService.YOUTUBE_MUSIC, piko)
+        val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
+        assertEquals(listOf(inMorphe, inPiko), rows(MusicService.YOUTUBE_MUSIC))
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE, pikoYouTube)), rows(MusicService.YOUTUBE))
+        assertEquals(listOf(Destination.Service(MusicService.SPOTIFY)), rows(MusicService.SPOTIFY))
+
+        // The only build, it stands for its service, which is what the only music app is saved as.
+        installed -= morphe
+        found.setDefault(Destination.Service(MusicService.YOUTUBE_MUSIC))
+        assertEquals(inPiko, found.defaultDestination())
+        assertEquals(piko, found.defaultDestination().packageName)
+        // With YouTube Music's own app there too, each is a row.
+        installed += MusicService.YOUTUBE_MUSIC.packageName
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE_MUSIC), inPiko), rows(MusicService.YOUTUBE_MUSIC))
+        // Uninstalled since it was found, it's gone at once, before Android is asked about links again.
+        installed -= piko
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE_MUSIC)), rows(MusicService.YOUTUBE_MUSIC))
+    }
+
+    @Test
     fun aPatchedBuildIsAnAppOfItsOwnOnlyWhileInstalledAndFallsBackToItsServiceOnceGone() {
         val morphe = "app.morphe.android.apps.youtube.music"
         val installed = mutableSetOf(morphe, "app.revanced.android.youtube")
@@ -54,21 +112,46 @@ class DestinationStoreTest {
         val music = Destination.Service(MusicService.YOUTUBE_MUSIC)
         val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
 
-        // Each build comes right after its service, and plain services keep their own key and app.
+        // Without the service's own app, which would open the build anyway, the build alone stands for it.
         val services = patched.allDestinations().filterIsInstance<Destination.Service>()
-        assertEquals(listOf(music, inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
-        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE), Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        assertEquals(listOf(inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        // The service chosen before, or as the first default, is that build now.
+        assertEquals(inMorphe, patched.defaultDestination())
+        preferences.edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        assertEquals(inMorphe, patched.defaultDestination())
+        // Chosen again as it stands, it keeps the service's key, as saving the default again in settings does.
+        patched.setDefault(inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("default_target", null))
+        // With the own app there too, each build comes right after its service, and plain services keep their own key and app.
+        installed += MusicService.YOUTUBE_MUSIC.packageName
+        assertEquals(listOf(music, inMorphe), patched.allDestinations().filterIsInstance<Destination.Service>().filter { it.service == MusicService.YOUTUBE_MUSIC })
+        // So the service chosen before is its own app now, and the build is a choice of its own.
+        assertEquals(music, patched.defaultDestination())
+        patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
+        installed -= MusicService.YOUTUBE_MUSIC.packageName
         assertEquals(morphe, inMorphe.packageName)
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, music.packageName)
         assertEquals("YOUTUBE_MUSIC@$morphe", inMorphe.key)
         assertEquals("YOUTUBE_MUSIC", music.key)
 
-        // Chosen as the default and as a rule, it comes back as itself.
+        // Chosen as the default over another app, and as a rule, it comes back as itself.
+        patched.setDefault(deezer)
         patched.setDefault(inMorphe)
+        assertEquals(inMorphe.key, preferences.getString("default_target", null))
         patched.setRule(MusicService.SPOTIFY, inMorphe)
         assertEquals(inMorphe, patched.defaultDestination())
         assertEquals(inMorphe, patched.rule(MusicService.SPOTIFY))
         assertTrue(patched.hasDefault())
+        // A rule chosen again as it stands keeps the service's key the same way, for a service's links and a frontend's.
+        patched.setRule(MusicService.DEEZER, music)
+        patched.setRule(MusicService.DEEZER, inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_DEEZER", null))
+        patched.setRule(Frontend.entries.first(), music)
+        patched.setRule(Frontend.entries.first(), inMorphe)
+        assertEquals("YOUTUBE_MUSIC", preferences.getString("rule_frontend_${Frontend.entries.first().name}", null))
+        assertEquals(inMorphe, patched.rule(Frontend.entries.first()))
 
         // Uninstalled, the choice is its service again, not nothing.
         installed.clear()
@@ -136,6 +219,11 @@ class DestinationStoreTest {
         }
         // Where a query is a parameter, the slash is just text.
         assertEquals("https://music.youtube.com/search?q=AC%2FDC", MusicService.YOUTUBE_MUSIC.searchUrl("AC/DC"))
+        // So are "&" and "#", which would otherwise end the search or start another parameter.
+        assertEquals(
+            "https://streaming.prestomusic.com/explore/results/albums?search=Rock%20%26%20Roll%20%231%20AC%2FDC",
+            MusicService.PRESTO_MUSIC.searchUrl("Rock & Roll #1 AC/DC")
+        )
     }
 
     @Test

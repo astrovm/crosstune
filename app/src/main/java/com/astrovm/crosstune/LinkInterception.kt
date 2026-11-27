@@ -83,9 +83,6 @@ internal class LinkInterception(private val context: Context) {
         context.packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
     }
 
-    /** Services whose app is installed, or a build patched from it, so setup can suggest them first. */
-    fun installedServices(): Set<MusicService> = MusicService.entries.filter { installedPackages(it).isNotEmpty() }.toSet()
-
     /**
      * Every package [service]'s app is installed under: its own, builds patched from it, and, on a TV, YouTube's for
      * YouTube Music. A patched YouTube or YouTube Music Crosstune has no name for is found by the links it opens, as

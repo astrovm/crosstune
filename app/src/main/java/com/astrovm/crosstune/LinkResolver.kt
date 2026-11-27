@@ -116,13 +116,14 @@ internal class LinkResolver(
 
     /**
      * The songs of an album or playlist whose page doesn't list them, from where its service's own
-     * website gets them: Spotify's embed pages, and the APIs behind TIDAL's, SoundCloud's and
-     * Audiomack's websites. They're extra, so the album or playlist still shows without them when
-     * they can't be read. A Spotify playlist's own [page] has its first songs' covers.
+     * website gets them: Spotify's embed pages, the APIs behind TIDAL's, SoundCloud's and
+     * Audiomack's websites, and the one behind Presto Music's app. They're extra, so the album or
+     * playlist still shows without them when they can't be read. A Spotify playlist's own [page] has
+     * its first songs' covers.
      */
     private suspend fun withTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
         if (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM) return metadata
-        val tracks = try {
+        val tracks = answeredOr(emptyList()) {
             when (link.service) {
                 MusicService.SPOTIFY -> {
                     val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
@@ -132,12 +133,9 @@ internal class LinkResolver(
                 MusicService.TIDAL -> apis.tidalTracks(link.type, link.id)
                 MusicService.SOUNDCLOUD -> apis.soundCloudTracks(link.url)
                 MusicService.AUDIOMACK -> apis.audiomackTracks(link.type, link.id)
+                MusicService.PRESTO_MUSIC -> apis.prestoTracks(link.id, metadata)
                 else -> return metadata
             }
-        } catch (_: IOException) {
-            emptyList()
-        } catch (_: JSONException) {
-            emptyList()
         }
         return metadata.copy(tracks = tracks, trackCount = metadata.trackCount?.takeIf { it > tracks.size })
     }
@@ -166,6 +164,8 @@ internal class LinkResolver(
                 .build().toString()
         }
         MusicService.DEEZER -> "https://api.deezer.com/${link.url.toHttpUrl().pathSegments.first()}/${link.id}"
+        // Its website asks a browser to prove it's one; the API behind its app doesn't.
+        MusicService.PRESTO_MUSIC -> "${Presto.API}/album/${link.id}"
         else -> link.url
     }
 
@@ -191,7 +191,8 @@ internal class LinkResolver(
         MusicService.TIDAL -> MetadataParsers.tidal(body, link.type)
         MusicService.SOUNDCLOUD -> MetadataParsers.soundCloud(JSONObject(body), link.type)
         MusicService.AUDIOMACK -> MetadataParsers.audiomack(JSONObject(body), link.type)
-        // Bandcamp; Amazon Music is never a source.
+        MusicService.PRESTO_MUSIC -> Presto.album(JSONObject(body))
+        // Bandcamp; Amazon Music and Qobuz are never a source.
         else -> MetadataParsers.bandcamp(body, link.type)
     }
 
@@ -209,7 +210,7 @@ internal class LinkResolver(
 
     /** The video [id] as YouTube Music names it, or null when it can't. */
     private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
-        youTubeMusic(YOUTUBE_MUSIC_NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
+        youTubeMusic(YouTubeMusicApi.NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
 
     /** The SoundCloud upload at [url] as SoundCloud's own API has it, or null when it can't say. */
     private suspend fun soundCloudTrack(url: String): MusicMetadata? = try {
@@ -220,22 +221,16 @@ internal class LinkResolver(
 
     /** An album's or artist's page on YouTube Music, as its header names it, with an album's songs. */
     private suspend fun youTubeMusicPage(link: MusicLink): MusicMetadata? =
-        youTubeMusic(YOUTUBE_MUSIC_BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
+        youTubeMusic(YouTubeMusicApi.BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
 
     /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
-    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = try {
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
-            .put(key, id)
+    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = answeredOr(null) {
+        val body = YouTubeMusicApi.body().put(key, id)
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) return@answer null
             JSONObject(response.body.stringAtMost())
         }
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
     }
 
     private suspend fun fetch(url: String): Pair<Response, String> {
@@ -265,8 +260,5 @@ internal class LinkResolver(
     }
 
     private companion object {
-        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
-        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
-        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
     }
 }

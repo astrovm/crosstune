@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * The order the app's songs up next play in, as they're moved in the player. Music apps don't let
@@ -45,7 +44,7 @@ internal class QueueOrder(
         if (app == null || from !in queued.indices || to !in queued.indices) return
         order.value = queued.toMutableList().apply { add(to, removeAt(from)) }
         job?.cancel()
-        job = scope.launch { keep(app) }
+        scope.launchKept({ job = it }) { keep(app) }
     }
 
     /** The app's own order again. */

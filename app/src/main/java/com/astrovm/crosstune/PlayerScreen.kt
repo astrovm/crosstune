@@ -139,7 +139,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // A song the app went on to often comes without a cover, which is then the result's, when it's that song.
     val cover = song.artworkUrl ?: state.result?.takeIf { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) }?.artworkUrl
     val following = player.following
-    val app = following?.app ?: MusicService.ofPackage(player.app)?.let { stringResource(it.labelRes) }
+    // Named as Play named it: a build patched from the service by its own name.
+    val app = following?.app ?: musicAppLabel(player.app)
     SwipedBack(onBack = actions.onClosePlayer)
     // What plays next, opened from the list it plays from up top or its button under the buttons.
     // Between one song and the next the app says nothing for a moment, so it stays as it was till it
@@ -178,10 +179,10 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     // A station with no state has nothing else to press, so on a TV the remote starts on its one button, and keeps it as the station changes.
     LaunchedEffect(player.stationOnly) { if (player.stationOnly && state.phone == Phone.TV) openStation.requestFocus() }
     // Closed, the remote goes back to the station's bar, which is still there, rather than nowhere.
-    val barFocus = LocalBarFocus.current
+    val main = LocalMainFocus.current
     val handsBack by rememberUpdatedState(player.stationOnly && state.phone == Phone.TV)
-    DisposableEffect(barFocus) {
-        onDispose { if (handsBack) barFocus.owed = true }
+    DisposableEffect(main) {
+        onDispose { if (handsBack) main?.goBackTo(Screen.PLAYER) }
     }
     val fromTools = remember { FocusRequester() }
     // Which of them opened it, null till one did, so the remote is back there once it's put away,
@@ -250,7 +251,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .then(if (crossing) Modifier.fades(moving) else Modifier.moves("names", moving))
                     .clip(MaterialTheme.shapes.small)
-                    .then(if (player.songless) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
+                    .then(if (player.songless) Modifier else Modifier.clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard))
                     .padding(vertical = 8.dp)
             ) {
                 Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, modifier = Modifier.basicMarquee())
@@ -302,7 +303,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             }
             Spacer(Modifier.weight(1f))
             // With no line to show, the words are a button here instead.
-            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics) {
+            if (hasWords && words.isEmpty()) IconButton(onClick = actions.onPlayerLyrics, modifier = Modifier.returnsFocus(Screen.LYRICS)) {
                 AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
             if (state.canCast) CastButton(state, actions.onCast)
@@ -366,7 +367,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                                         modifier = Modifier
                                             .moves("cover", moving)
                                             .clip(MaterialTheme.shapes.small)
-                                            .clickable(onClickLabel = stringResource(R.string.dismiss_button)) { upNext = false }
+                                            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = stringResource(R.string.dismiss_button)) { upNext = false }
                                     )
                                     Spacer(Modifier.width(16.dp))
                                 }
@@ -538,7 +539,7 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions, modifie
         IconButton(onClick = { actions.onPlayerSkip(false) }, enabled = following?.canSkipPrevious == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_previous, contentDescription = stringResource(R.string.lyrics_previous_song), modifier = Modifier.size(32.dp))
         }
-        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.size(72.dp)) {
+        FilledIconButton(onClick = actions.onPlayerPlayPause, modifier = Modifier.returnsFocus().size(72.dp)) {
             AppIcon(
                 if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                 contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play),
@@ -577,7 +578,7 @@ private fun ModeButton(on: Boolean, @DrawableRes icon: Int, name: String, how: S
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .toggleable(value = on, role = Role.Checkbox, onValueChange = { onToggle() })
+            .toggleable(value = on, interactionSource = null, indication = focusRing(CircleShape), role = Role.Checkbox, onValueChange = { onToggle() })
             .semantics {
                 contentDescription = name
                 if (how != null) stateDescription = how
@@ -634,7 +635,7 @@ private fun PlayingFrom(from: String, modifier: Modifier, onOpen: () -> Unit) {
         modifier = modifier
             .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClickLabel = upNext, onClick = onOpen)
+            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = upNext, onClick = onOpen)
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) { contentDescription = "$upNext, $from" }
     ) {
@@ -863,7 +864,7 @@ private fun SleepButton(sleep: Sleep?, songEnds: Boolean, actions: ScreenActions
                 .heightIn(min = 48.dp)
                 .widthIn(min = 48.dp)
                 .clip(MaterialTheme.shapes.small)
-                .clickable(onClickLabel = name) { open = true }
+                .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.small), onClickLabel = name) { open = true }
                 .padding(horizontal = 12.dp)
                 .semantics(mergeDescendants = true) { contentDescription = name }
         ) {
@@ -937,7 +938,8 @@ private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Follow
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .background(tint.copy(alpha = 0.24f))
-            .clickable(onClickLabel = name, onClick = onLyrics)
+            .returnsFocus(Screen.LYRICS)
+            .clickable(interactionSource = null, indication = focusRing(MaterialTheme.shapes.large), onClickLabel = name, onClick = onLyrics)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // Named as the button it stands in for: the line changes as it's sung, which a screen reader would read out each time.

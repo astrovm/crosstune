@@ -29,8 +29,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-26.04
-    # One runner does what CI splits into jobs: lint and detekt (about 15 minutes), every unit test (about 13
-    # without a cache hit) and the release builds. v2.26.0 took 20 minutes; v2.27.1 was stopped at 30, in the tests.
+    # One runner does what CI splits into jobs: lint and detekt (about 2 minutes since detekt stopped resolving the
+    # tests' types, which took 13), every unit test (about 13 without a cache hit) and the release builds. v2.26.0 took
+    # 20 minutes; v2.27.1 was stopped at 30, in the tests.
     timeout-minutes: 60
     outputs:
       prerelease: ${{ steps.tag.outputs.prerelease }}
@@ -78,14 +79,10 @@ jobs:
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      # Main's test cache may hold mirror downloads; resolve the release from Central itself.
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          cache-read-only: true
+          gradle: central
 
       # The same checks as CI, which also build the minified release APKs, plus the App Bundle that
       # Google Play needs. "play" is the build Google Play and GitHub ship; "foss" is the same app with
@@ -230,10 +227,9 @@ jobs:
           path: Crosstune-${{ env.TAG }}.aab
           if-no-files-found: error
 
-  # Rebuilds the commit from scratch with a different JDK and checks that the signed APK's signature
-  # fits it, as F-Droid does before shipping our APK. If it doesn't, F-Droid would skip this version.
-  verify:
-    needs: sign
+  # Rebuilds independently with no Gradle cache: it downloads its own dependencies from Central, so verify
+  # compares the signed APK with a build that did not share its dependency files or build outputs.
+  rebuild:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions: {}
@@ -243,17 +239,39 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          cache-disabled: true
+          gradle: disabled
 
       - name: Build unsigned APKs
         run: ./gradlew :app:assemblePlayRelease :app:assembleFossRelease --no-build-cache
+
+      - name: Upload the rebuilt APKs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rebuilt
+          path: app/build/outputs/apk/*/release/app-*-release-unsigned.apk
+          if-no-files-found: error
+
+  # Checks that the signed APK's signature fits the rebuild. If it doesn't, F-Droid would skip this version.
+  verify:
+    needs: [sign, rebuild]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      # Only the verifier's pinned wheels: none of the build's code runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/release/apksigcopier-requirements.txt
+          sparse-checkout-cone-mode: false
+
+      - name: Download the rebuilt APKs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rebuilt
+          path: rebuilt
 
       - name: Download signed APK
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -280,7 +298,7 @@ jobs:
           for flavor in play foss; do
             file="Crosstune-$TAG.apk"
             [[ "$flavor" == "foss" ]] && file="Crosstune-$TAG-foss.apk"
-            if ! "$verifier/bin/apksigcopier" compare "$file" --unsigned "app/build/outputs/apk/$flavor/release/app-$flavor-release-unsigned.apk"; then
+            if ! "$verifier/bin/apksigcopier" compare "$file" --unsigned "rebuilt/$flavor/release/app-$flavor-release-unsigned.apk"; then
               echo "::error::The signed $flavor APK doesn't match a fresh build, so F-Droid can't ship it"
               exit 1
             fi

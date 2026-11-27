@@ -483,8 +483,7 @@ internal class HeardSongs(private val cache: LookupCache) {
         val kept = heard.takeLast(MAX_STRETCHES).map { stretch ->
             JSONObject().put("from", stretch.fromMs).put("to", stretch.toMs).put("words", JSONArray(stretch.words.map { (text, ms) -> JSONArray().put(text).put(ms) }))
         }
-        cache.put(keyOf(song, words), JSONArray(kept).toString())
-        cache.save()
+        cache.keep(keyOf(song, words), JSONArray(kept).toString())
     }
 
     private fun stretch(json: JSONObject): HeardStretch {

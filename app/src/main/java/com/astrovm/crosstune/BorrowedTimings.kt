@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import java.text.Normalizer
 import kotlin.math.abs
 
 /**
@@ -28,7 +27,7 @@ internal object BorrowedTimings {
 
     /** [text] as the letters it's said with, without accents, spaces or punctuation. */
     fun sound(text: String): String =
-        Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase().replace(notSound, "")
+        SongNames.unaccented(text, marks).replace(notSound, "")
 
     /**
      * [lines], said as [sounds], timed as [other], said as [otherSounds], times them; null when the

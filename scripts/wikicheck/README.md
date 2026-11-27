@@ -3,7 +3,7 @@
 The runner reads ChordWiki's public practice editor. It submits no form and does not click a browser check. It records counts, allowed host names, resource kinds and callback decisions. It keeps no URLs, query strings, paths, cookie values, unknown host labels or editor text.
 
 1. Back up the stopped test AVD and verify the copy before starting it. Hold its device lock. The runner needs the dev app, never the production app. Use a clean dev data set or restore the complete AVD afterwards.
-2. Build with `scripts/wikicheck/build.sh`. Check both hashes and the test APK's instrumentation entry.
+2. Commit the candidate, then build with `scripts/device-check-build.sh ChordWikiBrowserCheck wikicheck`. Check both hashes and the test APK's instrumentation entry.
 3. Start the emulator with `scripts/emulator/emulator.py`. Attach through `device_list` and `device_open`. Set media volume to zero through Android Settings with that pinned command before anything can play. Do not use adb to change a setting. If the command has no volume action, open Android Settings and use its sound slider.
 4. Install both APKs with the SDK adb, naming the emulator serial. Save the previous `run_id` from `cache/wikicheck-status.json` if the file exists. Then start the project runner:
 

@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Otwórz w Spotify</string>
     <string name="open_in_audiomack">Otwórz w Audiomack</string>
     <string name="open_in_qobuz">Otwórz w Qobuz</string>
+    <string name="open_in_presto_music">Otwórz w Presto Music</string>
     <string name="open_in_bandcamp">Otwórz w Bandcamp</string>
     <string name="open_in_amazon_music">Otwórz w Amazon Music</string>
     <string name="from_service">z %1$s</string>
@@ -53,7 +54,6 @@
     <string name="got_it_button">Rozumiem</string>
     <string name="chatgpt_channel">Logowanie przez ChatGPT</string>
     <string name="chatgpt_signing_in_notification">Logowanie przez ChatGPT…</string>
-    <string name="next_button">Dalej</string>
     <string name="back_button">Wstecz</string>
     <string name="setup_step">Krok %1$d z %2$d</string>
     <string name="setup_sources_listening_note">Słuchasz w %1$s, więc jego linki i tak się tam otwierają.</string>
@@ -284,7 +284,6 @@
     <string name="song_search_title">Utwory</string>
     <string name="song_search_none">Nie znaleziono utworów dla „%1$s”.</string>
     <string name="floating_background">Tło</string>
-    <string name="floating_text_size">Rozmiar tekstu</string>
     <string name="floating_float">Wyświetlaj nad innymi aplikacjami</string>
     <string name="floating_permission_title">Tekst nad twoimi aplikacjami</string>
     <string name="floating_customize">Dostosuj</string>

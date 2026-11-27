@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +66,8 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
     LaunchedEffect(songs.isEmpty(), removed) { if (songs.isEmpty() && removed == null) onBack() }
     // The song whose lines are being chosen, by its name and singer, so it stays chosen on a turn.
     var editing by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    // Its pencil, which the remote goes back to as the sheet is put away; gone on a turn, when the screen's own takes it.
+    var opener by remember { mutableStateOf<FocusRequester?>(null) }
     Page(
         title = stringResource(R.string.saved_practice),
         snackbarHost = { SnackbarHost(snackbar) },
@@ -76,7 +79,7 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
         actions = { ReminderBell(state, actions) }
     ) {
         // All of them practises what's due; with none, it says so, and the kinds of card can still be set there.
-        PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice) {
+        PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice, modifier = Modifier.returnsFocus()) {
             AppIcon(R.drawable.ic_school, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(24.dp))
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -96,9 +99,12 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
                     modifier = Modifier.clip(MaterialTheme.shapes.medium)
                 ) {
                     PracticeRow(
-                        song.song.title, song.due, below = song.song.artist, onClick = { actions.onPractiseSongOf(song.song) }, edit = { editing = listOf(song.song.title, song.song.artist) },
+                        song.song.title, song.due, below = song.song.artist, onClick = { actions.onPractiseSongOf(song.song) }, edit = { pencil ->
+                            editing = listOf(song.song.title, song.song.artist)
+                            opener = pencil
+                        },
                         // Swiping isn't something TalkBack can do, so removing is an action of its own there.
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surface).semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
+                        modifier = Modifier.returnsFocus(song.song.title to song.song.artist).background(MaterialTheme.colorScheme.surface).semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
                     ) {
                         CoverArt(song.song.artworkUrl, actions.loadArtwork, size = 40.dp)
                     }
@@ -110,7 +116,7 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
     chosen?.let { song ->
         ChooseLinesSheet(
             song.song, texts = emptyList(), words = emptyList(), kept = song.lines, actions.loadArtwork, practise = false,
-            onSave = { _, remove -> actions.onChooseLines(emptyList(), remove, false) }, onDismiss = { editing = null }
+            onSave = { _, remove -> actions.onChooseLines(emptyList(), remove, false) }, onDismiss = { editing = null }, opener = opener
         )
     }
 }
@@ -123,16 +129,18 @@ private fun PracticeRow(
     title: String,
     due: Int,
     onClick: () -> Unit,
+    modifier: Modifier,
     below: String? = null,
-    edit: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
+    edit: ((pencil: FocusRequester) -> Unit)? = null,
     leading: @Composable () -> Unit
 ) {
+    val focus = rememberRowButtonFocus()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
+            .then(focus.rowModifier)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = 4.dp)
     ) {
@@ -153,7 +161,7 @@ private fun PracticeRow(
             Box(words) { name() }
         }
         edit?.let {
-            IconButton(onClick = it) {
+            IconButton(onClick = { it(focus.button) }, modifier = focus.buttonModifier) {
                 AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.choose_lines))
             }
         }

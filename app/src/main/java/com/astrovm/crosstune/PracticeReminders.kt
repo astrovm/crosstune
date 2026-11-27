@@ -58,12 +58,10 @@ internal fun nextReminderAt(minute: Int, now: Long, zone: ZoneId): Long {
     }
 }
 
+internal class ReminderOccurrence(val at: Long, val day: LocalDate)
+
 /** The latest chosen minute that is due, including a day whose clock skips that minute or date. */
-internal fun latestReminderAt(minute: Int, now: Long, zone: ZoneId): Long = latestReminderOccurrence(minute, now, zone).at
-
-private class ReminderOccurrence(val at: Long, val day: LocalDate)
-
-private fun latestReminderOccurrence(minute: Int, now: Long, zone: ZoneId): ReminderOccurrence {
+internal fun latestReminderOccurrence(minute: Int, now: Long, zone: ZoneId): ReminderOccurrence {
     val time = LocalTime.of(minute / 60, minute % 60)
     var date = Instant.ofEpochMilli(now).atOffset(ZoneOffset.MAX).toLocalDate()
     var latest: ReminderOccurrence? = null
@@ -349,9 +347,13 @@ internal class PracticeReminders(
 }
 
 /** The day's alarm, and whatever makes Android forget it or its hour: a reboot, an update, a new time zone or clock. */
-class PracticeReminderReceiver : BroadcastReceiver() {
+class PracticeReminderReceiver internal constructor(
+    private val makeReminders: (Context) -> PracticeReminders
+) : BroadcastReceiver() {
+    constructor() : this({ PracticeReminders(it) })
+
     override fun onReceive(context: Context, intent: Intent) {
-        val reminders = PracticeReminders(context)
+        val reminders = makeReminders(context)
         val alarm = intent.action == PracticeReminders.ACTION_REMIND || intent.action == PracticeReminders.ACTION_REMIND_KEEP
         if (alarm) reminders.remind(intent) else reminders.arm()
     }

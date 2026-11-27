@@ -1,0 +1,4 @@
+Open songs in Presto Music, which searches for the albums they are on.
+Search for a song, or open it without playing, from the icons next to Play. With Play right away off, Search comes first.
+Share or paste a Presto Music album, and Crosstune reads its songs and follows what Presto plays.
+Open a matching album directly in Presto Music from another service's album link.

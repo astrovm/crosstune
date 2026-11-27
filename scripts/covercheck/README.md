@@ -2,14 +2,7 @@
 
 The instrumentation runner calls the app's real bitmap-cover reader on the main thread with one made-up 1024x1024 cover. It needs no account or network. It measures the first read, thirty immediate reads, and one hundred reads after the file exists. The runner saves one fake cover in the dev app's normal artwork cache. Remove that file after the run.
 
-Build the dev APK separately from the test APK, in the Gradle box:
-
-```
-scripts/gradle-box/gradle-box.sh :app:assemblePlayDebug
-scripts/gradle-box/gradle-box.sh :app:assemblePlayDebugAndroidTest -PcrosstuneTestRunner=com.astrovm.crosstune.CoverEncodingCheck
-```
-
-Or use `scripts/covercheck/build.sh` to build both APKs and record their hashes in `build/covercheck/`.
+Commit the candidate, then build the dev APK separately from the test APK, in the Gradle box, with `scripts/device-check-build.sh CoverEncodingCheck covercheck`. It records their hashes and commit in `build/covercheck/`.
 
 After installing both APKs on the locked test device, use the SDK adb to run the project test runner:
 

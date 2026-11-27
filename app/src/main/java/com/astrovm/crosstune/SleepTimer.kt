@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 /** When the sleep timer pauses the music: at [atMs], on the clock that counts since the phone started, or once the song ends, without one. */
 internal data class Sleep(val atMs: Long? = null)
@@ -76,7 +75,7 @@ internal class SleepTimer(
     private fun start(set: Sleep, waits: suspend () -> Unit) {
         off()
         sleep.value = set
-        job = scope.launch { waits() }
+        scope.launchKept({ job = it }) { waits() }
     }
 
     companion object {

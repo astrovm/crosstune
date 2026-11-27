@@ -6,7 +6,9 @@ import io
 import json
 import os
 import random
+import re
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -22,6 +24,17 @@ os.environ.pop('SYNCREPLAY_DIR', None)
 spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
+
+
+class ReplayTiersTest(unittest.TestCase):
+    def test_fixed_issue_and_guard_recordings_are_in_the_song_set(self):
+        folder = Path(__file__).parent
+        def rows(name):
+            return [row.split('\t') for row in (folder / name).read_text().splitlines() if row and not row.startswith('#')]
+        songs = {row[3] for row in rows('songs.tsv') if len(row) > 3}
+        wanted = {row[0] for row in rows('issue-songs.tsv')} | {row[3] for row in rows('guard.tsv')}
+        self.assertEqual(set(), wanted - songs)
+
 
 class ReplayContainerTest(unittest.TestCase):
     def test_replay_containers_have_cpu_and_memory_limits_and_no_host_access(self):
@@ -54,7 +67,89 @@ class ReplayContainerTest(unittest.TestCase):
         self.assertEqual(run.call_args.args[0][:-4], r.replay_container((r.OUT, r.OUT, 'ro'), (Path('/compiler'), Path('/compiler'), 'ro')))
 
 
+class SharedSlotTest(unittest.TestCase):
+    def test_the_hearing_limit_also_applies_within_one_replay(self):
+        code = 'import runpy,sys; print(runpy.run_path(sys.argv[1])["HEARD_AT_ONCE"])'
+        for configured, expected in [('9', '9'), ('0', '1')]:
+            env = os.environ | {'SYNCREPLAY_HEARING_SLOTS': configured}
+            result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).with_name('syncreplay.py'))],
+                                    capture_output=True, text=True, check=True, env=env)
+            self.assertEqual(expected, result.stdout.strip())
+
+    def test_a_slot_is_also_exclusive_across_processes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            lock = Path(directory) / 'locks' / 'gpu-0.lock'
+            code = ('import fcntl,sys; f=open(sys.argv[1], "a"); '
+                    'fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)')
+            with r.shared_slot('gpu', 1):
+                held = subprocess.run([sys.executable, '-c', code, str(lock)], capture_output=True, check=False)
+            free = subprocess.run([sys.executable, '-c', code, str(lock)], capture_output=True, check=False)
+            self.assertNotEqual(0, held.returncode)
+            self.assertEqual(0, free.returncode, free.stderr)
+
+    def test_only_one_separation_runs_and_the_slot_is_released_after_failure(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            entered = threading.Event()
+            release = threading.Event()
+            second = threading.Event()
+
+            def first():
+                with r.shared_slot('gpu', 1):
+                    entered.set()
+                    release.wait(timeout=5)
+
+            def other():
+                entered.wait(timeout=5)
+                with r.shared_slot('gpu', 1):
+                    second.set()
+
+            with ThreadPoolExecutor(2) as pool:
+                a, b = pool.submit(first), pool.submit(other)
+                self.assertTrue(entered.wait(timeout=5))
+                self.assertFalse(second.wait(timeout=0.2))
+                release.set()
+                a.result(timeout=5)
+                b.result(timeout=5)
+            self.assertTrue(second.is_set())
+            with self.assertRaisesRegex(ValueError, 'failure'), r.shared_slot('gpu', 1):
+                raise ValueError('failure')
+            with r.shared_slot('gpu', 1):
+                pass
+
+
+class ParallelOrderTest(unittest.TestCase):
+    def test_replay_can_hold_the_same_song_set_across_builds(self):
+        self.assertEqual(['b', 'a'], r.replay_songs(['a', 'b', 'c'], ['b', 'a']))
+        self.assertEqual(['a', 'b', 'c'], r.replay_songs(['a', 'b', 'c'], None))
+        with self.assertRaisesRegex(ValueError, 'not prepared: d'):
+            r.replay_songs(['a', 'b'], ['a', 'd'])
+        with self.assertRaisesRegex(ValueError, 'more than once'):
+            r.replay_songs(['a', 'b'], ['a', 'a'])
+
+    def test_guard_set_has_fixed_distinct_recordings(self):
+        rows = [line.split('\t') for line in Path(__file__).with_name('guard.tsv').read_text().splitlines()
+                if line and not line.startswith('#')]
+        self.assertEqual(11, len(rows))
+        self.assertTrue(all(len(row) == 4 and len(row[3]) == 11 for row in rows))
+        self.assertEqual(len(rows), len({row[3] for row in rows}))
+
+    def test_priority_songs_run_first_and_missing_lyrics_are_reported(self):
+        spec = importlib.util.spec_from_file_location('parallel', Path(__file__).with_name('prep-parallel.py'))
+        parallel = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(parallel)
+        songs = [dict(id='one', lines=3), dict(id='two', lines=2), dict(id='empty', lines=0)]
+        self.assertEqual(['two', 'one'], parallel.order_songs(songs, ['two']))
+        self.assertEqual(['two'], parallel.order_songs(songs, ['two'], only_first=True))
+        with self.assertRaisesRegex(ValueError, 'empty'):
+            parallel.order_songs(songs, ['empty'])
+
+
 class ResumeTest(unittest.TestCase):
+    def test_language_file_can_end_in_a_newline(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.language').write_text('ja\n')
+            self.assertEqual('ja', r.sung_language('fake'))
+
     def test_truth_without_hearing_is_resumed(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
@@ -187,7 +282,7 @@ class AgainstMainTest(unittest.TestCase):
     """Each run held to the lines main put within 1 s, run the same way: right on main and wrong or dark now."""
 
     def run_as(self, **given):
-        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False), **given})
+        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False, baseline=None), **given})
 
     def test_a_run_is_kept_by_how_it_was_run(self):
         self.assertEqual(r.untimed_key(self.run_as()), 'from 0 work 4500')
@@ -210,6 +305,16 @@ class AgainstMainTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()) as shown:
                 r.held_to_main(self.run_as(work=3000), dict(a=dict(right=[], put=[1])))
             self.assertEqual(shown.getvalue(), '')
+
+    def test_a_fresh_reference_can_be_kept_separately_from_the_historical_one(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'UNTIMED_MAIN', Path(directory) / 'old.json'):
+            fresh = Path(directory) / 'fresh.json'
+            r.UNTIMED_MAIN.write_text(json.dumps({'from 0 work 4500': {'a': [9]}}))
+            r.held_to_main(self.run_as(write_main=True, baseline=str(fresh)), dict(a=dict(right=[1], put=[1])))
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(baseline=str(fresh)), dict(a=dict(right=[], put=[1])))
+            self.assertIn('right on main, wrong now: 1', shown.getvalue())
+            self.assertEqual(json.loads(r.UNTIMED_MAIN.read_text()), {'from 0 work 4500': {'a': [9]}})
 
     def test_another_timing_takes_the_checkouts_place(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
@@ -261,7 +366,7 @@ class SharedFolderTest(unittest.TestCase):
             (kept / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch.object(r, 'OUT', kept), patch.object(r, 'own', return_value=mine), patch.object(r, 'prepped', return_value=['fake']), \
                     patch.object(r.subprocess, 'run', side_effect=gradle), patch('sys.stdout', io.StringIO()) as table:
-                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other'))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.other'))
             self.assertEqual(seen, [(['replay.json', 'replay.songs'], False)])
             self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
             self.assertFalse((kept / 'fake.from0.shown.json').exists())
@@ -353,8 +458,12 @@ class HearingLoadTest(unittest.TestCase):
         self.assertLessEqual(peak[0], r.HEARD_AT_ONCE)
         self.assertGreater(peak[0], 1)
 
-    def test_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
-        self.assertLessEqual(r.HEARD_AT_ONCE, 4)
+    def test_default_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
+        code = 'import runpy,sys; print(runpy.run_path(sys.argv[1])["HEARD_AT_ONCE"])'
+        env = {key: value for key, value in os.environ.items() if key != 'SYNCREPLAY_HEARING_SLOTS'}
+        result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).with_name('syncreplay.py'))],
+                                capture_output=True, text=True, check=True, env=env)
+        self.assertEqual('4', result.stdout.strip())
 
 
 class CheckpointTest(unittest.TestCase):
@@ -493,7 +602,7 @@ class TableTest(unittest.TestCase):
                                                        for n, start in enumerate([10.2, 20, 30])))
             output = io.StringIO()
             with redirect_stdout(output):
-                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard=''))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard=''))
             rows = output.getvalue().splitlines()
             self.assertEqual(['all', '3', '1', '1', '1', '1', '-9.0'], rows[2].split()[:7])
             self.assertIn('Reference coverage: 3/4', rows[3])
@@ -548,11 +657,11 @@ class HeardWhenAskedTest(unittest.TestCase):
         return gradle.call_count, heard.call_count
 
     def test_all_replays_until_nothing_new_is_asked(self):
-        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='')
+        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='')
         self.assertEqual(self.replays(r.run_all, args, [2, 1, 0]), (3, 3))
 
     def test_all_hears_nothing_for_another_set(self):
-        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other')
+        args = argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.other')
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
@@ -631,6 +740,18 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(asked[0]['work'], 3800)
         self.assertEqual(asked[0]['whiles'], [10500, 34300, 81400, 112700])
 
+    def test_only_sound_captured_says_the_phone_heard_it_clean(self):
+        # Issue #1100: with Spotify, each hearing's half-second check captured silence, and the visualizer heard instead.
+        spotify = "D CrosstuneTiming: captured 8000 samples, loudest 0\nD CrosstuneTiming: captured 8000 samples, loudest 2\n"
+        self.assertFalse(r.heard_clean(spotify))
+        self.assertFalse(r.heard_clean("D CrosstuneTiming: lit 1 at 2 pos 3"))
+        self.assertTrue(r.heard_clean(spotify + "D CrosstuneTiming: captured 320000 samples, loudest 30071"))
+
+    def test_silence_is_what_the_app_takes_as_silence(self):
+        source = (r.ROOT / 'app/src/main/java/com/astrovm/crosstune/CleanHearing.kt').read_text()
+        self.assertEqual([str(r.QUIET)], re.findall(r'const val QUIET = (\d+)', source),
+                         'QUIET moved or changed in CleanHearing.kt; keep syncreplay.QUIET in step')
+
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
@@ -638,8 +759,128 @@ class HeardWhenAskedTest(unittest.TestCase):
             r.run(self.run_args(behind_again=500, skew=None, shazam_ahead=0, words_length=None, video=False))
         heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
 
+    def test_an_identified_player_is_sent_to_the_replay(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertTrue(asked['identifiedPlayer'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(identified_player=True))
+
+    def test_reopening_needs_a_second_play_and_is_sent_to_the_app(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(reopen_again=True))
+
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertTrue(asked['reopenAgain'])
+                self.assertEqual(0, asked['behindAgain'])
+                return argparse.Namespace(returncode=0)
+
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(reopen_again=True, behind_again=0))
+
+    def test_a_first_play_can_end_after_one_hearing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(first_until=64000))
+            with self.assertRaisesRegex(ValueError, 'after --from'):
+                r.run(self.run_args(start=64000, first_until=64000, behind_again=0))
+
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(64000, asked['firstUntil'])
+                return argparse.Namespace(returncode=0)
+
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(first_until=64000, behind_again=0))
+
+    def test_a_second_play_can_start_at_another_position(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'needs --behind-again'):
+                r.run(self.run_args(again_from=79000))
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(79000, asked['againFrom'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(again_from=79000, behind_again=0))
+
+    def test_a_third_play_can_follow_a_short_second_play(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'third-from.*second-until'):
+                r.run(self.run_args(behind_again=0, third_from=180000))
+            with self.assertRaisesRegex(ValueError, 'after the second start'):
+                r.run(self.run_args(behind_again=0, again_from=180000, third_from=180000, second_until=180000))
+            def replay(*_, **__):
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(215000, asked['secondUntil'])
+                self.assertEqual(180000, asked['thirdFrom'])
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(behind_again=0, again_from=180000, second_until=215000, third_from=180000))
+        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.second.shown.json', 'fake.from0.shown.json'])
+
 
 class ReplayAllTest(unittest.TestCase):
+    def test_it_scores_a_third_opening_after_a_short_second_play(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'score_all') as score:
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='.cached',
+                                         identified_player=True, first_until=64000, again_from=79000,
+                                         second_until=120000, third_from=79000))
+        self.assertEqual(asked[0]['songs'][0]['secondUntil'], 120000)
+        self.assertEqual(asked[0]['songs'][0]['thirdFrom'], 79000)
+        score.assert_called_once_with(['fake'], 14000, 79000)
+
+    def test_a_third_opening_requires_a_later_end_to_the_second(self):
+        args = dict(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='',
+                    first_until=64000, again_from=79000)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']):
+            with self.assertRaisesRegex(ValueError, 'third-from.*second-until'):
+                r.run_all(argparse.Namespace(**args, third_from=79000))
+            with self.assertRaisesRegex(ValueError, 'after the second start'):
+                r.run_all(argparse.Namespace(**args, second_until=79000, third_from=79000))
+
+    def test_it_hears_windows_requested_on_all_three_plays(self):
+        def replay(*_, **__):
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score_all'):
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='',
+                                         first_until=64000, again_from=79000, second_until=120000, third_from=79000))
+        heard.assert_called_once_with('fake', ['fake.from14000.first.shown.json', 'fake.from14000.second.shown.json', 'fake.from14000.shown.json'])
+
+    def test_it_can_reopen_identified_recordings_at_another_position(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'score_all'):
+            r.run_all(argparse.Namespace(gradle='fake', start=14000, work=4500, behind=0, songs=None, heard='.cached',
+                                         identified_player=True, first_until=64000, again_from=79000))
+        self.assertEqual(asked[0]['songs'][0]['firstUntil'], 64000)
+        self.assertEqual(asked[0]['songs'][0]['againFrom'], 79000)
+        self.assertTrue(asked[0]['songs'][0]['identifiedPlayer'])
+        self.assertTrue(asked[0]['songs'][0]['reopenAgain'])
+        self.assertEqual(asked[0]['songs'][0]['behindAgain'], 0)
+
     def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):
         asked = []
         def replay(*_, **__):
@@ -651,8 +892,44 @@ class ReplayAllTest(unittest.TestCase):
             (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch('sys.stdout'):
-                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.thin5'))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=0, work=4500, behind=0, songs=None, heard='.thin5'))
         self.assertEqual(asked[0]['songs'][0]['heard'], '.thin5')
+
+    def test_it_replays_each_song_picked_up_partway(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay), \
+                patch.object(r, 'hear_asked', return_value=0) as heard:
+            (r.OUT / 'fake.from14000.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=15000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
+            (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=15.0)) + '\n')
+            with patch('sys.stdout', io.StringIO()) as table:
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, songs=None, heard=''))
+        self.assertEqual(asked[0]['songs'][0]['from'], 14000)
+        heard.assert_called_once_with('fake', ['fake.from14000.shown.json'])
+        self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
+
+    def test_a_line_sung_before_the_replay_start_is_not_dark(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            (r.OUT / 'fake.from14000.shown.json').write_text(json.dumps(dict(lines=['One', 'Two'], shown=[dict(line=1, at=15000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One'], [0, 'Two']]))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in [(0, 1.0), (1, 15.0)]))
+            with patch('sys.stdout', io.StringIO()) as table:
+                r.run_all(argparse.Namespace(gradle='fake-gradle', start=14000, work=4500, behind=0, songs=None, heard='.cached'))
+        self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
+
+    def test_a_second_play_scores_only_lines_sung_after_its_start(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.from14000.shown.json').write_text(json.dumps(dict(lines=['One', 'Two'], shown=[dict(line=1, at=80000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One'], [0, 'Two']]))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in [(0, 30.0), (1, 80.0)]))
+            with patch('sys.stdout', io.StringIO()) as table:
+                r.score_all(['fake'], 14000, 79000)
+        self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
 
 
 class WordsHeardTest(unittest.TestCase):
@@ -809,6 +1086,20 @@ class WordsShownTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as said:
             self.assertEqual({}, r.score(argparse.Namespace(id='song', start=0, placed=False)))
         self.assertIn('never shown 4', said.getvalue())
+
+    def test_lines_sung_before_a_late_start_are_not_counted_as_dark(self):
+        (r.OUT / 'song.from3000.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=3000, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            r.score(argparse.Namespace(id='song', start=3000, placed=False))
+        self.assertIn('never shown 3', said.getvalue())
+        self.assertNotIn('sung    1.0', said.getvalue())
+
+    def test_a_third_play_scores_from_its_own_start(self):
+        (r.OUT / 'song.from3000.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=5000, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            r.score(argparse.Namespace(id='song', start=3000, again_from=4000, third_from=5000, placed=False))
+        self.assertIn('never shown 1', said.getvalue())
+        self.assertNotIn('sung    4.2', said.getvalue())
 
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'
@@ -1081,6 +1372,37 @@ class FitsAlongTest(unittest.TestCase):
         song = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
         heard = array('h', np.concatenate([song[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)]).astype(np.int16).tobytes())
         self.assertAlmostEqual(10000, r.found_at_rate(song, heard, 9500, 1.05), delta=15)
+
+
+class ReplayRequestTest(unittest.TestCase):
+    def test_replay_requests_in_one_checkout_do_not_overlap(self):
+        entered = threading.Event()
+        release = threading.Event()
+        second = threading.Event()
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, {}, clear=True):
+            def first():
+                with r.replay_request():
+                    entered.set()
+                    release.wait(5)
+            def other():
+                with r.replay_request():
+                    second.set()
+            a = threading.Thread(target=first)
+            b = threading.Thread(target=other)
+            a.start()
+            self.assertTrue(entered.wait(5))
+            b.start()
+            self.assertFalse(second.wait(0.2))
+            release.set()
+            a.join(5)
+            b.join(5)
+            self.assertTrue(second.is_set())
+
+    def test_replay_opt_in_is_removed_after_the_request(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, {}, clear=True):
+            with r.replay_request():
+                self.assertEqual('1', os.environ['SYNCREPLAY_ACTIVE'])
+            self.assertNotIn('SYNCREPLAY_ACTIVE', os.environ)
 
 
 class PhoneVolumeTest(unittest.TestCase):

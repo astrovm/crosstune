@@ -28,6 +28,14 @@ letter from U+0080 up (and emoji) that is not two columns, which is what the app
 `trims` measures whether the browser trims a full-width bracket or stop beside another: on Windows, in
 Japanese, it trims none, as MS Gothic has no narrow forms.
 
+The same run also draws MS PGothic in MS Gothic's place, and an English browser, for how much those would move a
+chord: only an English browser on the monospace stack trims a bracket, as it draws Japanese in Yu Gothic. It draws
+the sheets the app's tests place chords on (invented.py writes them, `show` prints where each chord is) in all three
+browsers, and those and J-Total's own sheets at the page's 15px, as a screen Windows scales by 100%, 125% and 150%
+draws them. The tables are measured at 40px, where a fraction of a pixel is a smaller part of a letter. At 15px, MS
+Gothic draws a full-width letter 16px wide, 2.133 columns, at all three scales: there 2,985 of the 71,370 chords sit
+on another letter than the app puts them on (Issue #976).
+
 Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese
 fonts added), Firefox, and macOS, which draws a different page as "Hiragino Kaku Gothic" is not a
 macOS font name (Issue #976). `contexts.py` measures any machine's browser against the tables, and

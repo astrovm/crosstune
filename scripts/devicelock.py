@@ -2,12 +2,12 @@
 """Hold a shared test device so agents take turns.
 
   python3 scripts/devicelock.py take DEVICE --who TEXT --minutes N
-  python3 scripts/devicelock.py release DEVICE [--who TEXT] [--force]
+  python3 scripts/devicelock.py release DEVICE [--who TEXT | --holder PID] [--force]
   python3 scripts/devicelock.py who [DEVICE]
 
 DEVICE is samsung, or a test emulator in scripts/emulator/emulators.json:
 crosstune-phone, crosstune-tv or crosstune-android8 (Android 8, for regextable.py patterns). The lock is DEVICE.lock in the agent cache:
-/mnt/data/agent-cache on mr, and ~/.cache/agent-cache elsewhere. take waits in line. An earlier waiter gets
+/mnt/data/agent-cache on mr, and ~/.cache/agent-cache elsewhere; when that folder is missing, it says so. take waits in line. An earlier waiter gets
 the device before a later one, including when the holder takes it again:
 that new take goes to the back. flock(2) stays held for the whole turn, so
 a plain flock on the same file waits too. who reads the holder from that
@@ -15,8 +15,12 @@ lock. The name and the times live beside it, and writing over the lock file
 does not change who holds it. Taking a lock this --who already holds, while
 nobody is waiting, returns at once and prints that holder pid. release ends
 the holder this session took, or, with --who, the one taken with that name:
-an agent's shell calls each run in their own session. --force ends someone
-else's and prints who that was. The holder lets go after N minutes (a fraction is fine).
+an agent's shell calls each run in their own session. With --holder, the pid
+take printed, it ends that holder only, and leaves the device alone once someone
+else holds it. --force ends someone else's and prints who that was. The holder
+lets go after N minutes (a fraction is fine), at the "ends" its note gives by
+the machine's monotonic clock, which a script can wait on as the clock on the
+wall may move.
 """
 import argparse
 import contextlib
@@ -519,8 +523,10 @@ def hold(device, who, minutes, session, ready_fd):
         waiter.unlink(missing_ok=True)
         start = datetime.now().astimezone().replace(microsecond=0)
         until = start + timedelta(minutes=minutes)
+        deadline = time.monotonic() + minutes * 60
         write_holder_note({
             "device": device,
+            "ends": deadline,
             "pid": os.getpid(),
             "session": session,
             "start": start.isoformat(timespec="seconds"),
@@ -533,7 +539,6 @@ def hold(device, who, minutes, session, ready_fd):
             os.write(ready_fd, b"ok\n")
         os.close(ready_fd)
         ready_fd = -1
-        deadline = time.monotonic() + minutes * 60
         while time.monotonic() < deadline:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -561,17 +566,21 @@ def hold(device, who, minutes, session, ready_fd):
             os.close(ready_fd)
 
 
-def release(device, force, name=None):
+def release(device, force, name=None, holder=None):
     device = require_device(device)
     pid = kernel_holder(device)
     if pid is None or not pid_alive(pid):
         print(f"{device} is free")
         return
+    if holder is not None and pid != holder:
+        # That turn is over, and the device may be someone else's turn now, even from the same session.
+        print(f"{device} is no longer held by pid {holder}")
+        return
     argv = argv_of(pid)
     if not is_our_holder(argv, device):
         die(f"{device} is held by pid {pid}, which is not a devicelock holder. Not ending it.")
     who = flag(argv, "--who") or "unknown"
-    mine = ours(pid) or (name is not None and name.strip() == who)
+    mine = ours(pid) or (name is not None and name.strip() == who) or holder == pid
     if not mine and not force:
         die(f"{device} is held by {who} (pid {pid}), not this session. Pass --who with its name, or --force to end it.")
     if force and not mine:
@@ -610,6 +619,7 @@ def main():
     release_cmd = commands.add_parser("release", help="end this session's hold")
     release_cmd.add_argument("device")
     release_cmd.add_argument("--who", help="the name it was taken with, to release it from another shell session")
+    release_cmd.add_argument("--holder", type=int, help="the pid take printed, to end that hold only")
     release_cmd.add_argument("--force", action="store_true", help="end someone else's hold and print who it was")
     who_cmd = commands.add_parser("who", help="show who holds the device and who is waiting")
     who_cmd.add_argument("device", nargs="?")
@@ -623,7 +633,7 @@ def main():
     if args.command == "take":
         take(args.device, args.who, args.minutes)
     elif args.command == "release":
-        release(args.device, args.force, args.who)
+        release(args.device, args.force, args.who, args.holder)
     elif args.command == "who":
         who(args.device)
     else:

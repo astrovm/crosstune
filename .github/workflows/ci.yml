@@ -55,7 +55,7 @@ jobs:
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|ruff\.toml$|scripts/(ruff-requirements\.txt$|build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/|perf/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|site/|report/|extension/|ruff\.toml$|scripts/(ruff-requirements\.txt$|build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/|ci-warnings/|perf/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -88,6 +88,10 @@ jobs:
           "$RUNNER_TEMP/ruff/bin/pip" install --disable-pip-version-check --quiet -r scripts/ruff-requirements.txt
           "$RUNNER_TEMP/ruff/bin/ruff" check --output-format github
 
+      # Every tracked shell script. A finding is fixed, never silenced, as with ruff.
+      - name: Lint the shell scripts
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
   site:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -98,7 +102,6 @@ jobs:
 
       - name: Check Play Store changelog and texts
         run: |
-          python3 -m unittest discover -s scripts/release -p "test_*.py"
           python3 scripts/release/check_changelog.py
           python3 scripts/release/check_store_text.py
 
@@ -125,50 +128,23 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
 
       # The readings guard parses Kotlin and Java with the Kotlin compiler, and syncreplay's tests ask it what to compile.
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/kotlinc
-          key: kotlinc-${{ hashFiles('scripts/kotlinc/kotlinc.lock') }}
-
-      - name: Fetch the locked Kotlin compiler
-        run: python3 scripts/kotlinc/kotlinc.py fetch
+          gradle: none
+          kotlinc: true
 
       - name: Read the pinned Whisper headers for the JNI test
         run: git submodule update --init --depth 1 -- third_party/whisper.cpp
 
-      # The committed site has to be what build-site.py makes, new pages included.
-      - name: Test site and media scripts
+      # The committed site has to be what build-site.py makes, new pages included. Then each folder's tests under
+      # scripts/, the release, readings and mutants scripts' too, which other workflows also run before they use them.
+      - name: Test the site and the scripts
         run: |
           python3 scripts/build-site.py
           git add --intent-to-add docs/
           git diff --exit-code -- docs/
-          python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
-          python3 -m unittest discover -s scripts/shots -p "test_*.py"
-          python3 -m unittest discover -s scripts/songcheck -p "test_*.py"
-          python3 -m unittest discover -s scripts/kotlinc -p "test_*.py"
-          python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
-          python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
-          python3 -m unittest discover -s scripts/contrast -p "test_*.py"
-          python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
-          python3 -m unittest discover -s scripts/emulator -p "test_*.py"
-          python3 -m unittest scripts/test_devicelock.py
-          python3 -m unittest scripts/test_notices.py
-          python3 -m unittest scripts/test_mutants.py
-          python3 -m unittest scripts/test_workflows.py
-          python3 -m unittest discover -s scripts/record -p "test_*.py"
-          python3 -m unittest discover -s scripts/reports -p "test_*.py"
-          python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
-          python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
-          python3 -m unittest discover -s scripts/ci-warnings -p "test_*.py"
-          python3 -m unittest discover -s scripts/reminder-lateness -p "test_*.py"
-          python3 -m unittest discover -s scripts/perf -p "test_*.py"
-          python3 -m unittest discover -s scripts/regextable -p "test_*.py"
-          python3 -m unittest discover -s scripts/titlefuzz -p "test_*.py"
+          python3 scripts/unittests.py
+          bash scripts/device-check-build.test.sh
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node scripts/test-site-apk.cjs
@@ -194,12 +170,11 @@ jobs:
 
       - name: Test the Google Play steps
         run: |
-          shellcheck .github/play/play.sh
           ruby --version
           .github/play/play.sh setup
           bundle exec ruby .github/play/test/play_test.rb
 
-  # The panel test uses a local fixture. The tests that follow real links run by hand (see CONTRIBUTING.md).
+  # The panel test uses a local fixture. The tests that follow real links run by hand (see extension/README.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -234,24 +209,40 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    # Main also warms lint, release builds and PIT on a shared-cache miss.
+    timeout-minutes: 30
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
+        id: jdk
 
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
         run: ./gradlew :app:testPlayDebugUnitTest :app:testFossDebugUnitTest :pitest-changed-lines:test :app:koverLogPlayDebug :app:koverXmlReportPlayDebug :app:koverVerifyPlayDebug --build-cache --configuration-cache
+
+      # Lint, release builds and PIT resolve artifacts the unit tests do not. Run the real tasks so
+      # every job starts from their dependencies too; a dry run would not download them.
+      - name: Resolve the other jobs' dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        run: ./gradlew :app:lintDebug :app:detekt :app:assembleDebug :app:assembleRelease :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+
+      # The cache is immutable. An exact hit needs no save; a new build-file hash gets a new key.
+      - name: Save Gradle dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            !~/.gradle/caches/modules-2/modules-2.lock
+            !~/.gradle/caches/modules-2/gc.properties
+          key: ${{ steps.jdk.outputs.dependencies-key }}
 
       - name: Upload test and coverage reports
         if: always()
@@ -274,17 +265,14 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       - name: Count growth
         run: ./gradlew :app:growthTests --build-cache --configuration-cache
@@ -307,17 +295,14 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: ./.github/actions/jdk
 
       - name: Every case of each fuzz
         run: >-
@@ -337,44 +322,16 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them: about
-  # 600,000 searches, against what main opened. What opened is uploaded, to make main's again from (see the test).
+  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them.
   matcher:
     needs: changes
     if: needs.changes.outputs.matcher == 'true'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          # Main's runs of CI save the caches; this one only reads them.
-          cache-read-only: true
-
-      - name: Matcher cases in full
-        run: ./gradlew :app:testPlayDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
-
-      - name: Upload what opened
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: matcher-cases
-          path: |
-            app/build/test-results/testPlayDebugUnitTest/
-            app/build/matcher-*-now.tsv
-          retention-days: 14
-          if-no-files-found: warn
+    uses: ./.github/workflows/matcher.yml
 
   lint:
     needs: changes
+    env:
+      CROSSTUNE_MAVEN_MIRROR: "true"
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -388,6 +345,44 @@ jobs:
           persist-credentials: false
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
+
+      # Tangled new code is split up, never listed in detekt's baseline to pass.
+      - name: Detekt's baseline only shrinks
+        if: github.event_name == 'pull_request'
+        run: |
+          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
+          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
+          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
+          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
+          if [ -n "$added" ]; then
+            echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
+            echo "$added"
+            exit 1
+          fi
+
+      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
+      # SHA-256 its checksums file gives for that version.
+      - name: Lint workflows
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # actionlint skips the scripts without a word when shellcheck is missing.
+          if ! command -v shellcheck > /dev/null; then
+            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
+            exit 1
+          fi
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
+          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+
+      - uses: ./.github/actions/jdk
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug :app:detekt --build-cache --configuration-cache
 
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
@@ -435,49 +430,6 @@ jobs:
           fi
           python3 -E -s "$checker" --repo "$GITHUB_WORKSPACE" --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/pr-body.md"
 
-      # Tangled new code is split up, never listed in detekt's baseline to pass.
-      - name: Detekt's baseline only shrinks
-        if: github.event_name == 'pull_request'
-        run: |
-          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
-          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
-          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
-          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
-          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
-          if [ -n "$added" ]; then
-            echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
-            echo "$added"
-            exit 1
-          fi
-
-      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
-      # SHA-256 its checksums file gives for that version.
-      - name: Lint workflows
-        env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          # actionlint skips the scripts without a word when shellcheck is missing.
-          if ! command -v shellcheck > /dev/null; then
-            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
-            exit 1
-          fi
-          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
-          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
-          "$RUNNER_TEMP/actionlint"
-
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-
-      - name: Lint
-        run: ./gradlew :app:lintPlayDebug :app:lintFossDebug :app:detekt --build-cache --configuration-cache
-
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -495,7 +447,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    # Main also fills the Central-only release cache on a miss.
+    timeout-minutes: ${{ github.event_name == 'push' && 60 || 20 }}
+    env:
+      CROSSTUNE_MAVEN_MIRROR: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -503,18 +458,16 @@ jobs:
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 
-      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      - uses: ./.github/actions/jdk
+        id: jdk
         with:
-          distribution: temurin
-          java-version: "25"
-
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+          gradle: ${{ github.event_name == 'pull_request' && 'read-only' || 'central' }}
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
       # what changed is compiled again. Saved from main, like Gradle's caches.
       # A cache only saves time, so the build goes on without it when it can't be set up.
-      - uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+      - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         id: ccache
         continue-on-error: true
         with:
@@ -538,6 +491,25 @@ jobs:
       # F-Droid ships the GitHub APK only when its own build of the tag, in other folders, matches it.
       - name: Check the native library doesn't depend on where it's built
         run: python3 scripts/release/check_native_paths.py
+
+      # The release runs the full checks and bundle; save their Central dependencies for it on main.
+      - name: Resolve release dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        run: ./gradlew :app:ci :app:bundleRelease :app:cachePitestDependencies --build-cache --configuration-cache
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+          CCACHE_COMPILERCHECK: content
+
+      - name: Save Central dependencies
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.jdk.outputs.dependencies-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            !~/.gradle/caches/modules-2/modules-2.lock
+            !~/.gradle/caches/modules-2/gc.properties
+          key: ${{ steps.jdk.outputs.dependencies-key }}
 
   required-ci:
     name: CI / Required

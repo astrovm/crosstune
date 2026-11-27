@@ -10,6 +10,11 @@ import kotlin.math.abs
 /** A line put in time by hand: the words had it at [lineMs], and the user heard it at [songMs]. */
 internal data class SyncPoint(val lineMs: Long, val songMs: Long)
 
+/** A far hearing that still needs a separate hearing before it can change saved timing. */
+internal data class PendingShift(val offsetMs: Long, val fromMs: Long, val toMs: Long) {
+    fun separateFrom(other: PendingShift) = toMs <= other.fromMs || other.toMs <= fromMs
+}
+
 /**
  * Timed words put right by hand. Words timed for another take of the song, or timed badly, drift
  * from it; a line tapped as it's heard sets where it really is. Between two such lines the others
@@ -20,11 +25,26 @@ internal object LyricsSync {
      * [lines] where the user says they are, by [points]. Past the first or last of them, they go on at
      * [pace]: how much of the song plays per ms of the words, when the recording is known to play faster
      * or slower than the one they're timed for, unless the points themselves tell how fast.
+     * With the recording's length, [durationMs], and that of the take the words are timed for, [takeMs]:
+     * when the correction still leaves that take's end past the recording's, the take has a stretch this
+     * recording doesn't, and lines timed past the end may be in it. Unheard, they stay past the end,
+     * where [pace] alone puts them, rather than be brought into the recording. Points can still place them
+     * directly, or between lines heard either side. A take longer only by where its words start, as a
+     * longer intro, ends where the recording does once corrected, so its last lines follow the correction.
+     * A correction by hand has no such limit.
      */
-    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0): List<LyricLine> =
-        if (points.isEmpty()) lines else lines.map { line ->
-            line.copy(timeMs = timeOf(line.timeMs, points, pace), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points, pace)) }, endMs = line.endMs?.let { timeOf(it, points, pace) })
+    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0, durationMs: Long? = null, takeMs: Long? = null): List<LyricLine> {
+        if (points.isEmpty()) return lines
+        val end = durationMs?.takeIf { takeMs != null && timeOf(takeMs, points, pace) > it + LyricsFinder.SAME_LENGTH_MS }
+        return lines.map { line ->
+            val moved = line.timed { timeOf(it, points, pace) }
+            val paced = line.timed { (it * pace).toLong() }
+            val outside = end != null && paced.timeMs >= end && line.timeMs > points.last().lineMs
+            if (outside && moved.timeMs < paced.timeMs) paced else moved
         }
+    }
+
+    private fun LyricLine.timed(at: (Long) -> Long) = copy(timeMs = at(timeMs), words = words.map { it.copy(timeMs = at(it.timeMs)) }, endMs = endMs?.let(at))
 
     /** Where in the song [lineMs] of the words is, by [points] in order, going on at [pace] past them. */
     fun timeOf(lineMs: Long, points: List<SyncPoint>, pace: Double = 1.0): Long {
@@ -97,10 +117,43 @@ internal object LyricsSync {
 
 /**
  * The lines put in time by hand, per song, on the phone only, and the pace the words go on at past
- * them. They hold for the words they were set on: other words for the song, e.g. from another place,
- * are timed their own way, so they start over.
+ * them, and whether a person put them in time. They hold for the words they were set on: other words
+ * for the song, e.g. from another place, are timed their own way, so they start over.
  */
 internal class LyricsSyncStore(private val preferences: SharedPreferences) {
+
+    fun pending(song: MusicMetadata, lines: List<LyricLine>): PendingShift? {
+        if (!RecordingKey.identifiesRecording(song)) return null
+        val saved = pendingAll().optJSONObject(pendingKey(song)) ?: return null
+        if (saved.optString("words") != fingerprint(lines)) {
+            clearPending(song)
+            return null
+        }
+        val offset = saved.opt("offset") as? Number ?: return null
+        val from = saved.opt("from") as? Number ?: return null
+        val to = saved.opt("to") as? Number ?: return null
+        if (to.toLong() <= from.toLong()) return null
+        return PendingShift(offset.toLong(), from.toLong(), to.toLong())
+    }
+
+    fun rememberPending(song: MusicMetadata, lines: List<LyricLine>, pending: PendingShift) {
+        if (!RecordingKey.identifiesRecording(song)) return
+        val all = pendingAll()
+        val key = pendingKey(song)
+        all.remove(key)
+        all.put(key, JSONObject().put("words", fingerprint(lines)).put("offset", pending.offsetMs).put("from", pending.fromMs).put("to", pending.toMs))
+        while (all.length() > MAX_SONGS) all.remove(all.keys().next())
+        preferences.edit { putString(KEY_PENDING, all.toString()) }
+    }
+
+    fun clearPending(song: MusicMetadata) {
+        val all = pendingAll()
+        if (all.remove(pendingKey(song)) != null) preferences.edit { putString(KEY_PENDING, all.toString()) }
+    }
+
+    private fun pendingAll(): JSONObject = preferences.getString(KEY_PENDING, null)?.let {
+        try { JSONObject(it) } catch (_: JSONException) { null }
+    } ?: JSONObject()
 
     fun load(song: MusicMetadata, lines: List<LyricLine>): List<SyncPoint> {
         val array = saved(song, lines)?.optJSONArray("points") ?: JSONArray()
@@ -112,13 +165,16 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     /** How much of [song] plays per ms of its [lines], as learnt: the same unless it's sped up or slowed. */
     fun pace(song: MusicMetadata, lines: List<LyricLine>): Double = saved(song, lines)?.optDouble("pace", 1.0) ?: 1.0
 
-    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0) {
+    /** Whether [song]'s [lines] were put in time by hand, the points or Shazam's gap for them; kept from before this was, they weren't. */
+    fun byHand(song: MusicMetadata, lines: List<LyricLine>): Boolean = saved(song, lines)?.optBoolean("hand") == true
+
+    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0, byHand: Boolean = false) {
         val all = all() ?: JSONObject()
         val key = keyOf(song)
         all.remove(key)
-        if (points.isNotEmpty() || pace != 1.0) {
+        if (points.isNotEmpty() || pace != 1.0 || byHand) {
             val array = JSONArray().apply { points.forEach { put(JSONArray().put(it.lineMs).put(it.songMs)) } }
-            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array).apply { if (pace != 1.0) put("pace", pace) })
+            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array).apply { if (pace != 1.0) put("pace", pace) }.apply { if (byHand) put("hand", true) })
         }
         // The oldest go first once there are many; JSONObject keeps the order they were put in.
         while (all.length() > MAX_SONGS) all.remove(all.keys().next())
@@ -137,11 +193,15 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     private fun keyOf(song: MusicMetadata) = RecordingKey.of(song)
 
+    /** Pending evidence can use a link when a player supplies only a blank ID. */
+    private fun pendingKey(song: MusicMetadata) = RecordingKey.withLinkWhenIdBlank(song)
+
     /** Which words these are, timings and all, in a few characters. */
     private fun fingerprint(lines: List<LyricLine>) = lines.joinToString("\n") { "${it.timeMs} ${it.text}" }.hashCode().toString(16)
 
     private companion object {
         const val KEY = "lyrics_sync"
+        const val KEY_PENDING = "lyrics_sync_pending"
         const val MAX_SONGS = 200
     }
 }

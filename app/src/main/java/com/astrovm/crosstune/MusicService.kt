@@ -72,23 +72,34 @@ internal enum class MusicService(
     QOBUZ(
         R.string.service_qobuz, R.string.open_in_qobuz, R.drawable.ic_service_qobuz, "com.qobuz.music", false,
         querySearchUrl("https://play.qobuz.com/search", "q")
+    ),
+    /** Classical and jazz. Its search finds albums only, by what's on them too, so a song's title and artist find the albums it's on. */
+    PRESTO_MUSIC(
+        R.string.service_presto_music, R.string.open_in_presto_music, R.drawable.ic_service_prestomusic, "com.prestomusic.app", true,
+        querySearchUrl("https://streaming.prestomusic.com/explore/results/albums", "search")
     );
 
     fun searchUrl(query: String): String = searchUrlBuilder(query)
 
     /**
      * Whether Crosstune can open its links when they're tapped, not just shared or pasted. SoundCloud,
-     * Bandcamp and Audiomack can't: much of what's on them is on no other service (#372), and every
-     * host claimed is one more to tick in Android's "Open by default".
+     * Bandcamp and Audiomack can't: much of what's on them is on no other service (#372). Presto Music
+     * can't either: its links are mostly its shop's, and every host claimed is one more to tick in
+     * Android's "Open by default".
      */
     val opensTappedLinks: Boolean get() = this in LinkInterception.HOSTS
 
     /**
-     * Whether its app plays a song asked for by name while Crosstune stays open. Spotify ignores
-     * apps it doesn't know, Amazon Music's free plan plays the artist's radio instead, and Bandcamp's
-     * comes to the front on a search and plays nothing, so a song is searched for there.
+     * Whether its app can start a requested song through a media session. Spotify ignores apps it
+     * doesn't know, Amazon Music's free plan plays the artist's radio, and Bandcamp, Audiomack and Presto Music open a search.
      */
-    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP
+    val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC && this != BANDCAMP && this != AUDIOMACK && this != PRESTO_MUSIC
+
+    /**
+     * Whether its app plays the song it's opened on by the song's own link, as Spotify does, which plays none asked for.
+     * Amazon Music, Bandcamp and Presto Music have only a search.
+     */
+    val playsLinkedSongs: Boolean get() = this != AMAZON_MUSIC && this != BANDCAMP && this != PRESTO_MUSIC
 
     /**
      * Whether its app takes no list of songs, so a playlist plays there one song after another, see
@@ -180,6 +191,16 @@ internal enum class MusicService(
             val query = service.appSearch(link, asking) ?: return null
             return Intent(Intent.ACTION_SEARCH).setClassName(app, BANDCAMP_SEARCH_ACTIVITY).putExtra(SearchManager.QUERY, query)
         }
+
+        /**
+         * A word telling the build [packageName] from its service's own app when both go by one name:
+         * "TV" for YouTube's TV app, or the patcher's name, e.g. "ReVanced" for app.revanced.android.youtube.
+         */
+        fun buildName(packageName: String): String =
+            if (packageName == YOUTUBE_TV) "TV"
+            else packageName.substringBefore(".android").substringAfterLast('.').let { BUILD_NAMES[it] ?: (it.take(1).uppercase() + it.drop(1)) }
+
+        private val BUILD_NAMES = mapOf("revanced" to "ReVanced", "rvx" to "RVX")
 
         /** The service whose own app, not a build patched from it, has [packageName]. */
         fun ofOwnApp(packageName: String?): MusicService? = entries.firstOrNull { it.packageName == packageName }

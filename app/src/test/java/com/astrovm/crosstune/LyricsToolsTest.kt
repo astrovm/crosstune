@@ -16,7 +16,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -54,7 +53,7 @@ import org.robolectric.annotation.Config
 class LyricsToolsTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
@@ -140,18 +139,6 @@ class LyricsToolsTest {
         waitUntil { composeRule.onAllNodes(hasText("Demo one", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true)
         composeRule.waitForIdle()
-    }
-
-    /** projectM, when it can't start. */
-    private object NoMilkdrop : Milkdrop {
-        override fun open(width: Int, height: Int) = false
-        override fun size(width: Int, height: Int) = Unit
-        override fun show(preset: String, smooth: Boolean) = false
-        override fun hear(samples: ByteArray, count: Int) = Unit
-        override fun draw() = Unit
-        override fun darken(shade: Float, ceiling: Float) = Unit
-        override fun finish() = Unit
-        override fun close() = Unit
     }
 
     private fun passes(ms: Long) {
@@ -835,6 +822,26 @@ class LyricsToolsTest {
         passes(1)
         assertTrue(onTheBar())
         assertEquals(1, offers())
+    }
+
+    @Test
+    fun onATvTheRemoteGoesBackToStudyFromPracticeOnlyUntilItsUsedOnTheWords() {
+        prefs().edit().putString("saved_lines", """[{"text":"Demo one","translation":"Demo uno","title":"Demo","artist":"Band","interval":3,"due":1}]""").commit()
+        openLyrics()
+        val study = composeRule.onNode(hasContentDescription(string(R.string.lyrics_study)))
+        study.performClick()
+        composeRule.onAllNodes(hasText(string(R.string.practice_song)))[0].performClick()
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isEmpty() }
+        composeRule.runOnIdle { checkNotNull(controller) { "Expected controller to be non-null" }.get().onBackPressedDispatcher.onBackPressed() }
+        waitUntil { composeRule.onAllNodes(hasText("Demo two")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { runCatching { study.assertIsFocused() }.isSuccess }
+        // Used on the words since, the remote is sent to the bar's first tool again, as before Practice.
+        line("Demo two").requestFocus()
+        awayFromTheTools()
+        line("Demo two").performKeyInput { pressKey(Key.DirectionRight) }
+        passes(1)
+        assertTrue(onTheBar())
+        study.assertIsNotFocused()
     }
 
     private companion object {

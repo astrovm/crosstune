@@ -38,13 +38,17 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import adbtool
+import gradlebox
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 TABLES = ROOT / "app/src/test/regextable"
 KOTLIN = ROOT / "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt"
 # The sets only the tests' pattern writer reads, kept out of the app.
 TEST_KOTLIN = ROOT / "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt"
 # The sets the app reads itself: the rest are TEST_KOTLIN's.
-APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_LATIN_IGNORING_CASE", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
+APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
 CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/playDebugUnitTest/compilePlayDebugUnitTestKotlin/classes"
 MAIN_CLASS = "com.astrovm.crosstune.RegexTableProbe"
 PATTERNS_CLASS = "com.astrovm.crosstune.PatternsProbe"
@@ -82,6 +86,10 @@ SETS = {
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, capture_output=True, text=True, **kwargs).stdout
+
+
+def adb(*args):
+    return run(adbtool.path(), *args)
 
 
 def load(path):
@@ -191,9 +199,9 @@ def emulator(serial):
         if not serial.startswith("emulator-"):
             sys.exit(f"{serial} isn't an emulator: the table is made on one, never on a phone")
         return serial
-    for line in run("adb", "devices").splitlines()[1:]:
+    for line in adb("devices").splitlines()[1:]:
         found = line.split("\t")[0]
-        if found.startswith("emulator-") and AVD in run("adb", "-s", found, "emu", "avd", "name"):
+        if found.startswith("emulator-") and AVD in adb("-s", found, "emu", "avd", "name"):
             return found
     sys.exit(f"No {AVD} emulator is running: start it with scripts/emulator/emulator.py start {AVD}")
 
@@ -202,17 +210,17 @@ def probe(serial):
     serial = emulator(serial)
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compilePlayDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
-    stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
+    stdlib = gradlebox.kotlin_stdlib(ROOT)
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
     probe_classes = sorted(str(path) for path in (CLASSES / "com/astrovm/crosstune").glob("RegexTableProbe*.class"))
     work = Path(tempfile.mkdtemp(prefix="regextable-", dir=os.environ.get("REGEXTABLE_TMP")))
     try:
         run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "probe.jar"), *probe_classes, str(stdlib))
-        run("adb", "-s", serial, "push", str(work / "probe.jar"), DEVICE_JAR)
-        run("adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {MAIN_CLASS} {DEVICE_TABLE}")
-        run("adb", "-s", serial, "pull", DEVICE_TABLE, str(work / "android.tsv"))
-        run("adb", "-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_TABLE}")
+        adb("-s", serial, "push", str(work / "probe.jar"), DEVICE_JAR)
+        adb("-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {MAIN_CLASS} {DEVICE_TABLE}")
+        adb("-s", serial, "pull", DEVICE_TABLE, str(work / "android.tsv"))
+        adb("-s", serial, "shell", f"rm -f {DEVICE_JAR} {DEVICE_TABLE}")
         engine = load(work / "android.tsv")[1]
         table = TABLES / f"android-{api(engine)}.tsv"
         TABLES.mkdir(parents=True, exist_ok=True)
@@ -228,7 +236,7 @@ def probe(serial):
 def compiled():
     env = dict(os.environ, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", "scripts/gradle-box/gradle-box.sh", "--max-workers=2", ":app:compilePlayDebugUnitTestKotlin"], cwd=ROOT, env=env, check=True)
-    stdlib = next(Path.home().glob(".cache/crosstune-gradle-box/seed/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/*/*/kotlin-stdlib-*[0-9].jar"))
+    stdlib = gradlebox.kotlin_stdlib(ROOT)
     tools = max((SDK / "build-tools").iterdir())
     platform = max((SDK / "platforms").iterdir()) / "android.jar"
     return stdlib, tools, platform
@@ -289,13 +297,13 @@ def patterns(serial, base):
         ids = next(ROOT.glob("app/build/intermediates/*r_class_jar/playDebug/*/R.jar"))
         run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
         device = "/data/local/tmp/patterns-"
-        run("adb", "-s", serial, "push", str(work / "dex.jar"), device + "probe.jar")
-        run("adb", "-s", serial, "push", str(work / "head.tsv"), device + "list.tsv")
+        adb("-s", serial, "push", str(work / "dex.jar"), device + "probe.jar")
+        adb("-s", serial, "push", str(work / "head.tsv"), device + "list.tsv")
         try:
-            run("adb", "-s", serial, "shell", f"app_process -cp {device}probe.jar /system/bin {PATTERNS_CLASS} digest {device}list.tsv {device}out.tsv")
-            run("adb", "-s", serial, "pull", device + "out.tsv", str(work / "android.tsv"))
+            adb("-s", serial, "shell", f"app_process -cp {device}probe.jar /system/bin {PATTERNS_CLASS} digest {device}list.tsv {device}out.tsv")
+            adb("-s", serial, "pull", device + "out.tsv", str(work / "android.tsv"))
         finally:
-            run("adb", "-s", serial, "shell", f"rm -f {device}probe.jar {device}list.tsv {device}out.tsv")
+            adb("-s", serial, "shell", f"rm -f {device}probe.jar {device}list.tsv {device}out.tsv")
         run(*jvm, "digest", str(work / "head.tsv"), str(work / "jvm.tsv"))
         engine, phone = digests(work / "android.tsv")
         kept = TABLES / f"patterns-android-{api(engine)}.tsv"

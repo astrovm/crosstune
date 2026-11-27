@@ -51,8 +51,7 @@ internal class QobuzNumbers(
         // Already on it, it's brought forward, and there's no start to see.
         if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return Opening()
         val launched = CompletableDeferred<Unit>()
-        val watch = scope.launch { tryOther(song, app, link, over, launched) }
-        job = watch
+        val watch = scope.launchKept({ job = it }) { tryOther(song, app, link, over, launched) }
         return Opening(launched, watch)
     }
 

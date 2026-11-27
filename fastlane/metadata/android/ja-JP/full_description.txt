@@ -4,7 +4,7 @@
 
 <b>主な機能</b>
 <ul>
-<li>Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack のリンクを読み取り、これらのいずれか、または Amazon Music や Qobuz で開きます。</li>
+<li>Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack、Presto Music のリンクを読み取り、これらのいずれか、または Amazon Music、Qobuz で開きます。</li>
 <li>プレイリストやアルバムは曲の一覧を表示します。好きな曲を選んだアプリで開いたり、リストをコピー・共有したり、YouTube Music、YouTube、TIDAL、Spotify で順番どおりやシャッフルですべて再生したりできます。</li>
 <li>サービスごとに開くアプリを変更できます。たとえば YouTube のリンクは YouTube Music、それ以外は Apple Music で開くこともできます。</li>
 <li>「先に Crosstune で表示」をオンにすると、その画面のまま、曲が選んだアプリで再生されます。</li>
@@ -22,4 +22,4 @@
 </ul>
 
 <b>プライバシー</b>
-アカウント登録、解析、広告はありません。履歴は端末内にのみ保存されます。リンクのタイトル、アーティスト、カバーを表示するため、Crosstune はリンク元のサービスにのみ問い合わせます。曲そのものを開くため、タイトルとアーティストが Apple、Deezer、YouTube Music、YouTube、Bandcamp の検索にも送信されます。「すべて再生」と「シャッフル」では、曲のタイトルとアーティストが YouTube Music の検索に、見つかった動画が YouTube に送信されます。 曲を認識するとき、Crosstune がマイクを使うのは聞き取っている間だけで、Shazam に送るのは音のフィンガープリントだけです。音声そのものは送りません。 曲の名前の入力はその名前を Deezer と Apple の曲検索に送信し、歌詞やコードのリクエストは曲のタイトルとアーティストを歌詞・コードのサイト（LRCLIB、YouTube Music、NetEase、Letras、Genius、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET、J-Total、ChordWiki）に送信します。翻訳は MyMemory に送られます。ChatGPT でサインインしている場合、AI 機能は曲のタイトル、アーティスト、歌詞と、質問した内容を OpenAI に送信します。 マイクの使用が許可済みの場合、歌詞は短時間音を聴いて、その録音のイントロによるずれを補正し、記憶できます。歌声にも合わせます。歌声はスマホ内で聴き取り、送信しません。 歌詞が見つからないときや、タイトルや LRCLIB がインストゥルメンタルとしたときも、スマホの音で歌声があるかを聴きます。音は送信しません。曲の問題の自動報告がオフのときは、ジャンルやタイトル、LRCLIB がインストゥルメンタルとした曲だけです。
+アカウント登録、解析、広告はありません。履歴は端末内にのみ保存されます。曲を認識するとき、Shazam に送るのは音のフィンガープリントだけで、音声そのものは送りません。歌詞を歌声に合わせる処理は端末内で行います。曲のタイトルとアーティストは、その曲を探して開く音楽サービスと、歌詞、コード、翻訳のサイトに送信されます。ChatGPT でサインインしている場合、AI 機能は曲と歌詞、質問した内容を OpenAI に送信します。Crosstune の唯一のサーバーが受け取るのは、送信された問題の報告と、オンにした場合の自動報告だけです。IP アドレスは保存せず、各報告は 180 日後に削除されます。すべてのサービスと各報告の内容: https://crosstune.cc/ja/privacy/

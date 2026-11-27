@@ -77,12 +77,14 @@ class LinkInterceptionTest {
     }
 
     @Test
-    fun soundCloudBandcampAndAudiomackLinksAreOnlySharedOrPasted() {
-        // Much of what's on them is on no other service (#372), so tapped, their links stay in their own apps.
+    fun soundCloudBandcampAudiomackAndPrestoLinksAreOnlySharedOrPasted() {
+        // Much of what's on them is on no other service (#372), and Presto's are mostly its shop's, so tapped,
+        // their links stay in their own apps.
         val links = mapOf(
             MusicService.SOUNDCLOUD to "https://soundcloud.com/theweeknd/blinding-lights",
             MusicService.BANDCAMP to "https://artist.bandcamp.com/album/record",
-            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/title"
+            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/title",
+            MusicService.PRESTO_MUSIC to "https://streaming.prestomusic.com/album/8269533"
         )
         MusicService.entries.filter { it.opensTappedLinks }.forEach { interception.setEnabled(it, true) }
         for ((service, link) in links) {
@@ -152,12 +154,12 @@ class LinkInterceptionTest {
 
     @Test
     fun installedAppsAreDetected() {
-        assertTrue(interception.installedServices().isEmpty())
+        assertTrue(interception.linkState().serviceApps.isEmpty())
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.aspiro.tidal" })
-        assertEquals(setOf(MusicService.TIDAL), interception.installedServices())
+        assertEquals(setOf(MusicService.TIDAL), interception.linkState().serviceApps.keys)
         // A build patched from an app, under a name of its own, is that app.
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "app.revanced.android.apps.youtube.music" })
-        assertEquals(setOf(MusicService.TIDAL, MusicService.YOUTUBE_MUSIC), interception.installedServices())
+        assertEquals(setOf(MusicService.TIDAL, MusicService.YOUTUBE_MUSIC), interception.linkState().serviceApps.keys)
         assertEquals("app.revanced.android.apps.youtube.music", interception.linkState().serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
     }
 
@@ -166,25 +168,11 @@ class LinkInterceptionTest {
         val fork = "org.example.android.apps.youtube.music"
         val plainYouTube = "org.example.android.youtube"
         shadowOf(app).checkActivities(true)
-        listOf(fork, plainYouTube).forEach { name ->
-            shadowOf(app.packageManager).installPackage(installedApp(name, name))
-            val opens = ComponentName(name, "$name.UrlActivity")
-            shadowOf(app.packageManager).addActivityIfNotPresent(opens)
-            shadowOf(app.packageManager).addIntentFilterForActivity(
-                opens, IntentFilter(Intent.ACTION_VIEW).apply {
-                    addCategory(Intent.CATEGORY_DEFAULT)
-                    addCategory(Intent.CATEGORY_BROWSABLE)
-                    addDataScheme("https")
-                    addDataAuthority("music.youtube.com", null)
-                    addDataAuthority("www.youtube.com", null)
-                    addDataAuthority("youtu.be", null)
-                }
-            )
-        }
+        listOf(fork, plainYouTube).forEach { name -> installLinkOpener(app, name, name, "music.youtube.com", "www.youtube.com", "youtu.be") }
         // An app of some other service that opens no such link is not mistaken for one.
         shadowOf(app.packageManager).installPackage(installedApp("org.example.player", "Player"))
-        assertEquals(setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE), interception.installedServices())
         val state = interception.linkState()
+        assertEquals(setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE), state.serviceApps.keys)
         assertEquals(fork, state.serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
         assertEquals(plainYouTube, state.serviceApps[MusicService.YOUTUBE]?.packageName)
         assertEquals(listOf(fork, plainYouTube), state.apps)

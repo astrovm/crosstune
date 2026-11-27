@@ -14,6 +14,7 @@
     <string name="open_in_spotify">Spotify で開く</string>
     <string name="open_in_audiomack">Audiomack で開く</string>
     <string name="open_in_qobuz">Qobuz で開く</string>
+    <string name="open_in_presto_music">Presto Music で開く</string>
     <string name="open_in_bandcamp">Bandcamp で開く</string>
     <string name="open_in_amazon_music">Amazon Music で開く</string>
     <string name="from_service">%1$s から</string>
@@ -54,7 +55,6 @@
     <string name="got_it_button">OK</string>
     <string name="chatgpt_channel">ChatGPT でログイン</string>
     <string name="chatgpt_signing_in_notification">ChatGPT でログインしています</string>
-    <string name="next_button">次へ</string>
     <string name="back_button">戻る</string>
     <string name="setup_step">ステップ %1$d/%2$d</string>
     <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
@@ -285,7 +285,6 @@
     <string name="song_search_title">曲</string>
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
     <string name="floating_background">背景</string>
-    <string name="floating_text_size">文字サイズ</string>
     <string name="floating_float">他のアプリの上に表示</string>
     <string name="floating_permission_title">アプリの上に歌詞を表示</string>
     <string name="floating_customize">カスタマイズ</string>

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -10,7 +11,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
@@ -24,8 +27,10 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.TimeSource
 
 /** A queue in YouTube or YouTube Music: its [url], and the [songs] it plays, as asked for, those found there. */
 internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>)
@@ -39,15 +44,24 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Version 7 requires an accented Latin row to name the song.
  * Version 8 doesn't take a row in another script that says it's a live, karaoke or other take for the studio song, and
  * can use an artist's video and a matching store album to name a song in another script.
+ * Version 9 learns the US store's name for a song another store found, so YouTube Music's row by Kenshi Yonezu is Lemon
+ * by 米津玄師, where a fan's lyrics video was found.
+ * Version 10 doesn't take a re-recording, From THE FIRST TAKE or 重生版, for the song unless it's asked for, so First Love
+ * opens 宇多田ヒカル's own, and takes a credit of two known names together, G.E.M. 鄧紫棋, as the artist's.
+ * Version 11 gives a missing store one retry before playing a fan upload and checks the upload again later.
+ * Version 12 can confirm an untranslated search result by its own song ID in another YouTube Music language.
+ * Version 13 matches two whole names in a bilingual store title when the artist's video repeats its credit.
+ * Version 14 needs evidence from the link before opening a row that names a disco version.
+ * Version 15 keeps disco requests separate from plain requests in the cache.
+ * Version 16 can prove a parenthesized catalog alias from both credited video titles.
  */
-internal const val MATCH_VERSION = 8
+internal const val MATCH_VERSION = 16
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
  * Search API and Deezer's public API, plus the search behind Bandcamp's, YouTube Music's, TIDAL's,
- * SoundCloud's and Audiomack's own websites, and Qobuz's store pages, which have no documented API.
- * Spotify and Amazon Music need an account, so they keep using a search. Any failure or uncertain
- * match returns null so the caller falls back to a search.
+ * SoundCloud's, Audiomack's and Presto Music's own sites, and Qobuz's store pages, which have no documented API.
+ * Any failure or uncertain match returns null so the caller falls back to a search.
  */
 internal class ExactMatcher(
     private val client: OkHttpClient,
@@ -67,23 +81,70 @@ internal class ExactMatcher(
      * ChatGPT asked again, each time it's opened; none by default.
      */
     private val missingForMs: Long = 0,
-    private val now: () -> Long = System::currentTimeMillis,
+    private val now: () -> Long = SystemClock::elapsedRealtime,
     /** How long a search has, and then ChatGPT to pick from what it found. */
     private val timeoutMs: Long = TIMEOUT_MS,
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
-    private val spotifyArtist: suspend (String) -> String? = { null }
+    private val spotifyArtist: suspend (String) -> String? = { null },
+    private val wallNow: () -> Long = { System.currentTimeMillis() },
+    private val lookupTime: TimeSource = TimeSource.Monotonic
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
     sealed interface Match {
-        data class Found(val url: String) : Match
+        /** An upload found during a store outage can open now and still need another lookup later. */
+        data class Found(val url: String, val lasting: Boolean = true) : Match
+        data object WaitingForNames : Match
         data object Missing : Match
         data object Failed : Match
     }
 
+    /** A lookup to try again because a store that could name the song was down. */
+    data class Retry(val heldAtMs: Long? = null) {
+        fun toJson(): JSONObject = JSONObject().putOpt("heldAtMs", heldAtMs)
+
+        companion object {
+            fun fromJson(json: JSONObject): Retry = Retry(json.optLong("heldAtMs", -1).takeIf { it >= 0 })
+        }
+    }
+
+    data class Lookup(val match: Match, val retry: Retry? = null)
+
+    private data class SavedAnswer(val url: String?, val retry: Retry? = null) {
+        val confirmedUrl: String? get() = url.takeIf { retry == null }
+        val provisionalUrl: String? get() = url.takeIf { retry != null }
+
+        fun forCache(): String = retry?.toJson()?.putOpt("url", url)?.toString() ?: url.orEmpty()
+    }
+
+    private suspend fun savedAnswer(key: String): SavedAnswer? = cache?.get(key)?.let { value ->
+        if (value.startsWith("{")) {
+            answeredOr(null) {
+                val json = JSONObject(value)
+                SavedAnswer(json.optString("url").ifEmpty { null }, Retry.fromJson(json))
+            }
+        } else {
+            SavedAnswer(value)
+        }
+    }
+
     /** When each thing looked for and not found was, by its [cacheKey]. */
     private val missing = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** When each thing was looked for while a store that could have named it failed, and what that came to, by its [cacheKey]. */
+    private val unsure = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Lookup>>()
+
+    /** When the wait started, by the clock used during it and the clock that survives a restart. */
+    private data class NameHold(val startedAt: Long, val wallTime: Long) {
+        fun waiting(at: Long): Boolean = at - startedAt < UNSURE_FOR_MS
+        fun pending(): Lookup = Lookup(Match.WaitingForNames, Retry(wallTime))
+    }
+
+    private val waitingForNames = java.util.concurrent.ConcurrentHashMap<String, NameHold>()
+
+    /** Keeps checking saved answers and writing them together while lookups run independently. */
+    private val savingAnswers = Mutex()
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -94,14 +155,9 @@ internal class ExactMatcher(
      * or a vlog. Null when it can't be told, e.g. offline.
      */
     suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
-        try {
-            val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
-            val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
-            musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
-            null
+        answeredOr(null) {
+            val body = YouTubeMusicApi.body(language = null).put("videoId", videoId)
+            musicVideoTypeIn(fetchJson(YouTubeMusicApi.NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
         }
     }
 
@@ -116,15 +172,21 @@ internal class ExactMatcher(
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? = (lookFor(target, metadata) as? Match.Found)?.url
 
     /** What [target] has for [metadata], telling a song that isn't there from one that couldn't be looked for. */
-    suspend fun lookFor(target: MusicService, metadata: MusicMetadata): Match = match(target, metadata).also { cache?.save() }
+    suspend fun lookFor(target: MusicService, metadata: MusicMetadata): Match = lookup(target, metadata).match
 
-    private suspend fun match(target: MusicService, metadata: MusicMetadata): Match {
+    /** Recent can supply the retry and its provisional URL if the cache was cleared. */
+    suspend fun lookup(
+        target: MusicService, metadata: MusicMetadata, retry: Retry? = null, provisionalUrl: String? = null
+    ): Lookup = match(target, metadata, retry?.let { SavedAnswer(provisionalUrl, it) }).also { cache?.save() }
+
+    private suspend fun match(target: MusicService, metadata: MusicMetadata, previous: SavedAnswer? = null): Lookup {
         // A playlist whose songs aren't known may be an album put up as one, e.g. a SoundCloud set,
-        // so it's found as that album, by the same artist, or not at all.
-        val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
+        // so it's found as that album, by the same artist, or not at all. Presto only looks up album links.
+        val maybeAlbum = target != MusicService.PRESTO_MUSIC && metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()
+        val item = if (maybeAlbum) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
-        if (!canMatchExactly(target, item.type)) return Match.Missing
-        return remembered("find", target.name, item) { lookUp(target, item) }
+        if (!canMatchExactly(target, item.type)) return Lookup(Match.Missing)
+        return remembered("find", target.name, item, previous) { lookUp(target, item) }
     }
 
     /**
@@ -135,83 +197,231 @@ internal class ExactMatcher(
      */
     private suspend fun matchForQueue(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) {
-            return (match(target, metadata) as? Match.Found)?.url
+            return (match(target, metadata).match as? Match.Found)?.url
         }
         metadata.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(target)?.let { return it }
-        cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
-        return (remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) } as? Match.Found)?.url
+        val single = savedAnswer(cacheKey("find", target.name, metadata))
+        single?.confirmedUrl?.let { return it }
+        val queued = remembered("queue", target.name, metadata, single) { lookUp(target, metadata, loosely = true, retrying = true) }
+        return (queued.match as? Match.Found)?.url
     }
 
     /**
      * A search's answer: what it found, or else, on YouTube, the songs and videos it turned up for
      * ChatGPT to pick from, given its own while, as it takes a few seconds.
      */
-    private class Answer(val url: String?, val toPick: ToPick? = null)
+    private class Answer(
+        val url: String?, val toPick: ToPick? = null, val final: Boolean = true, val lasting: Boolean = true,
+        val waitForNames: Boolean = false, val artistVideo: String? = null,
+        val localizedUrl: (suspend () -> String?)? = null
+    )
 
     private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
     /**
+     * What [lookUp] came to, and whether it's only for now, as a store that could have named the song failed: [unsure].
+     * Then a miss is no answer, and what's found still needs a retry.
+     */
+    private class Looked(
+        val match: Match, val unsure: Boolean = false, val waitForNames: Boolean = false,
+        private val artistVideo: String? = null
+    ) {
+        fun matchAfterOutage(afterOutage: Boolean): Match =
+            if (afterOutage && artistVideo != null) Match.Found(artistVideo) else match
+    }
+
+    /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
      * [retrying], e.g. for a queue, where one song in fifty must not be lost to a slow moment; an
-     * answer of "none" is final.
+     * answer of "none" is final, unless what would have proved the song failed: then it's no answer,
+     * and not asked again at once, as the store that failed is likely still down.
      */
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Match {
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Looked {
         repeat(if (retrying) 2 else 1) {
+            val start = lookupTime.markNow()
             val answer = withTimeoutOrNull(timeoutMs) {
-                try {
-                    when (target) {
-                        MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata))
-                        MusicService.DEEZER -> Answer(findOnDeezer(metadata))
-                        MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
-                        MusicService.TIDAL -> Answer(findOnTidal(metadata))
-                        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
-                        MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
-                        MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
-                        MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
-                        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
-                        // YouTube.
-                        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
-                    }
-                } catch (_: IOException) {
-                    null
-                } catch (_: JSONException) {
-                    null
-                }
+                answeredOr(null) { findOn(target, metadata, loosely) }
             }
-            if (answer != null) return answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
+            if (answer != null) {
+                // A stalled localized search spends only what's left of the search time and doesn't lose the picker.
+                val url = answer.url ?: answer.localizedUrl?.let { localize ->
+                    withTimeoutOrNull(timeoutMs - start.elapsedNow().inWholeMilliseconds) { localize() }
+                }
+                val match = url?.let { Match.Found(it, answer.lasting) } ?: answer.toPick?.let { picked(it, answer.lasting) } ?: Match.Missing
+                return if (match == Match.Missing && !answer.final) Looked(Match.Failed, unsure = true)
+                else Looked(match, unsure = !answer.lasting, waitForNames = answer.waitForNames, artistVideo = answer.artistVideo)
+            }
         }
-        return Match.Failed
+        return Looked(Match.Failed)
+    }
+
+    private suspend fun findOn(target: MusicService, metadata: MusicMetadata, loosely: Boolean): Answer = when (target) {
+        MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata)?.url)
+        MusicService.DEEZER -> Answer(findOnDeezer(metadata))
+        MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
+        MusicService.TIDAL -> Answer(findOnTidal(metadata))
+        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
+        MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
+        MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
+        MusicService.PRESTO_MUSIC -> Answer(findOnPresto(metadata))
+        MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
+        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
+        // YouTube.
+        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
     }
 
     /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
-    private suspend fun picked(toPick: ToPick): Match {
+    private suspend fun picked(toPick: ToPick, lasting: Boolean): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
                 pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs)
                     ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs)
             )
         } ?: return Match.Failed
-        return url.url?.let(Match::Found) ?: Match.Missing
+        return url.url?.let { Match.Found(it, lasting) } ?: Match.Missing
     }
 
     /** By the song's length too, when it's known, as an edit of a song is often named just like it; and by how songs are matched, so what was found before is looked for again. */
-    private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
-        (listOf("$kind@$MATCH_VERSION", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) + listOfNotNull(metadata.lengthMs)).joinToString("|")
+    private fun cacheKey(kind: String, target: String, metadata: MusicMetadata): String {
+        val edition = if (metadata.requestsDisco()) "/disco" else ""
+        return (listOf("$kind@$MATCH_VERSION$edition", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) +
+            listOfNotNull(metadata.lengthMs)).joinToString("|")
+    }
 
     /**
      * What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found
-     * something; when it found nothing, that's kept for [missingForMs].
+     * something; when it found nothing, that's kept for [missingForMs]. One reached while a store that
+     * could have named the song failed is held for a while, at most as long, and then asked again: what
+     * it found may be a fan's video where that store's name finds the song. Held, asking again at once,
+     * as a card does, doesn't ask every service again for the store that's down.
+     * Give the store one 30-second hold if it could name a competing result and there is no provisional URL.
+     * After that, open the saved provisional URL if the next lookup still fails. Each open asks again after the
+     * short in-memory pause, so the artist's video can replace the upload once the store answers.
      */
-    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> Match): Match {
+    private suspend fun remembered(
+        kind: String, target: String, metadata: MusicMetadata, previous: SavedAnswer? = null, lookUp: suspend () -> Looked
+    ): Lookup {
         val key = cacheKey(kind, target, metadata)
-        cache?.get(key)?.let { return Match.Found(it) }
-        missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
-        return lookUp().also { match ->
-            when (match) {
-                is Match.Found -> cache?.put(key, match.url)
-                Match.Missing -> if (missingForMs > 0) missing[key] = now()
-                Match.Failed -> Unit
+        val changes = CacheChanges()
+        try {
+            return changes.findAnswer(key, previous, lookUp).also(changes::keepRetry)
+        } finally {
+            changes.flush()
+        }
+    }
+
+    private suspend fun CacheChanges.findAnswer(key: String, previous: SavedAnswer?, lookUp: suspend () -> Looked): Lookup {
+        val (outage, hold, earlier) = savingAnswers.withLock {
+            val saved = savedAnswer(key)
+            // Recent can still have an upload after another open found the artist's video.
+            saved?.confirmedUrl?.let { return Lookup(Match.Found(it)) }
+            val outage = previousOutage(saved, previous)
+            if (outage == null) {
+                missing[key]?.takeIf { now() - it < missingForMs }?.let { return Lookup(Match.Missing) }
             }
+
+            val hold = nameHold(key, saved, outage)
+            hold?.takeIf { it.waiting(now()) }?.let { return it.pending() }
+            val earlier = unsure[key]
+            earlier?.takeIf { now() - it.first < minOf(missingForMs, UNSURE_FOR_MS) }?.let { return it.second }
+            Triple(outage, hold, earlier?.second)
+        }
+        val looked = lookUp()
+        return answerLookup(key, outage, hold, earlier, looked)
+    }
+
+    private fun previousOutage(saved: SavedAnswer?, previous: SavedAnswer?): SavedAnswer? {
+        // The cache can have corrected a hold timestamp that Recent still has from before a clock change.
+        val retry = saved?.retry?.takeIf { it.heldAtMs != null } ?: previous?.retry ?: saved?.retry ?: return null
+        return SavedAnswer(saved?.provisionalUrl ?: previous?.provisionalUrl, retry)
+    }
+
+    private suspend fun CacheChanges.answerLookup(
+        key: String, outage: SavedAnswer?, hold: NameHold?, earlier: Lookup?, looked: Looked
+    ): Lookup = savingAnswers.withLock {
+        val saved = savedAnswer(key)
+        // Another lookup may have saved the artist's video while this one was waiting for the store.
+        saved?.confirmedUrl?.let { return@withLock Lookup(Match.Found(it)) }
+        val retry = saved?.retry ?: hold?.let { Retry(it.wallTime) } ?: outage?.retry
+        val earlierUrl = (earlier?.match as? Match.Found)?.url
+        val provisional = saved?.provisionalUrl ?: outage?.url ?: earlierUrl.takeIf { looked.waitForNames }
+        if (provisional == null && (looked.waitForNames || looked.match == Match.Failed)) {
+            waitingAnswer(key, saved, retry, canStart = looked.waitForNames)?.let { return@withLock it }
+        }
+        val match = if (looked.unsure && provisional != null) Match.Found(provisional, lasting = false)
+        else looked.matchAfterOutage(retry != null || earlier != null)
+        rememberAnswer(key, saved, looked, match, retry, provisional)
+    }
+
+    private suspend fun CacheChanges.nameHold(key: String, saved: SavedAnswer?, outage: SavedAnswer?): NameHold? {
+        if (outage?.url != null) return null
+        val heldAt = outage?.retry?.heldAtMs ?: return waitingForNames[key]
+        val at = now()
+        val wall = wallNow()
+        val start = minOf(heldAt, wall)
+        val hold = waitingForNames.computeIfAbsent(key) { NameHold(at - (wall - start), start) }
+        if (hold.wallTime < heldAt) {
+            // Keep the corrected start so the next restart counts time spent waiting here.
+            saveAnswer(key, saved, SavedAnswer(null, Retry(hold.wallTime)))
+        }
+        return hold
+    }
+
+    private suspend fun CacheChanges.waitingAnswer(key: String, saved: SavedAnswer?, retry: Retry?, canStart: Boolean): Lookup? {
+        val existing = waitingForNames[key]
+        if (existing != null) return existing.takeIf { it.waiting(now()) }?.pending()
+        if (!canStart || retry?.heldAtMs != null) return null
+        val hold = NameHold(now(), wallNow())
+        waitingForNames[key] = hold
+        val pending = hold.pending()
+        saveAnswer(key, saved, SavedAnswer(null, pending.retry))
+        return pending
+    }
+
+    private suspend fun CacheChanges.rememberAnswer(
+        key: String, saved: SavedAnswer?, looked: Looked, match: Match, previous: Retry?, provisional: String?
+    ): Lookup {
+        if (looked.unsure) {
+            val retry = if (match is Match.Found) {
+                (previous ?: Retry()).also { saveAnswer(key, saved, SavedAnswer(match.url, it)) }
+            } else {
+                previous
+            }
+            return Lookup(match, retry).also { unsure[key] = now() to it }
+        }
+        if (match == Match.Failed) return Lookup(provisional?.let { Match.Found(it, lasting = false) } ?: match, previous)
+
+        waitingForNames.remove(key)
+        unsure.remove(key)
+        if (match is Match.Found) saveAnswer(key, saved, SavedAnswer(match.url))
+        if (match == Match.Missing) {
+            saved?.let { discardAnswer(key, it) }
+            missing[key] = now()
+        }
+        return Lookup(match)
+    }
+
+    private inner class CacheChanges {
+        private var needsFlush = false
+
+        suspend fun saveAnswer(key: String, saved: SavedAnswer?, answer: SavedAnswer) {
+            if (cache == null || saved == answer) return
+            cache.put(key, answer.forCache())
+            if (answer.retry != null || saved?.retry != null) needsFlush = true
+        }
+
+        suspend fun discardAnswer(key: String, saved: SavedAnswer) {
+            cache?.discard(key, saved.forCache())
+            needsFlush = true
+        }
+
+        fun keepRetry(answer: Lookup) {
+            // Another lookup may have saved this retry and still be writing it to disk.
+            if (answer.retry != null) needsFlush = true
+        }
+
+        suspend fun flush() {
+            if (needsFlush) cache?.flush()
         }
     }
 
@@ -253,7 +463,13 @@ internal class ExactMatcher(
         }
     }
 
-    private suspend fun findOnAppleMusic(metadata: MusicMetadata): String? {
+    data class AppleMusicMatch(val url: String, val lengthMs: Long?)
+
+    /** Radio queue text needs its own title check, without using a cached general match. */
+    suspend fun findRadioSong(metadata: MusicMetadata): AppleMusicMatch? =
+        withTimeoutOrNull(timeoutMs) { answeredOr(null) { findOnAppleMusic(metadata, radio = true) } }
+
+    private suspend fun findOnAppleMusic(metadata: MusicMetadata, radio: Boolean = false): AppleMusicMatch? {
         val (entity, nameKey, urlKey) = when (metadata.type) {
             ItemType.TRACK -> Triple("song", "trackName", "trackViewUrl")
             ItemType.ALBUM -> Triple("album", "collectionName", "collectionViewUrl")
@@ -269,9 +485,12 @@ internal class ExactMatcher(
         val named = results.objects().filter { result ->
             // Apple marks some albums in their name, e.g. "Name - Single", which the source doesn't.
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
-            matches(metadata, name, result.optString("artistName"))
+            matches(metadata, name, result.optString("artistName"), radio = radio)
         }
-        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.let { it.optString(urlKey).linkTo(MusicService.APPLE_MUSIC) }
+        val result = asLongAs(metadata, named) { it.optLong("trackTimeMillis") } ?: return null
+        val link = result.optString(urlKey).linkTo(MusicService.APPLE_MUSIC) ?: return null
+        val length = result.optLong("trackTimeMillis").takeIf { it in 1L..Int.MAX_VALUE.toLong() }
+        return AppleMusicMatch(link, length)
     }
 
     private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
@@ -281,6 +500,25 @@ internal class ExactMatcher(
             matches(metadata, name, artist)
         }
         return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { it.optString("link").linkTo(MusicService.DEEZER) }
+    }
+
+    /** An album link must name the same edition and lead artist, and one release must fit those credits. */
+    private suspend fun findOnPresto(metadata: MusicMetadata): String? {
+        val title = SongNames.normalize(metadata.title)
+        val artists = Presto.albumArtists(metadata.artist) ?: return null
+        if (title.isEmpty()) return null
+        val results = apis.prestoAlbums(searchQuery(metadata)) ?: return null
+        // A row without its title or credits can't be ruled out as another release of the same album.
+        if (results.any { it.nonBlankString("title") == null || it.nonBlankString("artists") == null }) return null
+        val matches = results.filter { result ->
+            SongNames.normalize(result.nonBlankString("title").orEmpty()) == title &&
+                Presto.matchesAlbumArtists(artists, result.nonBlankString("artists").orEmpty())
+        }
+        // Keep a missing code in the list. The row can still be a different release from a row with a code.
+        val codes = matches.map { result ->
+            result.optString("prestoCode").toLongOrNull()?.takeIf { it > 0 }
+        }
+        return codes.distinct().singleOrNull()?.let { Presto.albumUrl(it.toString()) }
     }
 
     /**
@@ -337,29 +575,19 @@ internal class ExactMatcher(
 
     private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = (remembered("cover", "", metadata) {
         withTimeoutOrNull(timeoutMs) {
-            try {
+            answeredOr(null) {
                 // A Spotify song's own cover is known by its link, with no guessing by name. When Spotify
                 // doesn't answer, e.g. it's busy with the rest of the playlist, the name still finds it.
                 val own = if (metadata.url?.startsWith(SPOTIFY_TRACK_URL) == true) {
-                    try {
-                        spotifyCover(metadata.url)
-                    } catch (_: IOException) {
-                        null
-                    } catch (_: JSONException) {
-                        null
-                    }
+                    answeredOr(null) { spotifyCover(metadata.url) }
                 } else {
                     null
                 }
                 // Apple has some Deezer doesn't, e.g. The Blue Hearts'.
                 own ?: deezerCover(metadata) ?: itunesCover(metadata)
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
             }
-        }?.let(Match::Found) ?: Match.Failed
-    } as? Match.Found)?.url
+        }?.let { Looked(Match.Found(it)) } ?: Looked(Match.Failed)
+    }.match as? Match.Found)?.url
 
     private suspend fun spotifyCover(url: String): String? {
         val oEmbed = "https://open.spotify.com/oembed".toHttpUrl().newBuilder().addQueryParameter("url", url).build()
@@ -625,13 +853,9 @@ internal class ExactMatcher(
         }
         // Only songs can be opened in the YouTube app, and it would just be a search for the rest.
         if (!isSong && watchUrl == YOUTUBE_WATCH_URL) return Answer(null)
-        val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
-            .put("hl", "en")
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", client))
-            .put("query", searchQuery(metadata))
-            .put("params", params)
-        val items = fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+        val body = YouTubeMusicApi.body().put("query", searchQuery(metadata)).put("params", params)
+        val items = fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
+        val disco = DiscoRequest(metadata)
         val recording = requestedRecording(metadata.title.takeIf { isSong }.orEmpty())
         fun found(item: JSONObject, loose: Boolean): String? {
             val columns = item.optJSONArray("flexColumns")?.objects()
@@ -643,7 +867,7 @@ internal class ExactMatcher(
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
             // A song's album may say what version it is, "Song" on "… Remix".
             val album = if (isSong) details.getOrNull(1).orEmpty() else ""
-            if (!keepsRequestedRecording(recording, name, album)) return null
+            if (isSong && !keepsRequestedRecording(recording, name, album)) return null
             val named = if (isSong && metadata.lengthMs != null) keepNotesAfterGuests(name) else name
             val same = if (loose) looselyMatches(metadata, named, artist) else matches(metadata, named, artist.ifEmpty { named }, album)
             if (!same) return null
@@ -655,34 +879,161 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }
+        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item ->
+            val url = found(item, loose) ?: return@mapNotNull null
+            val row = row(item)
+            (url to row.lengthMs).takeIf { !isSong || disco.allows(row) }
+        }) { it.second }
         firstFound(loose = false)?.let { (url, length) ->
             val edition = if (isSong) namedLinkedEdition(metadata, items, length) else null
-            return Answer(edition?.let { watchUrl + it.id } ?: url)
+            return Answer(edition?.takeIf { disco.allows(it) }?.let { watchUrl + it.id } ?: url)
         }
         if (loosely) firstFound(loose = true)?.let { return Answer(it.first) }
         if (!isSong) return Answer(null)
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
         val (videos, names) = coroutineScope {
-            val videos = async { searchVideosOnYouTubeMusic(metadata, client) }
+            val videos = async { searchVideosOnYouTubeMusic(metadata) }
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
         val rows = items.map(::row)
-        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) }
-        val abroad = rows.filter { isTheSongInAnotherScript(it, names) }
+        val videoRows = videos.map(::row)
+        val named = rows.firstOrNull { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) && disco.allows(it) }
+        val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         // A row the song's name names, but that says it's a take, is the song's, not its studio recording: no row only known by its
         // artist and length takes its place, as the song may be written otherwise, and this one is the song by name.
         val takeNamed = named == null && rows.any { isTheSong(it, names) && keepsRequestedRecording(recording, it) }
-        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition) ?: it }
-            ?: videoNamesSong(metadata, abroad, videos.map(::row), names)
-            ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names)
-        song?.let { return Answer(watchUrl + it.id) }
-        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
-            ?.let { return Answer(watchUrl + it.id) }
+        val song = named?.let { linkedEditionInAnotherScript(it, abroad, names.linkedEdition)?.takeIf { row -> disco.allows(row) } ?: it }
+            ?: (videoNamesSong(metadata, abroad, videoRows, names)
+                ?: anotherScriptRecording(abroad.takeUnless { takeNamed }.orEmpty(), recording, names))?.takeIf { disco.allows(it) }
+        song?.let { return Answer(watchUrl + it.id, lasting = names.everyStore) }
+        matchingVideo(rows, videoRows, names, recording, watchUrl, disco)?.let { return it }
+        val localize = if (names.complete) null else suspend { localizedSong(metadata, items, names, recording, disco)?.let { watchUrl + it } }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
+        return Answer(
+            null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs),
+            final = names.complete, lasting = names.everyStore, localizedUrl = localize
+        )
+    }
+
+    /**
+     * When a store couldn't name the artist, ask YouTube Music how it credits its own song. The same song ID
+     * and one linked artist ID must agree in both replies. A second artist is not another spelling of the first.
+     */
+    private suspend fun localizedSong(metadata: MusicMetadata, rows: List<JSONObject>, names: Names, recording: RequestedRecording, disco: DiscoRequest): String? {
+        val languages = when (SongNames.homeStore(metadata.artist)) {
+            "JP" -> listOf("ja")
+            "KR" -> listOf("ko")
+            // Han alone does not say whether an artist is Japanese or Chinese.
+            "TW" -> listOf("ja", "zh-TW")
+            else -> return null
+        }
+        val candidates = rows.mapNotNull(::localizableRow).filter { fitsLocalizedSong(it.row, metadata, names, recording) }.associateBy { it.id }
+        if (candidates.isEmpty()) return null
+        for (language in languages) {
+            val body = YouTubeMusicApi.body(language = language).put("query", searchQuery(metadata)).put("params", YOUTUBE_MUSIC_SONGS)
+            val items = answeredOr(emptyList()) { fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems() }
+            val proved = items.mapNotNull(::localizableRow).filter { local ->
+                val original = candidates[local.id] ?: return@filter false
+                fitsLocalizedSong(local.row, metadata, names, recording) && localizedCredit(metadata.artist, original, local)
+            }
+            if (proved.isNotEmpty()) {
+                val id = proved.map { it.id }.toSet().singleOrNull() ?: return null
+                return id.takeIf { disco.allows(candidates.getValue(id).row) && proved.any { disco.allows(it.row) } }
+            }
+        }
+        return null
+    }
+
+    private fun fitsLocalizedSong(row: Row, metadata: MusicMetadata, names: Names, recording: RequestedRecording): Boolean {
+        val length = metadata.lengthMs?.takeIf { it > 0 }
+        val fitsLength = length?.let { sameRecordingLength(row.lengthMs, it) } ?: sameLength(row, names)
+        if (!fitsLength) return false
+        val album = row.details.getOrNull(1).orEmpty()
+        if (SongNames.saysAnotherVersion(album, metadata.title, metadata.artist)) return false
+        // One side of a dash could be a recording label, as in "First Love - 2022 Mix".
+        return SongNames.normalize(metadata.title) == SongNames.normalize(row.name) &&
+            keepsRequestedRecording(recording, row) && !isAnotherTake(row, names)
+    }
+
+    private class LocalizableRow(val id: String, val row: Row, val artistId: String)
+
+    /** A song's credit is before the first bullet. Collaborators have separate runs, even in Japanese. */
+    private fun localizableRow(item: JSONObject): LocalizableRow? {
+        val song = row(item)
+        val id = song.id ?: return null
+        val credit = item.optJSONArray("flexColumns")?.optJSONObject(1)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+            ?.optJSONObject("text")?.optJSONArray("runs").objects().takeWhile { it.optString("text") != " • " }.singleOrNull()
+        val browse = credit?.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint") ?: return null
+        val artist = browse.optString("browseId").takeIf(String::isNotBlank) ?: return null
+        return LocalizableRow(id, song, artist)
+    }
+
+    private fun localizedCredit(wanted: String, original: LocalizableRow, local: LocalizableRow): Boolean {
+        if (original.artistId != local.artistId) return false
+        val localName = local.row.details.first()
+        if (SongNames.normalize(localName) == SongNames.normalize(wanted)) return true
+        val english = SongNames.unaccented(original.row.details.first())
+        val native = SongNames.unaccented(wanted)
+        val credit = SongNames.unaccented(localName)
+        // One linked credit can keep both names, as in "BTS (방탄소년단)". Do not erase the separator of a collaboration.
+        return credit in listOf("$english ($native)", "$native ($english)", "$english $native", "$native $english")
+    }
+
+    private fun matchingVideo(songs: List<Row>, videos: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, disco: DiscoRequest): Answer? {
+        val known = videos.filter { isTheSongsVideo(it, names) && keepsRequestedRecording(recording, it, video = true) }
+        val matching = if (known.any { disco.allows(it, video = true) }) known else {
+            videos.filter { isTheSongsVideo(it, names, allowAlias = true) && keepsRequestedRecording(recording, it, video = true) }
+        }
+        val first = matching.firstOrNull { disco.allows(it, video = true) } ?: return null
+        val artist = matching.firstOrNull { isOwnVideo(it, names) && disco.allows(it, video = true) }?.id?.let { watchUrl + it }
+        // A later lookup can use the artist's video to replace what an outage left it with.
+        if (names.everyStore) return Answer(watchUrl + first.id, artistVideo = artist)
+        if (artist != null) return Answer(artist, lasting = false)
+        return fanVideoDuringOutage(songs, videos, matching, names, recording, watchUrl, disco)
+    }
+
+    private fun fanVideoDuringOutage(
+        songs: List<Row>, videos: List<Row>, matching: List<Row>, names: Names, recording: RequestedRecording, watchUrl: String, disco: DiscoRequest
+    ): Answer? {
+        // A failed search may have lost a length, even if there is no song row.
+        if (names.searchFailed) return null
+        // A title can hide an unconfirmed name in brackets, as on a piano upload.
+        val fans = matching.filterNot { names.lookupCouldName(unconfirmedVideoText(it.name, names)) }
+        val fan = fans.firstOrNull { disco.allows(it, video = true) } ?: return Answer(null, final = false, lasting = false)
+        // A lookup can prove a playable song in its length window, or a video that could be the artist's.
+        val competingSong = !names.complete && songs.any { it.id != null && sameLength(it, names) }
+        val competingVideo = videos.any { it.id != fan.id && it !in fans && couldBeOwnVideo(it, names, recording) }
+        return Answer(watchUrl + fan.id, lasting = false, waitForNames = competingSong || competingVideo)
+    }
+
+    private fun couldBeOwnVideo(row: Row, names: Names, recording: RequestedRecording): Boolean {
+        if (row.id == null || !keepsRequestedRecording(recording, row, video = true)) return false
+        val channel = row.details.first().removeSuffix(" - Topic")
+        val knownChannel = isOwnVideo(row, names)
+        if (!knownChannel && !names.lookupCouldName(channel)) return false
+        if (videoTitleMatches(row.name, names)) return true
+        if (isAnotherVideoVersion(row.name, names) || !names.lookupCouldName(unconfirmedVideoText(row.name, names))) return false
+        // Close videos can need both names. An artist's video may run long when one name is already known.
+        val closeLength = row.lengthMs != null && sameLength(row, names)
+        return knownChannel || closeLength || sameJapaneseVideoTitle(row.name, names)
+    }
+
+    private fun sameJapaneseVideoTitle(title: String, names: Names): Boolean {
+        if (title.none(Readings::isKana)) return false
+        val latin = names.titles.filter(String::hasLatin)
+        if (latin.isEmpty()) return false
+        val reading = Readings.of(listOf(title), Script.JAPANESE).single().typed
+        return latin.any { SongNames.same(it, reading) }
+    }
+
+    /** What remains of the video's title, including brackets, after removing known names and tags. */
+    private fun unconfirmedVideoText(title: String, names: Names): String {
+        val known = names.titles.map(SongNames::withoutEditionTag) + names.artists.flatMap(SongNames::artistNames)
+        val words = SongNames.words(title) - known.flatMap(SongNames::words).toSet() - VIDEO_TAGS
+        val withoutNames = removeVideoNames(title, known.map(SongNames::normalize) + VIDEO_TAG_MARKS)
+        return withoutNames.filter { it.code > 0x7f } + words.joinToString(" ")
     }
 
     /** Keep a recording note separate when an unbracketed guest credit runs up to it. */
@@ -700,8 +1051,9 @@ internal class ExactMatcher(
     private fun namedLinkedEdition(metadata: MusicMetadata, items: List<JSONObject>, firstLength: Long?): Row? {
         val link = metadata.lengthMs ?: return null
         if (firstLength == null || kotlin.math.abs(firstLength - link) <= SAME_LENGTH_MS || !plainLinkedTitle(metadata)) return null
+        val recording = requestedRecording(metadata.title)
         return playable(items).singleOrNull {
-            sameRecordingLength(it.lengthMs, link) &&
+            keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) && sameRecordingLength(it.lengthMs, link) &&
                 sameArtist(metadata, it.details.first()) && SongNames.same(metadata.title, SongNames.bareTitle(it.name)) &&
                 takeSaysLive(it.name) == true && liveAlbum(it.details.getOrNull(1).orEmpty())
         }
@@ -729,7 +1081,26 @@ internal class ExactMatcher(
     private fun sameRecordingLength(time: Long?, wanted: Long): Boolean =
         time != null && kotlin.math.abs(time - wanted) <= SAME_SONG_LENGTH_MS
 
-    private class RequestedRecording(val live: Boolean, val part: NumberedPart?)
+    private fun MusicMetadata.requestsDisco(): Boolean = Takes.requestsDisco(title) || Takes.requestsDisco(album.orEmpty())
+
+    /** A disco note can rule out opening its row, not using it as evidence. */
+    private inner class DiscoRequest(metadata: MusicMetadata) {
+        private val named = metadata.requestsDisco()
+        private val length = metadata.lengthMs?.takeIf { it > 0 }
+
+        fun allows(row: Row, video: Boolean = false): Boolean {
+            if (named) return true
+            val album = if (video) "" else row.details.getOrNull(1).orEmpty()
+            if (!Takes.namesDisco(row.name) && !Takes.namesDisco(album)) return true
+            val wanted = length ?: return false
+            return sameRecordingLength(row.lengthMs?.takeIf { it > 0 }, wanted)
+        }
+    }
+
+    private class RequestedRecording(val live: Boolean, val part: NumberedPart?, val title: String)
+
+    /** These labels name a new performance, even when it runs as long as the original. */
+    private val rerecordingLabels = listOf("fromthefirsttake", "重生版")
 
     private class NumberedPart(val title: String, val number: String)
 
@@ -774,20 +1145,26 @@ internal class ExactMatcher(
 
     private fun requestedRecording(title: String): RequestedRecording {
         val text = title.trim()
-        return RequestedRecording(liveAtEnd(text), numberedPart(text))
+        return RequestedRecording(liveAtEnd(text), numberedPart(text), SongNames.normalize(text))
     }
 
-    private fun keepsRequestedRecording(wanted: RequestedRecording, name: String, album: String): Boolean {
+    private fun keepsRequestedRecording(wanted: RequestedRecording, name: String, album: String, fullName: String = name): Boolean {
         val part = wanted.part?.number
         val keepsPart = part == null || part == (numberedPartBeforeNotes(name) ?: partOnAlbum(name, album))?.number
+        if (!keepsRerecording(wanted, fullName, album)) return false
         return keepsPart && (!wanted.live || saysLive(name) || liveAlbum(album))
+    }
+
+    private fun keepsRerecording(wanted: RequestedRecording, name: String, album: String): Boolean {
+        val labels = SongNames.normalize("$name $album")
+        return rerecordingLabels.none { it in labels && it !in wanted.title }
     }
 
     private fun partOnAlbum(name: String, album: String): NumberedPart? =
         numberedPartBeforeNotes(album)?.takeIf { SongNames.same(it.title, SongNames.bareTitle(name)) }
 
     private fun keepsRequestedRecording(wanted: RequestedRecording, row: Row, video: Boolean = false): Boolean =
-        if (video) SongNames.titleNames(row.name).any { keepsRequestedRecording(wanted, it, "") }
+        if (video) SongNames.titleNames(row.name).any { keepsRequestedRecording(wanted, it, "", fullName = row.name) }
         else keepsRequestedRecording(wanted, row.name, row.details.getOrNull(1).orEmpty())
 
     private fun anotherScriptRecording(rows: List<Row>, recording: RequestedRecording, names: Names): Row? {
@@ -892,9 +1269,10 @@ internal class ExactMatcher(
      */
     private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
         val recording = requestedRecording(metadata.title)
+        val disco = DiscoRequest(metadata)
         val part = recording.part
         // Keep the row numbers while omitting any names that local evidence already rules out.
-        val offered = rows.map { it.takeIf { row -> keepsRequestedRecording(recording, row, video = videos) &&
+        val offered = rows.map { it.takeIf { row -> disco.allows(row, video = videos) && keepsRequestedRecording(recording, row, video = videos) &&
             (part == null || namesThePickedPart(part, row, videos)) } }
         if (offered.none { it != null }) return null
         val shown = offered.map { it?.let { row -> "${row.name} | ${row.details.joinToString(" • ")}" }.orEmpty() }
@@ -916,12 +1294,9 @@ internal class ExactMatcher(
      * it's the song's words, its artist's and nothing else but such tags; a remix or a live take has
      * words of its own and stays out.
      */
-    private suspend fun searchVideosOnYouTubeMusic(metadata: MusicMetadata, client: JSONObject): List<JSONObject> {
-        val body = JSONObject()
-            .put("context", JSONObject().put("client", client))
-            .put("query", searchQuery(metadata))
-            .put("params", YOUTUBE_MUSIC_VIDEOS)
-        return fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+    private suspend fun searchVideosOnYouTubeMusic(metadata: MusicMetadata): List<JSONObject> {
+        val body = YouTubeMusicApi.body().put("query", searchQuery(metadata)).put("params", YOUTUBE_MUSIC_VIDEOS)
+        return fetchJson(YouTubeMusicApi.SEARCH_URL, body).listItems()
     }
 
     /** A YouTube Music search result: its video, its name, its second line split up, and its length when it says. */
@@ -951,10 +1326,26 @@ internal class ExactMatcher(
      */
     private class Names(
         val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, japaneseTitle: String?,
+        val requestedTitle: String, val requestedArtist: String,
         val linkedEdition: LinkedEdition?, val corroboratingAlbum: String?,
         /** An album Apple has the song on, or a name it has for it, says it's a live, karaoke or other take. */
-        val takeOnAlbum: Boolean
+        val takeOnAlbum: Boolean,
+        /** A failed Apple or Deezer search could have supplied a length. */
+        val searchFailed: Boolean,
+        /**
+         * No store that could prove a row failed to answer: when one did, a name or a length that would have proved
+         * the artist's own row may be missing. See [namesOf].
+         */
+        val complete: Boolean,
+        val failedLookups: Set<String>
     ) {
+        // A failed lookup can leave a name missing even where the names are complete, as for Lemon (Music Box).
+        val everyStore = complete && failedLookups.isEmpty()
+
+        fun lookupCouldName(text: String): Boolean =
+            SongNames.storesWriting(text).any(failedLookups::contains) ||
+                ("US" in failedLookups && SongNames.words(text).any { word -> word.any(Char::isLetter) })
+
         /** Apple, or Deezer, knows recordings of the song that differ in length: a live take may be one. */
         val severalRecordings = lengthsMs.any { one -> lengthsMs.any { other -> one - other > SAME_SONG_LENGTH_MS } }
 
@@ -965,31 +1356,43 @@ internal class ExactMatcher(
 
     private class LinkedEdition(val lengthMs: Long, val live: Boolean)
 
+    /**
+     * The song's [Names]. They're [Names.complete] unless a store that could still name it failed: a search, when no
+     * store found the song; a lookup in the US store, which writes names in Latin letters, or in the store of the
+     * country the song's names are written in, as YouTube Music writes its rows either way; or Deezer, asked for the
+     * length. Japan's lookup of a Korean song failing loses no name a row would have.
+     */
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
         val artists = mutableSetOf(metadata.artist)
         var japaneseTitle: String? = null
-        val found = appleSong(metadata)
+        val searching = Asked()
+        val searched = java.util.concurrent.ConcurrentHashMap<String, List<JSONObject>>()
+        val found = appleSong(metadata, searching, searched)
         val song = found?.song
         // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
         // music app may have only the single's.
         val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
+        var unanswered = emptySet<String>()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
-            val elsewhere = coroutineScope {
-                NAMING_STORES.map { store -> async { answering { appleLookup(id, store) } } }.awaitAll()
-            }
-            japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")]?.optString("trackName")?.takeIf(String::isNotBlank)
-            (listOf(song) + elsewhere.filterNotNull()).forEach {
+            // And by the US store's name, in Latin letters as YouTube Music writes it, when another store found it under a
+            // name in another script: Japan's finds Lemon by 米津玄師, which only the US store names Kenshi Yonezu, as YouTube
+            // Music does. One found in Latin letters, as Argentina's Owaranai Uta, has that name already. A store whose
+            // search already turned the song up isn't asked again.
+            // Found by the US store, its search has that name, so it isn't looked up either.
+            val written = song.optString("trackName") + song.optString("artistName")
+            val stores = NAMING_STORES + listOfNotNull("US".takeIf { SongNames.storesWriting(written).isNotEmpty() })
+            val elsewhere = namesIn(stores, id, searched)
+            japaneseTitle = elsewhere[NAMING_STORES.indexOf("JP")].first?.optString("trackName")?.takeIf(String::isNotBlank)
+            (listOf(song) + elsewhere.mapNotNull { it.first }).forEach {
                 titles += it.optString("trackName").ifBlank { null } ?: return@forEach
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
             }
+            unanswered = stores.zip(elsewhere).filter { it.second.second }.map { it.first }.toSet()
         }
-        if (lengthsMs.isEmpty()) {
-            answering {
-                searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
-                    ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
-            }?.let(lengthsMs::add)
-        }
+        val homes = SongNames.storesWriting((titles + artists).joinToString(""))
+        val asked = Asked()
+        if (lengthsMs.isEmpty()) asked.answer { deezerLength(metadata) }?.let(lengthsMs::add)
         val album = found?.editions?.singleOrNull()?.takeIf {
             matches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                 metadata.lengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
@@ -998,8 +1401,32 @@ internal class ExactMatcher(
             val collection = it.optString("collectionName")
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
-        return Names(titles, artists, lengthsMs, japaneseTitle, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum)
+        val searchFailed = (found == null && searching.failed) || asked.failed
+        val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
+        return Names(
+            titles, artists, lengthsMs, japaneseTitle, metadata.title, metadata.artist, linkedAppleEdition(metadata, found?.editions.orEmpty()), album, takeOnAlbum,
+            searchFailed, complete, unanswered
+        )
     }
+
+    /**
+     * Song [id]'s row in each of [stores]: the one its search turned up, in [searched], or else its lookup there; and
+     * whether that lookup failed.
+     */
+    private suspend fun namesIn(stores: List<String>, id: Long, searched: Map<String, List<JSONObject>>): List<Pair<JSONObject?, Boolean>> =
+        coroutineScope {
+            stores.map { store ->
+                async {
+                    val looking = Asked()
+                    (searched[store]?.firstOrNull { it.optLong("trackId") == id } ?: looking.answer { appleLookup(id, store) }) to looking.failed
+                }
+            }.awaitAll()
+        }
+
+    /** How long Deezer says [metadata]'s song is, when its search has it. */
+    private suspend fun deezerLength(metadata: MusicMetadata): Long? =
+        searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
+            ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
 
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
@@ -1008,11 +1435,11 @@ internal class ExactMatcher(
      * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
      * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
-    private suspend fun appleSong(metadata: MusicMetadata): AppleSong? {
+    private suspend fun appleSong(metadata: MusicMetadata, asked: Asked, searched: MutableMap<String, List<JSONObject>>): AppleSong? {
         val stores = listOf(country.takeIf { it.length == 2 }, "US").distinct()
-        stores.firstNotNullOfOrNull { appleSong(metadata, it) }?.let { return it }
+        stores.firstNotNullOfOrNull { appleSong(metadata, it, asked, searched) }?.let { return it }
         if ((metadata.title + metadata.artist).none { Character.UnicodeScript.of(it.code) in EAST_ASIAN }) return null
-        return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store) } }.awaitAll() }.firstNotNullOfOrNull { it }
+        return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store, asked, searched) } }.awaitAll() }.firstNotNullOfOrNull { it }
     }
 
     /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
@@ -1027,14 +1454,16 @@ internal class ExactMatcher(
         return LinkedEdition(chosen.optLong("trackTimeMillis"), saysLive(chosen.optString("trackName")) || liveAlbum(chosen.optString("collectionName")))
     }
 
-    private suspend fun appleSong(metadata: MusicMetadata, store: String?): AppleSong? = answering {
+    /** The song in [store]'s search, whose results are kept in [searched], so its names there aren't looked up again. */
+    private suspend fun appleSong(metadata: MusicMetadata, store: String?, asked: Asked, searched: MutableMap<String, List<JSONObject>>): AppleSong? = asked.answer {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata))
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "10")
             .apply { store?.let { addQueryParameter("country", it) } }
             .build()
-        val results = fetchJson(url.toString()).optJSONArray("results")?.objects().orEmpty()
+        val results = appleJson(url.toString()).optJSONArray("results")?.objects().orEmpty()
+        searched[store ?: "US"] = results
         val song = results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
             ?: results.firstOrNull {
                 looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
@@ -1071,16 +1500,36 @@ internal class ExactMatcher(
             .addQueryParameter("id", id.toString())
             .addQueryParameter("country", store)
             .build()
-        return fetchJson(url.toString()).optJSONArray("results")?.optJSONObject(0)
+        return appleJson(url.toString()).optJSONArray("results")?.optJSONObject(0)
     }
 
-    /** [lookUp]'s answer, or null when it failed, so one of many asked at once doesn't sink the rest. */
-    private suspend fun <T> answering(lookUp: suspend () -> T?): T? = try {
-        lookUp()
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null
+    /**
+     * Apple's answer at [url]. A store that doesn't exist, as Iran's or Cuba's, is answered 400: a store with
+     * nothing, as that is no failure that asking again would mend.
+     */
+    private suspend fun appleJson(url: String): JSONObject = try {
+        fetchJson(url)
+    } catch (e: ServiceApis.ServiceException) {
+        if (e.code != HTTP_BAD_REQUEST) throw e
+        JSONObject()
+    }
+
+    /** The stores asked for a song's names, and whether one of them failed to answer. */
+    private class Asked {
+        @Volatile
+        var failed = false
+            private set
+
+        /** [lookUp]'s answer, or null when it failed, so one of many asked at once doesn't sink the rest; which is kept in [failed]. */
+        suspend fun <T> answer(lookUp: suspend () -> T?): T? = try {
+            lookUp()
+        } catch (_: IOException) {
+            failed = true
+            null
+        } catch (_: JSONException) {
+            failed = true
+            null
+        }
     }
 
     /** As long as the song, or one of its editions, give or take what another release of it adds; true when either isn't known. */
@@ -1094,9 +1543,18 @@ internal class ExactMatcher(
         if (row.id == null) return false
         val album = row.details.getOrNull(1).orEmpty()
         val named = SongNames.titleNames(row.name).any { name -> names.titles.any { SongNames.sameVersion(it, name, album) } }
-        val wanted = names.artists.flatMap(SongNames::artists).toSet()
-        val by = SongNames.artists(row.details.first()).any(wanted::contains)
+        val by = knownArtist(row.details.first(), names)
         return named && by && sameLength(row, names)
+    }
+
+    /** A credit can put two known names together, as "G.E.M. 鄧紫棋"; both whole names must be known. */
+    private fun knownArtist(credit: String, names: Names): Boolean {
+        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+        fun known(name: String) = SongNames.artists(name).any(wanted::contains)
+        if (known(credit)) return true
+        return credit.indices.filter { credit[it].isWhitespace() }.any { at ->
+            known(credit.substring(0, at)) && known(credit.substring(at + 1))
+        }
     }
 
     private fun numberedPartBeforeNotes(title: String): NumberedPart? = numberedPart(title) ?: numberedPart(SongNames.bareTitle(title))
@@ -1117,8 +1575,7 @@ internal class ExactMatcher(
         val anotherScript = namedInAnotherScript(row.name)
         if (!anotherScript && !sameLatinSpelling(row.name, names)) return false
         if (isAnotherTake(row, names)) return false
-        val wanted = names.artists.flatMap(SongNames::artists).toSet()
-        return SongNames.artists(row.details.first()).any(wanted::contains)
+        return knownArtist(row.details.first(), names)
     }
 
     /**
@@ -1170,12 +1627,18 @@ internal class ExactMatcher(
      * Its title says nothing else but such tags outside brackets, so "Perfect Day" isn't "Perfect";
      * what's in them, "(終わらない歌 An Endless Song)", is what it's called elsewhere or said of it.
      */
-    private fun isTheSongsVideo(row: Row, names: Names): Boolean {
-        if (row.id == null) return false
-        if (names.titles.none { titleIn(it, row.name) }) return false
-        if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
+    private fun isTheSongsVideo(row: Row, names: Names, allowAlias: Boolean = false): Boolean {
+        if (row.id == null || !videoTitleMatches(row.name, names, allowAlias)) return false
+        // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
+        // "Band - Topic", "BandVEVO".
+        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+    }
+
+    private fun videoTitleMatches(title: String, names: Names, allowAlias: Boolean = false): Boolean {
+        if (names.titles.none { titleIn(it, title) }) return false
+        if (isAnotherVideoVersion(title, names)) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val outside = outsideBrackets(row.name)
+        val outside = outsideBrackets(title)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -1184,12 +1647,96 @@ internal class ExactMatcher(
         val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
         val written = (known + bothWays.map(SongNames::normalize) +
             names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
-            .filter { it.isNotEmpty() }.sortedByDescending { it.length }
-        if (written.fold(SongNames.normalize(outside)) { left, name -> left.replace(name, "") }.any { it.code > 0x7f }) return false
-        // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
-        // "Band - Topic", "BandVEVO".
-        return isOwnVideo(row, names) || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
+        return removeVideoNames(outside, written).none { it.code > 0x7f } || repeatsBilingualTitle(title, names) ||
+            allowAlias && repeatsParenthesizedTitle(title, names)
     }
+
+    /** A store's bracketed alias proves a video only when both whole names and both credits agree. */
+    private fun repeatsParenthesizedTitle(title: String, names: Names): Boolean {
+        val parts = title.split(',', '，', limit = 3)
+        if (parts.size != 2) return false
+        val artist = aliasText(names.requestedArtist)
+        val credited = parts.map { part ->
+            val pair = part.split(" - ", limit = 2)
+            if (pair.size != 2 || !aliasText(pair[0]).equals(artist, ignoreCase = true)) return false
+            aliasText(pair[1])
+        }.toSet()
+        val requested = aliasText(names.requestedTitle)
+        return names.titles.any { name ->
+            val pair = parenthesizedAlias(name) ?: return@any false
+            val native = aliasText(pair.first)
+            val alias = aliasText(pair.second)
+            native != alias && alias == requested && setOf(native, alias) == credited &&
+                plainVideoNameMatches(native, names) && plainVideoNameMatches(alias, names)
+        }
+    }
+
+    /** Ask the ordinary video check about each name alone, with the requested title still known. */
+    private fun plainVideoNameMatches(name: String, names: Names): Boolean {
+        val plain = Names(
+            setOf(names.requestedTitle, name), names.artists, names.lengthsMs, null, names.requestedTitle, names.requestedArtist,
+            names.linkedEdition, names.corroboratingAlbum, names.takeOnAlbum, names.searchFailed, names.complete, names.failedLookups
+        )
+        return videoTitleMatches("${names.requestedArtist} - $name", plain)
+    }
+
+    private fun aliasText(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFKC).trim()
+
+    private fun parenthesizedAlias(name: String): Pair<String, String>? {
+        val text = name.trim()
+        val open = text.indexOfFirst { it == '(' || it == '（' }
+        if (open <= 0) return null
+        val close = if (text[open] == '(') ')' else '）'
+        if (!text.endsWith(close)) return null
+        val native = text.substring(0, open).trim()
+        if (aliasText(native).any { it in ALIAS_BRACKETS }) return null
+        val alias = text.substring(open + 1, text.lastIndex).trim()
+        val nested = alias.indexOfFirst { it == '(' || it == '（' }
+        val plain = if (nested < 0) alias else {
+            val end = if (alias[nested] == '(') ')' else '）'
+            if (!alias.endsWith(end)) return null
+            val note = aliasText(alias.substring(nested + 1, alias.lastIndex)).lowercase(Locale.ROOT)
+            if (note !in NEUTRAL_ALIAS_WORDS) return null
+            alias.substring(0, nested).trim()
+        }
+        if (plain.isEmpty() || aliasText(plain).any { it in ALIAS_BRACKETS }) return null
+        return native to plain
+    }
+
+    /** The video repeats the artist before each store name. Compare whole names, so 愛 can't explain 愛愛. */
+    private fun repeatsBilingualTitle(title: String, names: Names): Boolean {
+        val parts = title.split(',', '，', limit = 3)
+        if (parts.size != 2) return false
+        val artists = names.artists.map(SongNames::normalize).toSet()
+        val first = creditedVideoTitle(parts[0], artists) ?: return false
+        val second = creditedVideoTitle(parts[1], artists) ?: return false
+        val inAnotherScript = listOf(first, second).partition(::namedInAnotherScript)
+        val latin = inAnotherScript.second.singleOrNull()?.takeIf(String::hasLatin) ?: return false
+        val other = inAnotherScript.first.single()
+        val titles = setOf(SongNames.normalize(latin), SongNames.normalize(other))
+        return names.titles.any { name ->
+            val pair = name.split(" - ", limit = 3).map(String::trim)
+            pair.size == 2 && pair.map(SongNames::normalize).toSet() == titles && pair.none(::isVideoTitleTag)
+        }
+    }
+
+    private fun creditedVideoTitle(part: String, artists: Set<String>): String? {
+        val (credit, title) = part.split(" - ", limit = 2).takeIf { it.size == 2 } ?: return null
+        return title.trim().takeIf { SongNames.normalize(credit) in artists }
+    }
+
+    private fun isVideoTitleTag(name: String): Boolean {
+        // Read a dash half as a note before treating it as a name, even when the store put it first.
+        val asTag = "Song ($name)"
+        return SongNames.withoutEditionTag(asTag) != asTag || Takes.saysAnotherTake(asTag) != null
+    }
+
+    private fun isAnotherVideoVersion(name: String, names: Names): Boolean =
+        names.titles.all { title -> SongNames.saysAnotherVersion(name, title, names.artists.joinToString(" ")) }
+
+    private fun removeVideoNames(title: String, names: List<String>): String =
+        names.filter(String::isNotEmpty).sortedByDescending(String::length)
+            .fold(SongNames.normalize(title)) { left, name -> left.replace(name, "") }
 
     private fun isOwnVideo(row: Row, names: Names): Boolean {
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
@@ -1232,7 +1779,7 @@ internal class ExactMatcher(
             .build()
         return client.newCall(request).answer(ioDispatcher) { response ->
             // Busy, or down, it's no answer, and says nothing about whether it has the song.
-            if (!response.isSuccessful) throw IOException("${request.url.host} answered ${response.code}")
+            if (!response.isSuccessful) throw ServiceApis.ServiceException(response.code)
             JSONObject(response.body.stringAtMost())
         }
     }
@@ -1241,8 +1788,9 @@ internal class ExactMatcher(
      * Requires the same name and at least one artist in common, so remixes, covers and deluxe
      * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
      */
-    private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = ""): Boolean {
-        if (!SongNames.sameVersion(metadata.title, name, album)) return false
+    private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = "", radio: Boolean = false): Boolean {
+        val titleMatches = if (radio) RadioGarden.sameTitle(metadata.title, name) else SongNames.sameVersion(metadata.title, name, album)
+        if (!titleMatches) return false
         if (metadata.type == ItemType.ARTIST) return true
         // With no artist to check, e.g. a Google link that only names the song, any song of that name
         // would do, so none is taken for it: it's searched for instead.
@@ -1261,6 +1809,11 @@ internal class ExactMatcher(
 
         /** How long ChatGPT has to pick a song, after the searches it picks from; it takes a few seconds. */
         const val PICK_TIMEOUT_MS = 8_000L
+
+        /** How long a song missed while a store that could have proved it was down stays no answer, see [remembered]. */
+        const val UNSURE_FOR_MS = 30_000L
+
+        private const val HTTP_BAD_REQUEST = 400
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
@@ -1282,8 +1835,6 @@ internal class ExactMatcher(
         private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)${'"'}""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
-        const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
-        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
 
         /** Songs (ATV), official music videos (OMV) and label uploads; UGC and podcasts aren't music. */
         val MUSIC_VIDEO_TYPES = setOf("ATV", "OMV", "OFFICIAL_SOURCE_MUSIC")
@@ -1293,7 +1844,6 @@ internal class ExactMatcher(
         const val YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v="
         /** How many search results the song is picked from. */
         const val PICK_FROM = 6
-        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
         const val YOUTUBE_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
         const val YOUTUBE_CLIENT_VERSION = "2.20240101.00.00"
 
@@ -1317,6 +1867,9 @@ internal class ExactMatcher(
         /** The same, as other scripts write them: "歌詞付き", "公式". */
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
+        private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
+        private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
+
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = phoneRegex("""(?:19|20)\d\d""")
 
@@ -1338,20 +1891,22 @@ internal class ExactMatcher(
     }
 }
 
-/** The apps whose search needs no account. Spotify's does, so its songs are found another way, but not its albums or artists. */
+/** The apps whose search needs no account and can look up songs, albums and artists. */
 private val matchable = setOf(
     MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
-    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ, MusicService.SPOTIFY
+    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK
 )
 
 /**
- * Whether Crosstune can look [type] up in [target] itself, so that finding nothing there means it isn't
- * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else;
- * Qobuz's artists aren't told apart, see ExactMatcher.findOnQobuz.
+ * Whether Crosstune can look [type] up in [target] itself. A playlist is someone's own, and is never anywhere else.
+ * Spotify songs are found through ListenBrainz, Qobuz's artists aren't told apart, and Presto Music only lists albums.
  */
-internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
-    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST) &&
-        !(target == MusicService.SPOTIFY && type != ItemType.TRACK)
+internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean = when (target) {
+    MusicService.PRESTO_MUSIC -> type == ItemType.ALBUM
+    MusicService.QOBUZ -> type == ItemType.ALBUM || type == ItemType.TRACK
+    MusicService.SPOTIFY -> type == ItemType.TRACK
+    else -> type != ItemType.PLAYLIST && target in matchable
+}
 
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
@@ -1364,9 +1919,10 @@ internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
 
 /**
  * The apps where a song not found may still be there: on Bandcamp, SoundCloud and Audiomack only its
- * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
+ * artist's own page or a verified account counts, ListenBrainz doesn't know every Spotify song, and Presto Music
+ * may find more than one edition of the same album.
  */
-private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
+private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY, MusicService.PRESTO_MUSIC)
 
 /** [name] with what's in brackets put as a space, of any kind a title uses: "Song (An Endless Song (1987))" is "Song  ". */
 internal fun outsideBrackets(name: String) = replacingBracketTags(name, "([（【「『［", ")]）】」』］", " ")

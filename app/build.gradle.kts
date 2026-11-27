@@ -15,13 +15,6 @@ plugins {
     id("pl.droidsonroids.pitest")
 }
 
-abstract class DetektTestClasspath : CommandLineArgumentProvider {
-    @get:Classpath
-    abstract val files: ConfigurableFileCollection
-
-    override fun asArguments() = listOf("--classpath", files.asPath)
-}
-
 // projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
 // builds, just with no visuals: they need the native library, and the app runs fine without it.
 val projectM = rootProject.file("third_party/projectm/CMakeLists.txt").exists()
@@ -29,7 +22,9 @@ if (!projectM) logger.warn("third_party/projectm is missing, so this build has n
 
 android {
     namespace = "com.astrovm.crosstune"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     // The Android fixtures and their JVM tests share these helpers.
     sourceSets.named("test") { kotlin.directories += "src/sharedTest/kotlin" }
@@ -40,8 +35,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2270100
-        versionName = "2.27.1"
+        versionCode = 2290000
+        versionName = "2.29.0"
 
         testInstrumentationRunner = providers.gradleProperty("crosstuneTestRunner").orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
@@ -238,14 +233,14 @@ kover {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.11.01")
     implementation(composeBom)
     testImplementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.19.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 
@@ -284,7 +279,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-    testImplementation("org.robolectric:robolectric:4.18")
+    testImplementation("org.robolectric:robolectric:4.18.1")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
@@ -356,33 +351,8 @@ tasks.register<JavaExec>("detekt") {
     )
 }
 
-// detekt's null-safety rule needs the test classpath to resolve types. NoUnsafeCallsTest also checks
-// the source without type resolution, so an unresolved type cannot hide an assertion.
-val detektTests = tasks.register<JavaExec>("detektTests") {
-    group = "verification"
-    description = "Checks test sources for unsafe calls on nullable values."
-    val testSources = fileTree("src") {
-        include("test*/**/*.kt", "*Test*/**/*.kt")
-    }
-    val config = rootProject.layout.projectDirectory.file("config/detekt/tests.yml")
-    val report = layout.buildDirectory.file("reports/detekt/tests.txt")
-    inputs.files(testSources, config).withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.file(report)
-    dependsOn("compilePlayDebugUnitTestKotlin")
-    classpath = detektCli
-    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
-    jvmArgs("--sun-misc-unsafe-memory-access=allow")
-    args(
-        "--input", layout.projectDirectory.dir("src").asFile.path,
-        "--includes", "**/test*/**/*.kt,**/*Test*/**/*.kt",
-        "--config", config.asFile.path,
-        "--jvm-target", "17",
-        "--report", "txt:" + report.get().asFile.path,
-    )
-    argumentProviders.add(objects.newInstance<DetektTestClasspath>().apply {
-        files.from(tasks.named<Test>("testPlayDebugUnitTest").get().classpath)
-    })
-}
+// No null assertion in the app's code or its tests. NoUnsafeCallsTest reads every source folder as text, so it
+// needs no types resolved to find one, as detekt's rule for it did.
 val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
     group = "verification"
     description = "Checks source for null assertions even where detekt cannot resolve the type."
@@ -392,7 +362,7 @@ val noUnsafeCalls = tasks.register<Test>("noUnsafeCalls") {
     filter.includeTestsMatching("com.astrovm.crosstune.NoUnsafeCallsTest")
     inputs.files(fileTree("src") { include("**/*.kt", "**/*.java") }).withPathSensitivity(PathSensitivity.RELATIVE)
 }
-tasks.named("detekt") { dependsOn(detektTests, noUnsafeCalls) }
+tasks.named("detekt") { dependsOn(noUnsafeCalls) }
 
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
 // class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.
@@ -444,6 +414,12 @@ val robolectricDeps = tasks.register("robolectricDeps") {
             "org.robolectric\\:android-all-instrumented\\:${it.name.removePrefix("android-all-instrumented-").removeSuffix(".jar")}=${it.absolutePath}\n"
         })
     }
+}
+
+// The cache writer fetches PIT's own runtime without running mutations.
+tasks.register("cachePitestDependencies") {
+    inputs.files(configurations.named("pitest"))
+    doLast { logger.lifecycle("PIT dependencies are ready") }
 }
 
 // What the release APK is built from, for the notices task: a line per library, "maven group:module",
@@ -577,6 +553,7 @@ tasks.matching { it.name == "testFossDebugUnitTest" }.configureEach {
 }
 
 tasks.withType<Test>().configureEach {
+    System.getProperty("user.timezone")?.let { systemProperty("user.timezone", it) }
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     if (name != "songCheck") filter.excludeTestsMatching("com.astrovm.crosstune.songcheck.*")
     if (name != "notices") filter.excludeTestsMatching("com.astrovm.crosstune.notices.*")

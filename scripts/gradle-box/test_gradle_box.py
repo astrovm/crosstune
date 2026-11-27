@@ -87,6 +87,8 @@ class GradleBoxTest(unittest.TestCase):
         self.meminfo = self.dir / "meminfo"
         self.meminfo.write_text("MemTotal:       67108864 kB\nMemFree:         1000000 kB\n")
         self.stall(lately=0, total_s=0)
+        self.cgroup = self.dir / "cgroup"
+        self.cgroup.mkdir()
         self.checkouts = {}
 
     def checkout(self, name):
@@ -118,6 +120,8 @@ class GradleBoxTest(unittest.TestCase):
                 "GRADLE_BOX_PRESSURE": str(self.pressure),
                 # The machine's memory, as Linux tells it, on a Mac too: 64 GiB.
                 "GRADLE_BOX_MEMINFO": str(self.meminfo),
+                # The box's own memory, in a folder the test writes, not the machine running the tests.
+                "GRADLE_BOX_CGROUP": str(self.cgroup),
                 "FAKE_DIR": str(self.dir),
                 "FAKE_RUN": run,
                 **env,
@@ -194,6 +198,12 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
         self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
 
+    def test_replay_opt_in_is_passed_only_when_requested(self):
+        box = self.start("replay", ":app:testDebugUnitTest", SYNCREPLAY_ACTIVE="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn("-e SYNCREPLAY_ACTIVE=1", self.asked()[0])
+
     def box_that_runs(self):
         """A podman that runs what the box is asked in its working folder, with a gradlew that says where it ran."""
         podman = self.dir / "bin" / "podman"
@@ -213,6 +223,8 @@ for i, arg in enumerate(command):
         with open(arg) as real, open(copy, "w") as fake:
             fake.write(real.read().replace("./gradlew", os.environ["FAKE_GRADLEW"]))
         command[i] = copy
+    elif arg == "./gradlew":
+        command[i] = os.environ["FAKE_GRADLEW"]
 sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
 """)
         gradlew = self.dir / "gradlew"
@@ -282,6 +294,7 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
+        self.assertNotIn("SYNCREPLAY_ACTIVE", self.asked()[0])
         self.assertNotIn("MATCHCHECK", self.asked()[0])
 
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):
@@ -296,7 +309,8 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         self.assertIn("--memory-swap", command)
         self.assertIn(self.image(), command)
         self.assertNotIn("/usr/bin/git", command)
-        self.assertTrue(command.endswith("./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
+        self.assertTrue(command.endswith(
+            f"bash {self.checkout('a')}/scripts/gradle-box/in-box.sh ./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
         mounted = [part.split(":")[0] for part in command.split() if part.startswith("/") and ":" in part]
         self.assertNotIn(str(self.home), mounted)
         self.assertEqual([line for line in self.asked() if " build " in f" {line} "], [])
@@ -331,6 +345,20 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
         box = self.start("a", "help")
         box.communicate(timeout=20)
         self.assertIn(f"-v {key}:/root/.android/debug.keystore:ro", self.asked()[1])
+
+    def test_debug_key_can_be_replaced_or_left_out(self):
+        default_key = self.home / ".android" / "debug.keystore"
+        default_key.parent.mkdir()
+        default_key.touch()
+        key = self.dir / "separate debug.keystore"
+        key.touch()
+        box = self.start("a", "help", GRADLE_BOX_KEYSTORE=str(key))
+        box.communicate(timeout=20)
+        self.assertIn(f"-v {key}:/root/.android/debug.keystore:ro", self.asked()[0])
+        self.assertNotIn(str(default_key), self.asked()[0])
+        box = self.start("a", "help", GRADLE_BOX_KEYSTORE="")
+        box.communicate(timeout=20)
+        self.assertNotIn("debug.keystore", self.asked()[1])
 
     def test_gives_back_gradles_exit_code(self):
         box = self.start("a", "help", FAKE_EXIT="3")
@@ -371,6 +399,47 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
             box.communicate(timeout=20)
         self.assertTrue(self.asked()[1].endswith(" second"), self.asked())
         self.assertTrue(self.asked()[2].endswith(" third"), self.asked())
+
+    def test_a_later_build_cannot_overtake_a_waiting_single_slot_build(self):
+        self.hold("first")
+        self.hold("second")
+        first = self.start("first", "help", slots="1")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots="1")
+        queue = self.dir / "state" / "queue"
+        deadline = time.monotonic() + 20
+        while len(list(queue.iterdir())) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertEqual(2, len(list(queue.iterdir())))
+        third = self.start("third", "help", slots="3")
+        try:
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.third").exists())
+            self.release("first")
+            self.wait_for("started.second")
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.third").exists())
+        finally:
+            (self.dir / "hold.first").unlink(missing_ok=True)
+            (self.dir / "hold.second").unlink(missing_ok=True)
+            for box in (first, second, third):
+                box.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.third").exists())
+
+    def test_a_build_from_an_older_checkout_is_not_overtaken(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2")
+        self.wait_for("started.first")
+        (self.dir / "state" / "started" / str(first.pid)).unlink()
+        second = self.start("second", "help", slots="2")
+        try:
+            time.sleep(1)
+            self.assertFalse((self.dir / "started.second").exists())
+        finally:
+            self.release("first")
+            first.communicate(timeout=20)
+            second.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.second").exists())
 
     def test_same_checkout_waits_even_when_memory_and_slots_fit(self):
         self.hold("first")
@@ -643,8 +712,8 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
                 root = self.checkout(table)
                 here = root / "scripts" / (table + "check")
                 here.mkdir()
-                script = here / "golden.sh"
-                shutil.copy2(BOX.parent.parent / (table + "check") / "golden.sh", script)
+                script = root / "scripts" / "main-golden.sh"
+                shutil.copy2(BOX.parent.parent / "main-golden.sh", script)
                 (here / helper).touch()
                 tests = root / "app/src/test/java/com/astrovm/crosstune"
                 tests.mkdir(parents=True)
@@ -652,7 +721,7 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
                 resources = root / "app/src/test/resources"
                 resources.mkdir()
                 self.hold("first")
-                job = self.start_script(script, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
+                job = self.start_script(script, table, "fake-sha", FAKE_WRITER=str(writer), FAKE_TABLE=table)
                 try:
                     self.wait_for("started.first")
                     script.write_text("exit 99\n" * 8_192 + script.read_text())
@@ -838,11 +907,14 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         self.assertEqual([command[command.index("--cpus") + 1] for command in asked], [str(max(cores // 2, 1)), str(cores), str(cores)])
 
     def test_a_ticket_from_an_older_script_counts_as_the_most_it_asks_for(self):
-        # An older checkout's script leaves its ticket empty. This one is held by the test itself.
+        # An empty memory ticket still counts as 16 GiB when its owner is running.
         queue = self.dir / "state" / "queue"
         queue.mkdir(parents=True)
         old = queue / f"1.{os.getpid()}"
         old.touch()
+        started = self.dir / "state" / "started"
+        started.mkdir()
+        (started / str(os.getpid())).write_text("3\n")
         fits = self.start("fits", "help", slots=None, GRADLE_BOX_MEMORY="32")
         fits.communicate(timeout=20)
         self.assertTrue((self.dir / "started.fits").exists())
@@ -852,6 +924,81 @@ Path(args[-1].removeprefix("PNG32:")).write_text(run)
         old.unlink()
         waits.communicate(timeout=20)
         self.assertTrue((self.dir / "started.waits").exists())
+
+    def box_memory(self, waited_s, full=0, killed=0):
+        """The box's cgroup as Linux tells it: how long some task in it waited on memory, and its memory events."""
+        (self.cgroup / "memory.pressure").write_text(
+            f"some avg10=0.00 avg60=0.00 avg300=0.00 total={waited_s * 1_000_000}\n"
+            f"full avg10=0.00 avg60=0.00 avg300=0.00 total={waited_s * 500_000}\n")
+        (self.cgroup / "memory.events").write_text(
+            f"low 0\nhigh 0\nmax {full}\noom {killed}\noom_kill {killed}\noom_group_kill 0\n")
+
+    def in_box(self, build, *args):
+        """in-box.sh running a build that does `build` in the shell, with the box's cgroup in the test's folder."""
+        return self.start_script(BOX.with_name("in-box.sh"), "sh", "-c", build, "build", *args,
+                                 GRADLE_BOX_CGROUP=str(self.cgroup))
+
+    def squeezed(self, waited_us, full):
+        """A build that waits on memory for `waited_us` microseconds, at the box's limit `full` times, and exits 4."""
+        return (f'printf "some avg10=40.00 avg60=0.00 avg300=0.00 total=%s\\n" {100_000_000 + waited_us} > "$1/memory.pressure"; '
+                f'printf "low 0\\nhigh 0\\nmax {full}\\noom 0\\noom_kill 0\\n" > "$1/memory.events"; exit 4')
+
+    def test_in_the_box_a_build_that_waited_at_the_limit_says_how_long_and_to_ask_for_more(self):
+        self.box_memory(waited_s=100)
+        box = self.in_box(self.squeezed(12_400_000, full=3021), str(self.cgroup))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(4, box.returncode, output)
+        self.assertIn("this build waited on memory for 12 s, at the box's limit 3021 times", output)
+        self.assertIn("Ask for more with GRADLE_BOX_MEMORY", output)
+
+    def test_in_the_box_a_build_that_waited_under_the_limit_points_at_the_machine(self):
+        self.box_memory(waited_s=100)
+        box = self.in_box(self.squeezed(12_400_000, full=0), str(self.cgroup))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(4, box.returncode, output)
+        self.assertIn("this build waited on memory for 12 s, under the box's limit, so the machine was short of memory", output)
+        self.assertNotIn("GRADLE_BOX_MEMORY ", output)
+
+    def test_in_the_box_a_wait_of_5_s_is_told_and_one_under_it_is_not(self):
+        for waited_us, told in ((4_900_000, False), (5_000_000, True)):
+            with self.subTest(waited_us=waited_us):
+                self.box_memory(waited_s=100)
+                box = self.in_box(self.squeezed(waited_us, full=1), str(self.cgroup))
+                output, _ = box.communicate(timeout=20)
+                self.assertEqual(4, box.returncode, output)
+                self.assertEqual(told, "waited on memory for 5 s" in output, output)
+                self.assertEqual(told, bool(output), output)
+
+    def test_in_the_box_a_build_that_barely_waited_says_nothing(self):
+        self.box_memory(waited_s=100)
+        box = self.in_box("echo built")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertEqual("built\n", output)
+
+    def test_in_the_box_processes_killed_for_memory_are_told(self):
+        self.box_memory(waited_s=0, full=40, killed=1)
+        box = self.in_box("exit 137")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(137, box.returncode, output)
+        self.assertIn("the box ran out of memory and 1 processes in it were killed", output)
+
+    def test_in_the_box_without_its_cgroup_the_build_runs_as_ever(self):
+        box = self.in_box("echo built; exit 3")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(3, box.returncode, output)
+        self.assertEqual("built\n", output)
+
+    def test_in_the_box_a_stop_reaches_the_build(self):
+        self.box_memory(waited_s=0)
+        # The build takes a moment to stop, and stops well: its own 0, not the stop's 143.
+        box = self.in_box(f'trap \'touch "{self.dir}/stopped"; sleep 0.3; exit 0\' TERM; touch "{self.dir}/started"; '
+                          'while :; do sleep 0.02; done')
+        self.wait_for("started", box)
+        box.terminate()
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(0, box.returncode, output)
+        self.assertTrue((self.dir / "stopped").exists())
 
     def test_waits_to_start_while_the_machine_is_out_of_memory(self):
         self.stall(lately=40, total_s=0)

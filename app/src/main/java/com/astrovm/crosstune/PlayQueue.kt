@@ -151,7 +151,7 @@ internal class PlayQueue(
     private suspend fun start(queue: Playing) {
         at = -1
         save(queue)
-        job = scope.launch { playback.plays(queue.app).collect { now -> now?.let { heard(it) } } }
+        scope.launchKept({ job = it }) { playback.plays(queue.app).collect { now -> now?.let { heard(it) } } }
     }
 
     private suspend fun heard(now: AppPlays) {

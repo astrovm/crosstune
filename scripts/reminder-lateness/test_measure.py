@@ -2,7 +2,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from measure import summarize
+from measure import cache_dir, summarize
+
+
+class PlacesTest(unittest.TestCase):
+    def test_keeps_its_files_in_the_agent_cache_on_mr_and_in_the_home_elsewhere(self):
+        with tempfile.TemporaryDirectory() as folder:
+            mr = Path(folder) / 'agent-cache'
+            home = Path(folder) / 'home'
+            self.assertEqual(home / '.cache/agent-cache/crosstune-773', cache_dir(mr, home))
+            self.assertTrue((home / '.cache/agent-cache/crosstune-773').is_dir())
+            mr.mkdir()
+            self.assertEqual(mr / 'crosstune-773', cache_dir(mr, home))
+            self.assertTrue((mr / 'crosstune-773').is_dir())
 
 
 class SummaryTest(unittest.TestCase):
@@ -63,33 +75,6 @@ class TargetTest(unittest.TestCase):
         for lead in (0, -1):
             with self.subTest(lead=lead), self.assertRaises(ValueError):
                 target_time(1_700_000_000_000, lead, 'UTC')
-
-
-class DeviceTest(unittest.TestCase):
-    def test_selects_only_the_online_samsung(self):
-        from measure import samsung_serial
-
-        listing = (
-            'List of devices attached\n'
-            'fake-poco device product:x model:2510EPC8BG device:x transport_id:1\n'
-            'fake-samsung device product:b0qxxx model:SM_S908E device:b0q transport_id:2\n'
-            'fake-offline offline model:SM_S908E transport_id:3\n'
-        )
-        self.assertEqual(samsung_serial(listing), 'fake-samsung')
-
-    def test_accepts_a_serial_with_spaces_from_mdns(self):
-        from measure import samsung_serial
-
-        listing = 'fake-device (2)._adb-tls._tcp device product:x model:SM_S908E device:x transport_id:1\n'
-        self.assertEqual(samsung_serial(listing), 'fake-device (2)._adb-tls._tcp')
-
-    def test_rejects_absent_or_ambiguous_samsung(self):
-        from measure import samsung_serial
-
-        for listing in ('List of devices attached\n',
-                        'a device model:SM_S908E\nb device model:SM_S908E\n'):
-            with self.subTest(listing=listing), self.assertRaises(ValueError):
-                samsung_serial(listing)
 
 
 class NotificationTest(unittest.TestCase):

@@ -8,7 +8,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * What Crosstune takes for one song, against what `main` took (names-golden.tsv.gz, written by scripts/namescheck/golden.sh
+ * What Crosstune takes for one song, against what `main` took (names-golden.tsv.gz, written by scripts/main-golden.sh names
  * from dea6ebc1): a session with no artist, or "<unknown>" for one, as it's followed for a song by an artist or by none, a
  * title with the artist named, and titles by their words. A recording note must no longer supply a title's missing
  * words. The fixture declares the base titles separately, so this allowance does not depend on the new tag reader.
@@ -20,7 +20,7 @@ class NamesGoldenTest {
     /** Each way, the pairs `main` took. */
     private val main: Map<String, Set<Pair<String, String>>> by lazy {
         val lines = checkNotNull(javaClass.classLoader?.getResourceAsStream("names-golden.tsv.gz")).use { GZIPInputStream(it).bufferedReader().readLines() }
-        assertEquals("names-golden.tsv.gz is of other pairs: run scripts/namescheck/golden.sh", "pairs\t${NamePairs.fingerprint(pairs)}", lines.first())
+        assertEquals("names-golden.tsv.gz is of other pairs: run scripts/main-golden.sh names", "pairs\t${NamePairs.fingerprint(pairs)}", lines.first())
         lines.drop(1).filter { it.isNotBlank() }.map { it.split("\t") }.groupBy({ it[0] }, { it[1] to it[2] }).mapValues { it.value.toSet() }
     }
 

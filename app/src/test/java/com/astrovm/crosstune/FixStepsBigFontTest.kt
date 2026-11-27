@@ -104,7 +104,7 @@ class FixStepsBigFontTest {
                     val word = text.substring(start, stop)
                     // In its own bold or not, as it's drawn.
                     val drawn = input.text.subSequence(start, stop)
-                    val wide = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver, spanStyles = drawn.spanStyles).maxIntrinsicWidth
+                    val wide = Paragraph(word, input.style, Constraints(), input.density, input.fontFamilyResolver, input.defaultLocaleList, spanStyles = drawn.spanStyles).maxIntrinsicWidth
                     assertTrue("$where breaks inside \"$word\", ${wide.toInt()} px in ${room.toInt()} px", wide > room)
                 }
                 words++

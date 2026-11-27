@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.ResponseBody
 import okhttp3.coroutines.executeAsync
+import org.json.JSONException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -37,3 +38,15 @@ internal fun ResponseBody.bytesAtMost(maxBytes: Long = MAX_RESPONSE_BYTES): Byte
 /** Like [ResponseBody.string], but fails instead of reading more than [maxBytes] into memory. */
 internal fun ResponseBody.stringAtMost(maxBytes: Long = MAX_RESPONSE_BYTES): String =
     String(bytesAtMost(maxBytes), contentType()?.charset() ?: Charsets.UTF_8)
+
+/**
+ * [block]'s answer, or [fallback] when the network fails or what came back isn't the JSON it should be:
+ * only those two, so a lookup that's cancelled still stops, and any other error still shows.
+ */
+internal inline fun <T> answeredOr(fallback: T, block: () -> T): T = try {
+    block()
+} catch (_: IOException) {
+    fallback
+} catch (_: JSONException) {
+    fallback
+}

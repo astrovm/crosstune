@@ -7,7 +7,9 @@ plugins {
 // Nothing here runs in CI, which has no device; the app only uses the profile committed to it.
 android {
     namespace = "com.astrovm.crosstune.baselineprofile"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         // Collecting a profile without root needs Android 9.
@@ -40,6 +42,6 @@ dependencies {
     constraints {
         // benchmark-macro 1.5.0 brings Wire 6.4.0, which has a decoder crash (Dependabot alert 56).
         // Drop this once a newer benchmark-macro brings 6.4.5 or later.
-        implementation("com.squareup.wire:wire-runtime:7.2.1")
+        implementation("com.squareup.wire:wire-runtime:7.2.2")
     }
 }

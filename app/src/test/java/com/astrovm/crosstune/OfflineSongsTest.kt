@@ -30,11 +30,14 @@ class OfflineSongsTest {
 
     @Test
     fun anInstrumentalAlbumAndTheSungRecordingStaySeparateAcrossRestart() = runBlocking {
-        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        val sung = song.copy(album = "Album")
+        val instrumental = song.copy(album = "Album (Instrumentals)")
         val kept = songs()
-        assertTrue(kept.keep(song).id != kept.keep(instrumental).id)
+        assertTrue(kept.keep(sung).id != kept.keep(instrumental).id)
+        // The instrumental was also readable under the field name an older version wrote.
+        file.writeText(file.readText().replace("\"album\":\"Album (Instrumentals)\"", "\"instrumentalAlbum\":\"Album (Instrumentals)\""))
         val reopened = songs()
-        assertEquals(listOf(song), reopened.has(song)?.songs)
+        assertEquals(listOf(sung), reopened.has(sung)?.songs)
         assertEquals(listOf(instrumental), reopened.has(instrumental)?.songs)
     }
 
@@ -94,15 +97,13 @@ class OfflineSongsTest {
         songs.keep(song)
         songs.keep(list)
         // A song kept twice, alone and in a list, is liked once.
-        assertEquals(listOf(song, other), songs.toLike())
         assertFalse(songs.likeOnce { it.title == "Elsewhere" })
         assertTrue(songs.likeOnce { it.title == song.title })
         // Taken, it isn't taken again.
         assertFalse(songs.likeOnce { it.title == song.title })
-        assertEquals(listOf(other), songs.toLike())
         assertEquals(setOf(OfflineSongs.keyOf(song)), songs.has(list)?.liked)
         // Remembered once the app's closed, so it isn't liked again after it's unliked there.
-        assertEquals(listOf(other), songs().toLike())
+        assertFalse(songs().likeOnce { it.title == song.title })
     }
 
     @Test

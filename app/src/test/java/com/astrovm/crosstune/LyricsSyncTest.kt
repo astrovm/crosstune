@@ -3,6 +3,9 @@ package com.astrovm.crosstune
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Before
@@ -52,6 +55,54 @@ class LyricsSyncTest {
         assertEquals(24_000L, moved.endMs)
         assertEquals(null, LyricsSync.adjust(listOf(line.copy(endMs = null)), listOf(SyncPoint(20_000, 23_000))).single().endMs)
         assertEquals(line.words.map { it.text }, moved.words.map { it.text })
+    }
+
+    @Test
+    fun anAutomaticCorrectionCannotExtrapolateTheLongerTakesEndingIntoTheRecording() {
+        val ending = LyricLine(40_000, "Last words", listOf(TimedWord(40_000, "Last "), TimedWord(40_500, "words")), 41_000)
+        val sheet = lines.take(3) + ending
+        val points = listOf(SyncPoint(20_000, 10_000))
+        // The words' take is 60 s: moved 10 s earlier it still ends 20 s past this 30 s recording.
+        val limited = LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 60_000)
+        assertEquals(listOf(0L, 10_000L, 30_000L, 40_000L), limited.map { it.timeMs })
+        assertEquals(ending, limited.last())
+        assertEquals(sheet, LyricsSync.adjust(sheet, emptyList(), durationMs = 30_000, takeMs = 60_000))
+        // A known faster recording can place the ending before its own end without an offset's guess.
+        assertEquals(20_000L, LyricsSync.adjust(sheet, points, pace = 0.5, durationMs = 30_000, takeMs = 60_000).last().timeMs)
+        // Moving later never brings an impossible timestamp into the recording.
+        assertEquals(50_000L, LyricsSync.adjust(sheet, listOf(SyncPoint(20_000, 30_000)), durationMs = 30_000, takeMs = 60_000).last().timeMs)
+    }
+
+    @Test
+    fun aTakeLongerOnlyByWhereItsWordsStartBringsItsEndingIn() {
+        val ending = LyricLine(40_000, "Last words", listOf(TimedWord(40_000, "Last "), TimedWord(40_500, "words")), 41_000)
+        val sheet = lines.take(3) + ending
+        val points = listOf(SyncPoint(20_000, 10_000))
+        // A 41 s take heard 10 s earlier ends with this 30 s recording, give or take a copy's rounding: its last line is in it.
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 41_000).last().timeMs)
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 43_000).last().timeMs)
+        assertEquals(40_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000, takeMs = 43_001).last().timeMs)
+        // Not knowing the take's length, there's no telling it has a stretch this recording doesn't.
+        assertEquals(30_000L, LyricsSync.adjust(sheet, points, durationMs = 30_000).last().timeMs)
+    }
+
+    @Test
+    fun aLineKeptPastASlowerRecordingsEndStaysPastIt() {
+        // At 1.05 the line at 300 s is sung at 315 s, past this 309 s recording; heard 10 s earlier, it'd land at 300 s, inside it.
+        val line = LyricLine(300_000, "Last words", listOf(TimedWord(300_000, "Last "), TimedWord(302_000, "words")), 304_000)
+        val kept = LyricsSync.adjust(listOf(line), listOf(SyncPoint(100_000, 90_000)), pace = 1.05, durationMs = 309_000, takeMs = 477_000).single()
+        assertEquals(315_000L, kept.timeMs)
+        assertEquals(listOf(315_000L, 317_100L), kept.words.map { it.timeMs })
+        assertEquals(319_200L, kept.endMs)
+    }
+
+    @Test
+    fun linesBeyondTheRecordingCanStillBePlacedByEvidenceThere() {
+        val points = listOf(SyncPoint(20_000, 10_000), SyncPoint(40_000, 20_000))
+        val moved = LyricsSync.adjust(lines, points, durationMs = 30_000, takeMs = 60_000)
+        assertEquals(listOf(0L, 10_000L, 15_000L, 20_000L), moved.map { it.timeMs })
+        // Before the recording's end, an unheard line still follows the correction.
+        assertEquals(29_999L - 10_000, LyricsSync.adjust(listOf(LyricLine(29_999, "Before the end")), points.take(1), durationMs = 30_000, takeMs = 60_000).single().timeMs)
     }
 
     @Test
@@ -161,6 +212,122 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun anUnconfirmedHearingIsKeptApartFromConfirmedTiming() {
+        val store = LyricsSyncStore(prefs)
+        val song = song.copy(recordingId = "player:one")
+        assertNull(store.pending(song, lines))
+        assertFalse(RecordingKey.identifiesRecording(song.copy(recordingId = "player:duration:180000")))
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000, 60_000))
+        assertEquals(PendingShift(22_000, 40_000, 60_000), LyricsSyncStore(prefs).pending(song, lines))
+        assertNull(store.pending(song, lines.dropLast(1)))
+        assertNull(store.pending(song, lines.map { it.copy(timeMs = it.timeMs + 1) }))
+        assertNull(store.pending(song.copy(recordingId = "player:another"), lines))
+        assertNull(store.pending(song.copy(recordingId = null), lines))
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
+        store.rememberPending(song, lines, PendingShift(23_000, 80_000, 100_000))
+        assertEquals(PendingShift(23_000, 80_000, 100_000), store.pending(song, lines))
+        store.clearPending(song)
+        assertNull(store.pending(song, lines))
+        store.clearPending(song)
+        prefs.edit().putString("lyrics_sync_pending", "not json").commit()
+        assertNull(store.pending(song, lines))
+    }
+
+    @Test
+    fun timingSavedWithABlankPlayerIdSurvivesAnUpdateWithOrWithoutALink() {
+        val store = LyricsSyncStore(prefs)
+        val points = listOf(SyncPoint(10_000, 12_000))
+        for (id in listOf("", "  ")) {
+            val blank = song.copy(recordingId = id)
+            val temporary = blank.copy(recordingId = "temporary")
+            store.save(temporary, lines, points)
+            val all = JSONObject(checkNotNull(prefs.getString("lyrics_sync", null)))
+            val saved = all.remove(RecordingKey.of(temporary))
+            val mainKey = "${SongNames.normalize(blank.title)}\u0000${SongNames.normalize(blank.artist)}\u0000$id"
+            all.put(mainKey, saved)
+            prefs.edit().putString("lyrics_sync", all.toString()).commit()
+            assertEquals(points, store.load(blank, lines))
+            assertEquals(points, store.load(blank.copy(url = "https://music.youtube.com/watch?v=abcdefghijk"), lines))
+        }
+    }
+
+    @Test
+    fun changingSheetsDiscardsPendingEvidenceEvenIfTheOldSheetReturns() {
+        val store = LyricsSyncStore(prefs)
+        val recording = song.copy(recordingId = "player:one")
+        store.rememberPending(recording, lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(recording, lines.dropLast(1)))
+        assertNull(store.pending(recording, lines))
+    }
+
+    @Test
+    fun blankPlayerIdsUseTheLinkOnlyForPendingEvidence() {
+        val store = LyricsSyncStore(prefs)
+        val first = song.copy(recordingId = "", url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val second = first.copy(url = "https://music.youtube.com/watch?v=lmnopqrstuv")
+        store.rememberPending(first, lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(second, lines))
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(first, lines))
+    }
+
+    @Test
+    fun malformedPendingEvidenceCannotConfirmTiming() {
+        val store = LyricsSyncStore(prefs)
+        val song = song.copy(recordingId = "player:one")
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000, 60_000))
+        val all = JSONObject(checkNotNull(prefs.getString("lyrics_sync_pending", "{}")))
+        val saved = all.getJSONObject(RecordingKey.of(song))
+        saved.put("offset", "invalid")
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+        saved.put("offset", 22_000).remove("from")
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+        saved.put("from", 40_000).remove("to")
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+        saved.put("to", 40_000)
+        prefs.edit().putString("lyrics_sync_pending", all.toString()).commit()
+        assertNull(store.pending(song, lines))
+    }
+
+    @Test
+    fun separateHearingsCanOccurInEitherOrder() {
+        val first = PendingShift(1_000, 20_000, 60_000)
+        val after = PendingShift(1_000, 60_000, 100_000)
+        val overlap = PendingShift(1_000, 50_000, 90_000)
+        assertTrue(first.separateFrom(after))
+        assertTrue(after.separateFrom(first))
+        assertFalse(first.separateFrom(overlap))
+    }
+
+    @Test
+    fun oldestPendingEvidenceGoesFirst() {
+        val store = LyricsSyncStore(prefs)
+        repeat(200) { store.rememberPending(MusicMetadata("Song $it", "Artist", recordingId = "player:$it"), lines, PendingShift(22_000, 40_000, 60_000)) }
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(MusicMetadata("Song 0", "Artist", recordingId = "player:0"), lines))
+        store.rememberPending(MusicMetadata("Song 200", "Artist", recordingId = "player:200"), lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(MusicMetadata("Song 0", "Artist", recordingId = "player:0"), lines))
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(MusicMetadata("Song 200", "Artist", recordingId = "player:200"), lines))
+    }
+
+    @Test
+    fun unnamedRecordingsCannotSharePendingEvidence() {
+        val store = LyricsSyncStore(prefs)
+        store.rememberPending(song, lines, PendingShift(22_000, 40_000, 60_000))
+        assertNull(store.pending(song, lines))
+        assertFalse(prefs.contains("lyrics_sync_pending"))
+        val linked = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        store.rememberPending(linked, lines, PendingShift(22_000, 40_000, 60_000))
+        assertEquals(PendingShift(22_000, 40_000, 60_000), store.pending(linked, lines))
+        val blankId = linked.copy(recordingId = "")
+        val otherLink = blankId.copy(url = "https://music.youtube.com/watch?v=lmnopqrstuv")
+        store.rememberPending(blankId, lines, PendingShift(24_000, 60_000, 80_000))
+        assertEquals(PendingShift(24_000, 60_000, 80_000), store.pending(blankId, lines))
+        assertNull(store.pending(otherLink, lines))
+    }
+
+    @Test
     fun aRecordingsPaceIsKeptWithItsLinesForTheSameWords() {
         val store = LyricsSyncStore(prefs)
         assertEquals(1.0, store.pace(song, lines), 0.0)
@@ -179,6 +346,26 @@ class LyricsSyncTest {
         store.save(song, lines, points)
         assertEquals(1.0, store.pace(song, lines), 0.0)
         assertEquals(points, store.load(song, lines))
+    }
+
+    @Test
+    fun whetherTheLinesWerePutInTimeByHandIsKeptWithThem() {
+        val points = listOf(SyncPoint(10_000, 12_000))
+        // Kept as an older Crosstune kept them, with nothing said of hands: not by hand.
+        LyricsSyncStore(prefs).save(song, lines, points)
+        assertFalse(checkNotNull(prefs.getString("lyrics_sync", null)).contains("hand"))
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines))
+        // By hand, read back on the next play, for these words only.
+        LyricsSyncStore(prefs).save(song, lines, points, byHand = true)
+        assertTrue(LyricsSyncStore(prefs).byHand(song, lines))
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines.dropLast(1)))
+        // Shazam's gap moved by hand leaves no point to keep, but that it was by hand is kept on its own.
+        LyricsSyncStore(prefs).save(song, lines, emptyList(), byHand = true)
+        assertTrue(LyricsSyncStore(prefs).byHand(song, lines))
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs).load(song, lines))
+        // Put back as found, it's gone.
+        LyricsSyncStore(prefs).save(song, lines, emptyList())
+        assertFalse(LyricsSyncStore(prefs).byHand(song, lines))
     }
 
     @Test

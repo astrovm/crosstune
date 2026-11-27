@@ -25,7 +25,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
@@ -73,7 +72,7 @@ import org.robolectric.annotation.Config
 class FlashcardsTest {
 
     @get:Rule
-    val composeRule = createEmptyComposeRule()
+    val composeRule = createRemoteComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
@@ -1289,7 +1288,8 @@ class FlashcardsTest {
         // TalkBack, which can't swipe, removes it with an action of its own.
         fun removeByAction(title: String) {
             val row = song(title).fetchSemanticsNode()
-            composeRule.runOnUiThread { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() }
+            // Done, it says so, or TalkBack would tell the user it failed.
+            assertTrue(composeRule.runOnUiThread<Boolean> { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() })
             composeRule.waitForIdle()
         }
         // Swiped away, all its lines go, until undone.

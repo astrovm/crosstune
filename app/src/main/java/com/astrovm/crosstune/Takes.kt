@@ -1,7 +1,6 @@
 package com.astrovm.crosstune
 
 import java.text.Normalizer
-import java.util.Locale
 
 /**
  * The take of a song a name says it is: live, karaoke, a TV size. YouTube Music lists these beside the studio song, in any
@@ -29,6 +28,31 @@ internal object Takes {
      */
     fun saysAnotherVersionBesidesLive(title: String): Boolean = SongNames.saysAnotherVersion(title, "live", "")
 
+    /** Read only a disco note on a normalized copy. The matcher still needs the original title or album. */
+    fun namesDisco(name: String): Boolean =
+        tagsOf(Normalizer.normalize(name, Normalizer.Form.NFKC)).any { tag ->
+            // A dash note or an outer bracket can hold a second tag, such as a remaster note.
+            SongNames.normalize(tag.takeWhile { it !in TAG_BRACKET_OPENS }) in DISCO_LABELS
+        }
+
+    /** A link can name a disco recording without using the same note delimiters as a search result. */
+    fun requestsDisco(name: String): Boolean {
+        val written = Normalizer.normalize(name, Normalizer.Form.NFKC)
+        val words = SongNames.writtenWords(written)
+        val joined = words.any { it == "discoversion" || it == "discomix" }
+        if (joined || words.zipWithNext().any { (first, second) -> first == "disco" && second in DISCO_LATIN_ENDINGS }) return true
+        val letters = SongNames.normalize(written)
+        return DISCO_JAPANESE_LABELS.any { it in letters }
+    }
+
+    private val DISCO_LATIN_ENDINGS = setOf("version", "mix", "ver")
+    private val DISCO_JAPANESE_LABELS = listOf(
+        "DISCOバージョン", "プロモーション用DISCOバージョン",
+        "ディスコバージョン", "ディスコヴァージョン", "ディスコ版",
+        "プロモーション用ディスコバージョン", "プロモーション用ディスコヴァージョン", "プロモーション用ディスコ版"
+    ).map(SongNames::normalize).toSet()
+    private val DISCO_LABELS = DISCO_LATIN_ENDINGS.map { "disco$it" }.toSet() + DISCO_JAPANESE_LABELS
+
     /** The text of each tag in [name]: what's inside brackets, and what follows a dash set apart by spaces. */
     private fun tagsOf(name: String): List<String> {
         val tags = mutableListOf<String>()
@@ -52,15 +76,10 @@ internal object Takes {
         val cuts = (1 until name.lastIndex).filter { name[it] in TitleDelimiters.DASHES && name[it - 1].isWhitespace() && name[it + 1].isWhitespace() }
         return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
     }
-    private val marks = phoneRegex("""\p{M}+""")
-    private val wordSplit = phoneRegex("""[^a-z0-9]+""")
-
-    private fun wordList(text: String): List<String> =
-        Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT).split(wordSplit).filter { it.isNotEmpty() }
 
     private fun takeOfTag(tag: String): Take? {
         val letters = SongNames.normalize(tag).trimStart { it.isDigit() }
-        val words = wordList(tag).dropWhile { it.all(Char::isDigit) }
+        val words = SongNames.wordList(tag).dropWhile { it.all(Char::isDigit) }
         val first = words.firstOrNull()
         val spoken = words.take(2).joinToString("")
         return when {

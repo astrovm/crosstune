@@ -8,7 +8,7 @@
 # one, in the same box and slot: it waits in line once. The box sees DIR as well. The exit code is the first that failed.
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
-# of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
+# of $HOME. Git comes from the image (the JDK's image plus Git), so whisper.cpp can read its
 # commit on Linux and on a Mac. Builds wait in line for memory, first come first served, and say how many
 # are ahead: waiting is normal, not a hang. Builds that share a checkout, including --also, wait for each other.
 # Distinct checkouts can run together. Each build takes a slot, which keeps its Gradle home, so a
@@ -37,9 +37,19 @@
 # GiB, slows a build down once it holds that much, as the kernel takes pages back. Both show how a test
 # does on a busy machine, without making the machine busy. Neither changes the slots.
 #
-# On a Mac the box runs in podman's machine, so the memory and the CPUs it can have are that machine's,
-# not the Mac's. A box asking for more than is there gets what is there, and is told. Nothing here needs
-# GNU's tools or a newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
+# On a Mac the box runs in podman's machine, which has to be on (`podman machine start`), so the memory
+# and the CPUs it can have are that machine's, not the Mac's (`podman machine set --memory` gives it more).
+# A box asking for more than is there gets what is there, and is told. Nothing here needs GNU's tools or a
+# newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
+#
+# On Apple Silicon the box builds and runs a Linux amd64 image, for Robolectric. Point GRADLE_BOX_ANDROID_HOME
+# at an Android SDK of its own with Linux tools: fill it with sdkmanager and REPO_OS_OVERRIDE=linux. With it
+# empty, the box reads ANDROID_HOME. On a Mac, or with GRADLE_BOX_ANDROID_HOME set, the container uses that
+# SDK and its default NDK and CMake paths; Android Studio still reads the checkout's own local.properties.
+# Emulated, the box runs several times slower, a full :app:ci for hours, so the growth tests (Growth.kt)
+# measure how much slower the JVM runs and give the threads beside a reading that much more processor time.
+# GRADLE_BOX_KEYSTORE names a debug key to mount instead of ~/.android/debug.keystore. Set it empty to
+# leave the host key alone and let the box make its own.
 #
 # Idle slot homes are evicted oldest first above 40 GiB (GRADLE_BOX_CACHE_BYTES overrides it): a home
 # is about 6, and a build in a new one starts cold.
@@ -94,7 +104,7 @@ asked_sdk=${GRADLE_BOX_ANDROID_HOME:-${ANDROID_HOME:-}}
 sdk=${asked_sdk:-$HOME/Android/Sdk}
 # Where Android Studio puts it on a Mac.
 [[ -d $sdk || -n $asked_sdk || ! -d $HOME/Library/Android/sdk ]] || sdk=$HOME/Library/Android/sdk
-key=$HOME/.android/debug.keystore
+key=${GRADLE_BOX_KEYSTORE-$HOME/.android/debug.keystore}
 
 if [[ ! -d $sdk ]]; then
     echo "gradle-box: no Android SDK at $sdk. Check GRADLE_BOX_ANDROID_HOME or ANDROID_HOME." >&2
@@ -186,7 +196,7 @@ fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
 # Keep the memory ticket readable by older checkouts. Store checkout paths beside it.
-mkdir -p "$state/queue" "$state/checkouts"
+mkdir -p "$state/queue" "$state/checkouts" "$state/started"
 # Name and publish in one turn. A later build must not overtake an unpublished earlier ticket.
 exec 7>"$state/queue.lock"
 lock 7
@@ -201,6 +211,8 @@ for queued in "$state"/queue/*; do
 done
 ticket=$state/queue/$stamp.$$
 checkout_ticket=$state/checkouts/${ticket##*/}
+started_ticket=$state/started/${ticket##*.}
+rm -f "$started_ticket"
 for recorded in "$state"/checkouts/*; do
     [[ -f $recorded ]] || continue
     kill -0 "${recorded##*.}" 2>/dev/null || rm -f "$recorded"
@@ -211,12 +223,12 @@ echo "$memory" > "$state/ticket.$$"
 mv "$state/ticket.$$" "$ticket"
 exec 7>&-
 sdk_properties=
-trap 'rm -f "$ticket" "$checkout_ticket"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
+trap 'rm -f "$ticket" "$checkout_ticket" "$started_ticket" "$state/started.$$.tmp"; if [[ -n $sdk_properties ]]; then rm -f "$sdk_properties"; fi' EXIT
 
 # How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
 # with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other asked checkout line recorded count=0 sum=0 overlap=0
+    local other asked checkout line recorded started limit count=0 sum=0 overlap=0 waiting=0 cap=$slots
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
@@ -224,6 +236,16 @@ ahead_of_me() {
             [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
             sum=$((sum + asked))
+            started=$state/started/${other##*.}
+            if [[ -f $started ]]; then
+                limit=$(head -n 1 "$started" 2>/dev/null) || limit=1
+                [[ $limit =~ ^[0-9]+$ ]] || limit=1
+                ((limit >= 1)) || limit=1
+                ((limit < cap)) && cap=$limit
+            else
+                # Older scripts do not publish a start marker: let them finish before passing them.
+                waiting=1
+            fi
             recorded=$state/checkouts/${other##*/}
             # Also read the intermediate multi-line tickets while those builds finish.
             [[ -f $recorded ]] || recorded=$other
@@ -233,10 +255,10 @@ ahead_of_me() {
                 done
             done < <(cat "$recorded" 2>/dev/null)
         else
-            rm -f "$other" "$state/checkouts/${other##*/}"
+            rm -f "$other" "$state/checkouts/${other##*/}" "$state/started/${other##*.}"
         fi
     done
-    echo "$count $sum $overlap"
+    echo "$count $sum $overlap $waiting $cap"
 }
 
 pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
@@ -266,10 +288,10 @@ take_a_slot() {
 
 said=
 while :; do
-    read -r ahead asked_ahead overlap < <(ahead_of_me)
+    read -r ahead asked_ahead overlap waiting cap < <(ahead_of_me)
     lately=$(stalled avg10)
     # The first in line always fits, as nothing is ahead of it.
-    fits=$((!overlap && ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
+    fits=$((!overlap && !waiting && ahead < cap && (ahead == 0 || asked_ahead + memory <= budget)))
     if ((fits && lately <= stall_limit)) && take_a_slot; then
         break
     fi
@@ -287,6 +309,9 @@ while :; do
     said=$why
     sleep 1
 done
+
+echo "$slots" > "$state/started.$$.tmp"
+mv "$state/started.$$.tmp" "$started_ticket"
 
 python3 "$(dirname "${BASH_SOURCE[0]}")/clean-cache.py" "$state" "$slot"
 home=$state/gradle-$slot
@@ -319,6 +344,9 @@ fi
 if [[ -n ${SYNCREPLAY_DIR:-} ]]; then
     box+=(-v "$SYNCREPLAY_DIR:$SYNCREPLAY_DIR" -e "SYNCREPLAY_DIR=$SYNCREPLAY_DIR")
 fi
+if [[ ${SYNCREPLAY_ACTIVE:-} == 1 ]]; then
+    box+=(-e SYNCREPLAY_ACTIVE=1)
+fi
 # So are SongCheck's, as songs' words are people's and stay out of every checkout (scripts/readingsaudit).
 if [[ -n ${SONGCHECK_DIR:-} ]]; then
     box+=(-v "$SONGCHECK_DIR:$SONGCHECK_DIR")
@@ -342,7 +370,7 @@ if [[ $host == Darwin || -n ${GRADLE_BOX_ANDROID_HOME:-} ]]; then
     done
 fi
 # The same key as builds outside the box, so its APKs install over theirs.
-[[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
+[[ -n $key && -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
 if [[ -d $seed/modules-2 ]]; then
     touch "$seed"
@@ -375,12 +403,21 @@ if ((${#also[@]})); then
 else
     run=(./gradlew --no-daemon "$@")
 fi
+# The box's own memory, which the machine's pressure above doesn't show, is told from inside it.
+run=(bash "$root/scripts/gradle-box/in-box.sh" "${run[@]}")
+child=
+stopped=
+trap 'stopped=1; [[ -z $child ]] || kill -TERM "$child" 2>/dev/null || true' INT TERM
 nice -n 10 podman run "${box[@]}" "$image" "${run[@]}" &
 child=$!
-trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
-status=0
-while kill -0 "$child" 2>/dev/null; do
+[[ -z $stopped ]] || kill -TERM "$child" 2>/dev/null || true
+# A stop ends the wait early, with 128 and the signal: while the build still runs, wait again for its own code.
+while :; do
+    status=0
     wait "$child" || status=$?
+    if ((status <= 128)) || ! kill -0 "$child" 2>/dev/null; then
+        break
+    fi
 done
 ((status != 0)) || keep_downloads
 lost=$((($(stalled total) - stalled_before) / 1000000))

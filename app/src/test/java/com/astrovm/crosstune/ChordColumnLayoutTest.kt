@@ -2,14 +2,9 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
-import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,11 +20,7 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ChordColumnLayoutTest {
 
-    private val measurer = TextMeasurer(
-        createFontFamilyResolver(ApplicationProvider.getApplicationContext()),
-        Density(1f),
-        LayoutDirection.Ltr
-    )
+    private val measurer = testTextMeasurer()
 
     private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
 

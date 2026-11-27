@@ -14,6 +14,7 @@
     <string name="open_in_spotify">Apri in Spotify</string>
     <string name="open_in_audiomack">Apri in Audiomack</string>
     <string name="open_in_qobuz">Apri in Qobuz</string>
+    <string name="open_in_presto_music">Apri in Presto Music</string>
     <string name="open_in_bandcamp">Apri in Bandcamp</string>
     <string name="open_in_amazon_music">Apri in Amazon Music</string>
     <string name="from_service">da %1$s</string>
@@ -54,7 +55,6 @@
     <string name="got_it_button">Ho capito</string>
     <string name="chatgpt_channel">Accesso con ChatGPT</string>
     <string name="chatgpt_signing_in_notification">Accesso con ChatGPT in corso</string>
-    <string name="next_button">Avanti</string>
     <string name="back_button">Indietro</string>
     <string name="setup_step">Passaggio %1$d di %2$d</string>
     <string name="setup_sources_listening_note">Ascolti su %1$s, quindi i suoi link si aprono già lì.</string>
@@ -285,7 +285,6 @@
     <string name="song_search_title">Brani</string>
     <string name="song_search_none">Nessun brano trovato per «%1$s».</string>
     <string name="floating_background">Sfondo</string>
-    <string name="floating_text_size">Dimensione del testo</string>
     <string name="floating_float">Fai fluttuare sopra le altre app</string>
     <string name="floating_permission_title">Testi sopra le tue app</string>
     <string name="floating_customize">Personalizza</string>

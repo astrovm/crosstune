@@ -1,0 +1,14 @@
+{
+  "status": "ok",
+  "code": 0,
+  "payload": {
+    "hasComposers": false,
+    "hasArtists": false,
+    "hasWorks": false,
+    "hasLabels": false,
+    "hasAlbums": false,
+    "totalCount": 0,
+    "results": []
+  },
+  "message": "Success"
+}

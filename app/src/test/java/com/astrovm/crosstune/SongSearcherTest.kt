@@ -292,6 +292,133 @@ class SongSearcherTest {
         assertLeads("Song", "Song" to "Artist", "Song +3Key" to "Band")
         assertLeads("Song", "Song" to "Artist", "Song Key-1" to "Band")
         assertLeads("チェリー", "チェリー" to "スピッツ", "チェリー REMAKE" to "Yuzu")
+        assertLeads("Song", "Song" to "Artist", "Song [2 pianos version]" to "Pianist")
+        assertLeads("Song", "Song" to "Artist", "Song (Two Guitars)" to "Duo")
+    }
+
+    @Test
+    fun theArtistTypedLeadsACoverThatSpellsOutASongNamedInAnotherScript() {
+        // As Deezer answered on the phone: the song's own name is in Japanese, so the covers
+        // spelling it out in Latin letters had more of what was typed.
+        assertEquals(
+            listOf(
+                "夜に駆ける" to "YOASOBI",
+                "Racing into the Night [Yoru Ni Kaeru]" to "Vangakuz",
+                "Idol" to "YOASOBI",
+                "YOASOBI - Racing Into The Night - 夜に駆ける - Yoru Ni Kakeru [2 pianos version]" to "KayThePianist"
+            ),
+            foundTitles(
+                "Yoru ni Kakeru YOASOBI",
+                "YOASOBI - Racing Into The Night - 夜に駆ける - Yoru Ni Kakeru [2 pianos version]" to "KayThePianist",
+                "Racing into the Night [Yoru Ni Kaeru]" to "Vangakuz",
+                "夜に駆ける" to "YOASOBI",
+                "Idol" to "YOASOBI"
+            )
+        )
+        // A cover named "Song - Artist" isn't a song named what was typed: its name is the song's.
+        assertEquals(
+            listOf("夜に駆ける" to "YOASOBI", "Yoru Ni Kakeru - YOASOBI" to "Cover Artist"),
+            foundTitles("Yoru ni Kakeru YOASOBI", "Yoru Ni Kakeru - YOASOBI" to "Cover Artist", "夜に駆ける" to "YOASOBI")
+        )
+        // "The" needn't be typed.
+        assertEquals(
+            listOf("上を向いて歩こう" to "The Peanuts", "Ue o Muite Arukou" to "Cover Band"),
+            foundTitles("Ue o Muite Arukou Peanuts", "Ue o Muite Arukou" to "Cover Band", "上を向いて歩こう" to "The Peanuts")
+        )
+        // Half an artist's name isn't the artist.
+        assertEquals(
+            listOf("Lemon" to "Cover Band", "レモン" to "Kenshi Yonezu"),
+            foundTitles("Lemon Kenshi", "Lemon" to "Cover Band", "レモン" to "Kenshi Yonezu")
+        )
+        // An artist written with no letters isn't named by any search.
+        assertEquals(
+            listOf("Song" to "Someone", "歌" to "…"),
+            foundTitles("Song Thing", "Song" to "Someone", "歌" to "…")
+        )
+        // A karaoke named just as typed is no reason to think the song was named in Latin letters.
+        assertEquals(
+            listOf("夜に駆ける" to "YOASOBI", "Yoru Ni Kakeru" to "Cover Band", "Yoru ni Kakeru YOASOBI (Karaoke)" to "Sing King"),
+            foundTitles(
+                "Yoru ni Kakeru YOASOBI",
+                "Yoru ni Kakeru YOASOBI (Karaoke)" to "Sing King",
+                "Yoru Ni Kakeru" to "Cover Band",
+                "夜に駆ける" to "YOASOBI"
+            )
+        )
+        // The artist's own music box is still another recording.
+        assertEquals(
+            listOf("Yoru ni Kakeru" to "Someone", "夜に駆ける（オルゴール）" to "YOASOBI"),
+            foundTitles("Yoru ni Kakeru YOASOBI", "Yoru ni Kakeru" to "Someone", "夜に駆ける（オルゴール）" to "YOASOBI")
+        )
+    }
+
+    @Test
+    fun aWordOfTheSongThatsAlsoAnArtistDoesntLeadWithThem() {
+        // "Heart" is a band, but "Heart of Glass" is Blondie's.
+        assertEquals(
+            listOf("Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart"),
+            foundTitles("Heart of Glass", "Heart of Glass" to "Blondie", "ハート・オブ・グラス" to "Heart")
+        )
+        // Its tag aside, the name is still word for word what was typed.
+        assertEquals(
+            listOf("Heart Of Glass (Single Version / Remastered)" to "Blondie", "ハート・オブ・グラス" to "Heart"),
+            foundTitles("Heart of Glass", "Heart Of Glass (Single Version / Remastered)" to "Blondie", "ハート・オブ・グラス" to "Heart")
+        )
+        // Not in another order: "Glass of Heart" is a song by Heart, called that in Japanese.
+        assertEquals(
+            listOf("ガラスの心" to "Heart", "Of Heart Glass" to "Band"),
+            foundTitles("Glass of Heart", "Of Heart Glass" to "Band", "ガラスの心" to "Heart")
+        )
+        // Nor does a song of theirs whose name has none of the rest of what was typed.
+        assertEquals(
+            listOf("Glass" to "Cover Band", "Alone" to "Heart"),
+            foundTitles("Heart Glass", "Glass" to "Cover Band", "Alone" to "Heart")
+        )
+        // Or only some of it: "Can't Buy Me Love" isn't "Love Me Do".
+        assertEquals(
+            listOf("Love Me Do" to "The Beatles", "Love Me Do" to "BPC", "Can't Buy Me Love" to "The Beatles"),
+            foundTitles("Love Me Do Beatles", "Love Me Do" to "The Beatles", "Love Me Do" to "BPC", "Can't Buy Me Love" to "The Beatles")
+        )
+    }
+
+    @Test
+    fun theArtistAloneOrASongOfTheirsInLatinLettersLeadInDeezersOrder() {
+        // "Idol" is named in Latin letters, so it's that one, then their other songs.
+        assertEquals(
+            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI", "Idol" to "Cover Band"),
+            foundTitles("Idol YOASOBI", "Idol" to "Cover Band", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+        )
+        // The artist alone is any of theirs, before a song that only has their name in it.
+        assertEquals(
+            listOf("Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI", "Yoasobi Night" to "Band"),
+            foundTitles("YOASOBI", "Yoasobi Night" to "Band", "Idol" to "YOASOBI", "夜に駆ける" to "YOASOBI")
+        )
+        // As Deezer answered on the phone: covers naming the artist in their names first.
+        assertEquals(
+            listOf("アイドル" to "YOASOBI", "Idol Yoasobi Instrumental アイドル - Oshi no Ko" to "Bluee", "Idol (Yoasobi)" to "Noctave"),
+            foundTitles("Idol YOASOBI", "Idol Yoasobi Instrumental アイドル - Oshi no Ko" to "Bluee", "Idol (Yoasobi)" to "Noctave", "アイドル" to "YOASOBI")
+        )
+        // An artist of two words, typed in full.
+        assertEquals(
+            listOf("感電" to "Kenshi Yonezu", "Kanden Kenshi" to "Band"),
+            foundTitles("Kanden Kenshi Yonezu", "Kanden Kenshi" to "Band", "感電" to "Kenshi Yonezu")
+        )
+    }
+
+    @Test
+    fun aSongSaidInPinyinStillLeadsTheArtistTyped() {
+        fake.handler = { request: Request ->
+            val body = when {
+                request.url.queryParameter("country") == "HK" -> jayChou
+                request.url.host == "api.deezer.com" -> deezer("晴天 (Live)" to "Jay Chou", "晴天" to "Jay Chou")
+                else -> """{"results":[]}"""
+            }
+            FakeSpotify.html(request, body)
+        }
+        assertEquals(
+            listOf("晴天" to "周杰倫", "晴天" to "Jay Chou", "晴天 (Live)" to "Jay Chou"),
+            found("qing tian jay chou").map { it.title to it.artist }
+        )
     }
 
     @Test

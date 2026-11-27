@@ -23,27 +23,27 @@ Pasting or sharing a link to Crosstune works with no setup. Under the link field
 2. **Let lyrics follow your music**, so the words of what's playing show in time.
 3. Tap one to open Android's settings, with a small guide to each step. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, **Fix all** does it in one tap.
 
-Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Invidious and Piped links open here when shared or pasted.
+Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Presto Music, Invidious and Piped links open here when shared or pasted.
 
 The first app you pick on a song is where songs play from then on. Change it in **Settings**. Anything left to allow later shows as **Things to fix** on the main screen.
 
 ## Features
 
-- **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Apple Music.
-- **Choose where.** Pick your music app once, or one per service. ReVanced, RVX, Morphe and Vanced count as apps of their own. Or add any site with a search URL like `https://example.com/search?q={query}`.
+- **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Apple Music. If a store that names a song fails, Crosstune can check the same YouTube Music song in the artist's script.
+- **Choose where.** Pick your music app once, or one per service. Patched builds of YouTube and YouTube Music, as ReVanced, RVX, Morphe and others, count as apps of their own. Or add any site with a search URL like `https://example.com/search?q={query}`.
 - **Not in the app you picked?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play them all, in order or shuffled, in YouTube Music, YouTube, TIDAL or Spotify. Spotify pauses between songs while the phone is locked. On a phone with no screen lock, **Wake for Spotify's next song** in **Settings** → **Advanced** keeps it going.
 - **Recent.** Search your recent songs, and swipe one away to remove it.
-- **Play and stay.** **Play** a song in your music app and control it from Crosstune's own player: pause, skip, seek, shuffle, repeat, like, what's up next and a sleep timer. What's playing waits in a bar on the home screen. Swipe up for the player, up again for the words.
+- **Play and stay.** **Play** a song in your music app, or **Search** for it there, for another version or to start it yourself. With **Play right away** off, **Search** comes first. The icons beside it search for it, or open it there without playing it. If the app already has it paused partway through, **Play** resumes it there. An app that can't start it in the background, as Spotify or Audiomack, opens on the song, and Crosstune comes back once it plays, when it may show over other apps. An app that stops once left, as YouTube Music and YouTube without Premium, is brought back in front, and stays there from then on. When Crosstune may show over other apps, it covers it with the words instead. An app that plays an ad first stays in front until the song starts. An app that plays nothing, as one that asks you to sign in, stays in front. Amazon Music and Bandcamp only open a search. Presto Music opens a search for songs. Control what's playing from Crosstune's own player: pause, skip, seek, shuffle, repeat, like, what's up next and a sleep timer. What's playing waits in a bar on the home screen. Swipe up for the player, up again for the words. When a song is marked as instrumental, the player previews its lyrics after Crosstune hears singing while the lyrics are open.
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song Shazam finds. It also does this by itself when your music app's search can't find what a player says it plays, or the player gives only a title, like a browser tab's. Or type a song's name.
-- **Names what the radio plays.** When an app shows only a station's name, a file's or a video's, Crosstune names the song by ear while it's open with that app's bar showing, once you allowed the microphone. It hears the phone's own sound, more cleanly with Shizuku or root, and uses the microphone only when the phone won't share its sound. Tap the bar to open the song while it's still playing. A song heard only through the microphone isn't opened, as it may be another one in the room. Simple Radio's stations show, and are named by ear, even when it doesn't report playback state.
-- **Lyrics in time.** The words follow your music app, even one on your computer through KDE Connect, or Crosstune listens along. Each line lights a moment before it's sung. Set how early in **Settings** → **Lyrics**. Tap a line to jump there, resize the words, and fix the timing by tapping the line you hear.
+- **Names what the radio plays.** When an app shows only a station's name, a file's or a video's, Crosstune names the song by ear while it's open with that app's bar showing, once you allowed the microphone. For Radio Garden, it checks the station's text with Apple Music and keeps a confirmed title through gaps in that text. If the text stays the same and the microphone is allowed, Crosstune listens to check the title after the song's length plus 10 seconds from when it first saw the text. A matching listen puts the next check one track length later. Without fresh evidence, the title expires after twice the song's length, even while the bar is hidden. When the length is unknown, Crosstune uses 90 seconds as the track length. It checks at 90 seconds and expires the title after 180 seconds without fresh evidence. It hears the phone's own sound, more cleanly with Shizuku or root, and uses the microphone only when the phone won't share its sound, on any speaker, car or headphones. Tap the bar to open the song while it's still playing. A song heard only through the microphone isn't opened, as it may be another one in the room, as through headphones. Simple Radio's stations show, and are named by ear, even when it doesn't report playback state.
+- **Lyrics in time.** The words follow your music app, even one on your computer through KDE Connect, or Crosstune listens along. On Radio Garden, Crosstune listens for the position in the song and follows the next song the station names and Apple Music confirms. Each line lights a moment before it's sung. Set how early in **Settings** → **Lyrics**. Tap a line to jump there, resize the words, and fix the timing by tapping the line you hear.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Offline.** **Download** on a song, album or playlist keeps its lyrics, translation, chords and cover, on Wi-Fi. It also likes each song in Spotify, YouTube Music or TIDAL, so that app can download it too. **Download in your music app too** turns that off.
 - **Timing that fits the recording.** Lyrics listen briefly to line up with a live take, a video or another release. On phones with 3 GB of memory or more, they hear the singing and move each line to where it's sung, and time lyrics that came with no timing. This runs on your phone with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), whose 32 MB model downloads once, on Wi-Fi.
 - **Report a problem.** Wrong words or timing? One tap in the lyrics sends it to the developer. Say yes once, and Crosstune reports songs with missing lyrics, timing or chords by itself. It listens for singing first, so an instrumental isn't reported, and lyrics found for what looks like an instrumental show once someone sings. Turn it off in **Settings**.
 - **Floating lyrics.** Float them over any app.
-- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
+- **MilkDrop visuals.** 150 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word. A reading looks wrong? Flag it on the word.
 - **Practice with the music.** Save lines and they come back as cards: rate each **Again**, **Hard**, **Good** or **Easy**. A card plays its line in the music app that has the song open, or in a small YouTube player, and you stay in Crosstune. Tap the bell for a daily reminder of the cards due.
 - **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
@@ -70,8 +70,9 @@ The first app you pick on a song is where songs play from then on. Change it in 
 | Audiomack | Songs, albums, playlists | Songs, albums, verified artists |
 | Amazon Music | Can't read its links | Search |
 | Qobuz | Can't read its links | Songs, albums |
+| Presto Music | Albums, shop products | Albums, search |
 
-Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist. Bandcamp's app can only search, so there it opens a search for the song, with no **Play**.
+Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist. Bandcamp's app can only search, so there it opens a search for the song, with no **Play**. Presto Music opens an album directly when it can check all the results and find one release with the same title, edition and lead artist. Otherwise it opens a search. For a song, that search lists the albums the song is on.
 
 ## 🛠️ Troubleshooting
 
@@ -91,10 +92,10 @@ In **Settings** → **Practice**, use **Allow exact time**. Without it, Android 
 
 - No account, analytics or ads. Your history stays on your phone.
 - Naming a song sends Shazam a fingerprint of the sound, never the audio. Lining lyrics up with the singing happens on your phone.
-- A song's title and artist go to the music services that find and open it, and to lyrics, chords and translation sites.
+- A song's title and artist go to the music services that find and open it, and to lyrics, chords and translation sites. To find an album in Presto Music, the Android app sends the album's title and artist to Presto Music's search API. When Apple's regional search finds no match or fails, Crosstune can send the title and artist to Apple's US store. For Radio Garden, Crosstune splits the station's now-playing text into a title and an artist and sends those parts to Apple Music. The text usually describes a song. The station can supply other text in those fields.
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask.
 - The [browser extension](extension) sends the developer nothing. It sends a link's title and artist where the app does, and, while its lyrics panel is open, to LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words.
-- Crosstune's only server gets the problem reports you send, or turn on. It keeps no IP address, and deletes each report after 180 days.
+- Crosstune's only server gets the problem reports you send, or turn on. Until you decide about automatic reports, a report for singing heard far from the lyrics waits on your phone; only the latest 20 problems found are kept, and older ones are deleted. It keeps no IP address, and deletes each report after 180 days.
 - Casting sends the song's title, artist, link and cover, and your controls, to Crosstune on the TV you pick, over your local network through Google Cast, part of Google Play Services. The build without Google Play Services can't cast.
 
 The full [privacy policy](https://crosstune.cc/privacy/) names every service and what each report carries.
@@ -112,14 +113,8 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 
 ## Building
 
-Clone with `git clone --recurse-submodules`, and use the Android SDK and JDK 17 or newer.
-
-```bash
-./gradlew :app:assembleDebug   # "Crosstune Dev", installs next to the released app
-./gradlew :app:ci            # the checks CI runs
-```
-
-More in [CONTRIBUTING.md](CONTRIBUTING.md).
+Crosstune builds with the Android SDK and JDK 17 or newer, from a clone with its submodules.
+The commands are in [AGENTS.md](AGENTS.md#commands), and how to build, test and release it is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 
@@ -169,4 +164,4 @@ Google Play services, Firebase Android SDK, and javax.inject are included in the
 | [javax.inject](https://github.com/javax-inject/javax-inject) | The JSR-330 Expert Group | Apache License 2.0 |
 | [Google Play services](https://developer.android.com/studio/terms.html) | Google | Android Software Development Kit License |
 
-The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) are made from [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed. The readings: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. The words in kana: only the common ones with い or う after their first kana, each with how it's looked up, and those with ひ or ふ there, which are no old spelling. Both are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.
+The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) are made from [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed. The readings: words of two or more kanji, and words with one kanji followed by る or るる, that JMdict reads one way where Crosstune reads them otherwise. The words in kana: common words with い, う or お after their first kana, words with ひ, ふ or ほ there that are no old spelling, and common words with small kana for word searches. Both are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.

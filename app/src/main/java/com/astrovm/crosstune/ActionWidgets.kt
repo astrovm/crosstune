@@ -3,7 +3,6 @@ package com.astrovm.crosstune
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
@@ -36,10 +35,6 @@ abstract class ActionWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val palette = CrosstuneWidget.widgetPalette(context)
         provideContent { CrosstuneWidget.WidgetTheme(palette) { ActionContent(icon, label, intent(context)) } }
-    }
-
-    internal companion object {
-        val SMALL = DpSize(40.dp, 40.dp)
     }
 }
 

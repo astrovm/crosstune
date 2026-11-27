@@ -164,6 +164,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -231,7 +232,12 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     // Signed in from the sheet, what it's open at is asked for then.
     LaunchedEffect(signedIn) { if (signedIn) songTab?.let(openTab) }
+    // Practice is drawn in the words' place, so what's below starts over once it closes; this, kept out here, sends a TV's
+    // remote back to Study, which opened it, rather than to the bar's first button (Issue #1137). Saved, as on a TV's cover
+    // the words are drawn afresh once Back closes it.
+    var practised by rememberSaveable(song) { mutableStateOf(false) }
     if (state.practice != null) {
+        SideEffect { practised = true }
         PracticeScreen(state, actions)
         return
     }
@@ -280,6 +286,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
+    val study = remember { FocusRequester() }
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
     // What the song's info and its report open on a TV give the remote back to.
@@ -317,7 +324,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
-            .onPreviewKeyEvent { if (tv && it.type == KeyEventType.KeyDown) touches++; false }
+            .onPreviewKeyEvent {
+                if (tv && it.type == KeyEventType.KeyDown) {
+                    touches++
+                    // The words send the remote to Study each time until it's used: they do more than once as they come back.
+                    practised = false
+                }
+                false
+            }
             .swipeLayers(downFromTop = true)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
@@ -352,7 +366,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             TranslationStatus(state.learning, state.offline, actions)
             ChordsStatus(state.chords, state.offline, actions)
             CapoStatus(state.chords)
-            MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
+            // The microphone turned down, e.g. to listen along, said here where it was asked for, with a way to allow it.
+            ProblemRow(state.error == AppError.MICROPHONE, AppError.MICROPHONE.messageRes, R.string.open_settings_button to actions.onOpenMicrophoneSettings)
             // Timed words with no music app to say where the song is: on top, how they can follow one. Even
             // while they follow it by ear, as the microphone hears the room too, which may play another song.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -432,7 +447,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             state, actions, toolsShown, syncing, onOnlyVisuals = { visualsOnly = true },
             onSync = { syncingAsked = !syncing },
             onChooseLines = { practise -> choosing = practise },
-            menu = barMenu, onMenuChange = { barMenu = it }, focus = bar,
+            menu = barMenu, onMenuChange = { barMenu = it }, focus = bar, study = study,
+            // Study is on the bar only with the words.
+            landOn = if (practised && state.lyrics.isNotEmpty()) study else bar,
             focusBar = focusBar, onFocusBar = { focusBar = it }, onBarFocus = { barFocused = it },
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         )
@@ -688,8 +705,12 @@ private fun LyricsActions(
     onChooseLines: (Boolean) -> Unit,
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
-    /** Where a TV remote lands on the bar. */
+    /** The bar, for a TV remote, which lands on its first tool. */
     focus: FocusRequester,
+    /** Study, on the bar. */
+    study: FocusRequester,
+    /** Where the remote lands when it's sent to the bar: [focus], or [study] back from Practice. */
+    landOn: FocusRequester,
     /** Whether the remote is to land on the bar once it's there to take it. */
     focusBar: Boolean,
     onFocusBar: (Boolean) -> Unit,
@@ -731,7 +752,7 @@ private fun LyricsActions(
                     LaunchedEffect(focusBar) {
                         if (focusBar) {
                             onFocusBar(false)
-                            focus.requestFocus()
+                            landOn.requestFocus()
                         }
                     }
                     Surface(
@@ -740,7 +761,7 @@ private fun LyricsActions(
                         shadowElevation = 6.dp,
                         modifier = Modifier.onSizeChanged { barHeight = maxOf(barHeight, it.height) }
                     ) {
-                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus)
+                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus, study)
                     }
                 }
             }
@@ -759,7 +780,8 @@ private fun BarTools(
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
     onSync: () -> Unit,
-    focus: FocusRequester
+    focus: FocusRequester,
+    study: FocusRequester
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
         // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
@@ -769,7 +791,7 @@ private fun BarTools(
         }
         // The song's lines are learned, and lines kept are studied.
         if (state.lyrics.isNotEmpty()) {
-            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
+            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, modifier = Modifier.focusRequester(study), onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
         }
         VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
         // Floating shows the line being sung, which only timed words have.
@@ -1032,7 +1054,7 @@ private fun LayerChip(@StringRes label: Int, @StringRes name: Int, on: Boolean, 
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.heightIn(min = 56.dp).clip(shape)
             .then(if (on) Modifier.background(colors.secondaryContainer) else Modifier.border(1.dp, colors.outlineVariant, shape))
-            .toggleable(on, role = Role.Switch, onValueChange = onChange)
+            .toggleable(on, interactionSource = null, indication = focusRing(shape), role = Role.Switch, onValueChange = onChange)
             .semantics { contentDescription = description }
             .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
@@ -1152,6 +1174,7 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
  * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
  * those worth it are checked to start with. Each says how many times it's sung, and whether it has
  * words worth knowing. Saved, or practised when [practise], what changed is given to [onSave].
+ * Put away, it gives the remote back to [opener], what opened it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1163,7 +1186,8 @@ internal fun ChooseLinesSheet(
     loadArtwork: suspend (String) -> ImageBitmap?,
     practise: Boolean,
     onSave: (add: List<Int>, remove: List<SavedLine>) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    opener: FocusRequester? = null
 ) {
     val lines = remember(texts, words) { songLines(texts, words) }
     val keptLines = kept.filter { it.line == null }
@@ -1172,7 +1196,7 @@ internal fun ChooseLinesSheet(
     val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
     val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
     val dropped = remember(song) { mutableStateListOf<SavedLine>() }
-    ScreenSheet(onDismiss) {
+    ScreenSheet(onDismiss, opener) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
@@ -1212,17 +1236,19 @@ internal fun ChooseLinesSheet(
             }
             // Practised, it needs a line to practise; saved, something to change.
             val left = kept.size - dropped.size + picked.size
-            Button(
-                onClick = {
-                    onSave(picked.toList(), dropped.toList())
-                    onDismiss()
-                },
-                enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-            ) {
-                Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
+            ChooseLinesButton(practise, enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty()) {
+                onSave(picked.toList(), dropped.toList())
+                onDismiss()
             }
         }
+    }
+}
+
+/** What puts [ChooseLinesSheet] away with the lines chosen: practise them when [practise], else save them. */
+@Composable
+private fun ChooseLinesButton(practise: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
     }
 }
 
@@ -1315,19 +1341,28 @@ private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenA
         ChordFailure.WIKI_CHECK -> R.string.lyrics_chords_wiki_check
         null -> R.string.lyrics_chords_failed
     }
-    AnimatedVisibility(visible = chords.on && chords.failed, enter = Motion.appear, exit = Motion.disappear) {
+    ProblemRow(chords.on && chords.failed, said, (R.string.retry_button to actions.onRetryChords).takeIf { !offline })
+}
+
+/**
+ * A problem, in words, where it happened, as it comes and goes; [action], a button's words and what it
+ * does, puts it right when there's one.
+ */
+@Composable
+private fun ProblemRow(visible: Boolean, @StringRes message: Int, action: Pair<Int, () -> Unit>?) {
+    AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
         ) {
             Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
             Text(
-                stringResource(said),
+                stringResource(message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
             )
-            if (!offline) TextButton(onClick = actions.onRetryChords) { Text(stringResource(R.string.retry_button)) }
+            action?.let { (label, onClick) -> TextButton(onClick = onClick) { Text(stringResource(label)) } }
         }
     }
 }
@@ -1346,26 +1381,6 @@ private fun CapoStatus(chords: ChordsState) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
-    }
-}
-
-/** The microphone turned down, e.g. to listen along, said here where it was asked for, with a way to allow it. */
-@Composable
-private fun MicrophoneStatus(denied: Boolean, actions: ScreenActions) {
-    AnimatedVisibility(visible = denied, enter = Motion.appear, exit = Motion.disappear) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
-        ) {
-            Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            Text(
-                stringResource(AppError.MICROPHONE.messageRes),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
-            )
-            TextButton(onClick = actions.onOpenMicrophoneSettings) { Text(stringResource(R.string.open_settings_button)) }
-        }
     }
 }
 
@@ -1389,7 +1404,7 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
     if (start != null) {
         AppSource(
             stringResource(R.string.play_in_background, start.label()),
-            start.service.packageName,
+            start.packageName,
             playing = false,
             enabled = !state.playingResult,
             onClick = actions.onPlayResult
@@ -1413,7 +1428,7 @@ private fun AppSource(description: String, packageName: String?, playing: Boolea
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRing(CircleShape), enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
     ) {
         // The badge sits on the icon's corner, inside the button.
@@ -1465,10 +1480,10 @@ private fun ListenAlongButton(listening: Boolean, allowed: Boolean, actions: Scr
 
 /** A tool of the bar, its icon breathing while what it brings is on its way: a translation, or chords. */
 @Composable
-private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, selected: Boolean = false, onClick: () -> Unit) {
+private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, selected: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val transition = rememberInfiniteTransition(label = "working")
     val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
-    IconButton(onClick = onClick, modifier = Modifier.semantics { this.selected = selected }) {
+    IconButton(onClick = onClick, modifier = modifier.semantics { this.selected = selected }) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape)) {
             Icon(painterResource(icon), contentDescription = stringResource(description), tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp).graphicsLayer { alpha = if (working) breath else 1f })
         }
@@ -1674,17 +1689,23 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?, byE
         // back and forth: the line lit stays lit till its new time comes, as it's that close. Moved by
         // the player, as a line tapped, it's lit at once.
         val lit = value
-        val moved = followed[0] == following
+        val sameClock = followed[0] == following
         followed[0] = following
-        value = sung().takeUnless { moved && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position()?.let { line.timeMs - it < MainViewModel.WORDS_OFF_MS } == true } } ?: lit
+        value = keepCloseLine(lines, lit, sung(), position(), sameClock)
         val changes = SyncedLyrics.changes(lines, byEar)
         while (following?.timingKnown == true) {
             delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(changes, it) } ?: break)
-            value = sung()
+            // A delay can wake before the playback clock reaches its next line.
+            value = keepCloseLine(lines, value, sung(), position(), sameClock = true)
         }
     }
     return active
 }
+
+private fun keepCloseLine(lines: List<LyricLine>, lit: Int, next: Int, position: Long?, sameClock: Boolean): Int =
+    next.takeUnless {
+        sameClock && it >= 0 && it == lit - 1 && lines.getOrNull(lit).let { line -> line != null && position?.let { at -> line.timeMs - at < MainViewModel.WORDS_OFF_MS } == true }
+    } ?: lit
 
 /**
  * Timed words, one line at a time. While the song is followed the line being sung is lit, those

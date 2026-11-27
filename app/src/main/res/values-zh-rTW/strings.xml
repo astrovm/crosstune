@@ -13,6 +13,7 @@
     <string name="open_in_spotify">在 Spotify 中開啟</string>
     <string name="open_in_audiomack">在 Audiomack 中開啟</string>
     <string name="open_in_qobuz">在 Qobuz 中開啟</string>
+    <string name="open_in_presto_music">在 Presto Music 中開啟</string>
     <string name="open_in_bandcamp">在 Bandcamp 中開啟</string>
     <string name="open_in_amazon_music">在 Amazon Music 中開啟</string>
     <string name="from_service">來自 %1$s</string>
@@ -53,7 +54,6 @@
     <string name="got_it_button">知道了</string>
     <string name="chatgpt_channel">使用 ChatGPT 登入</string>
     <string name="chatgpt_signing_in_notification">正在使用 ChatGPT 登入</string>
-    <string name="next_button">下一步</string>
     <string name="back_button">返回</string>
     <string name="setup_step">第 %1$d 步，共 %2$d 步</string>
     <string name="setup_sources_listening_note">你在 %1$s 中收聽，所以它的連結已經會在那裡開啟。</string>
@@ -284,7 +284,6 @@
     <string name="song_search_title">歌曲</string>
     <string name="song_search_none">沒有找到與「%1$s」相符的歌曲。</string>
     <string name="floating_background">背景</string>
-    <string name="floating_text_size">文字大小</string>
     <string name="floating_float">懸浮在其他應用程式上方</string>
     <string name="floating_permission_title">歌詞懸浮在應用程式上方</string>
     <string name="floating_customize">自訂</string>

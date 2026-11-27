@@ -39,3 +39,6 @@ internal const val PHONE_KATAKANA = "30a1-30fa,30fd-30ff,31f0-31ff,32d0-32fe,330
 
 /** `\p{sc=Latin}` on a phone, as code point runs in hex. */
 internal const val PHONE_LATIN = "41-5a,61-7a,aa,ba,c0-d6,d8-f6,f8-2b8,2e0-2e4,1d00-1d25,1d2c-1d5c,1d62-1d65,1d6b-1d77,1d79-1dbe,1e00-1eff,2071,207f,2090-209c,212a-212b,2132,214e,2160-2188,2c60-2c7f,a722-a787,a78b-a7dc,a7f1-a7ff,ab30-ab5a,ab5c-ab64,ab66-ab69,fb00-fb06,ff21-ff3a,ff41-ff5a,10780-10785,10787-107b0,107b2-107ba,1df00-1df1e,1df25-1df2a"
+
+/** `[a-z]` ignoring case on a phone, as code point runs in hex. */
+internal const val PHONE_LATIN_IGNORING_CASE = "41-5a,61-7a,17f,212a"

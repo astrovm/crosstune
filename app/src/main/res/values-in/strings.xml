@@ -13,6 +13,7 @@
     <string name="open_in_spotify">Buka di Spotify</string>
     <string name="open_in_audiomack">Buka di Audiomack</string>
     <string name="open_in_qobuz">Buka di Qobuz</string>
+    <string name="open_in_presto_music">Buka di Presto Music</string>
     <string name="open_in_bandcamp">Buka di Bandcamp</string>
     <string name="open_in_amazon_music">Buka di Amazon Music</string>
     <string name="from_service">dari %1$s</string>
@@ -53,7 +54,6 @@
     <string name="got_it_button">Mengerti</string>
     <string name="chatgpt_channel">Masuk dengan ChatGPT</string>
     <string name="chatgpt_signing_in_notification">Sedang masuk dengan ChatGPT</string>
-    <string name="next_button">Lanjut</string>
     <string name="back_button">Kembali</string>
     <string name="setup_step">Langkah %1$d dari %2$d</string>
     <string name="setup_sources_listening_note">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana.</string>
@@ -284,7 +284,6 @@
     <string name="song_search_title">Lagu</string>
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
     <string name="floating_background">Latar</string>
-    <string name="floating_text_size">Ukuran teks</string>
     <string name="floating_float">Mengambang di atas aplikasi lain</string>
     <string name="floating_permission_title">Lirik mengambang di atas aplikasimu</string>
     <string name="floating_customize">Sesuaikan</string>

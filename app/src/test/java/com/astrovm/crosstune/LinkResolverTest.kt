@@ -355,4 +355,30 @@ class LinkResolverTest {
         }
         assertEquals(emptyList<MusicMetadata>(), (resolve("https://soundcloud.com/friend/sets/party") as Resolution.Resolved).metadata.tracks)
     }
+
+    @Test
+    fun aPrestoAlbumIsReadFromTheApiBehindItsAppWithItsSongs() {
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/app/6/album/8269533" -> FakeSpotify.html(
+                    request, """{"payload":{"title":"Kind Of Blue","artistSummary":"Miles Davis (trumpet), Bill Evans (piano)","images_sizes":[{"medium":"https://img/m.jpg"}]}}"""
+                )
+                "/api/app/6/tracks/8269533" -> FakeSpotify.html(
+                    request, """{"payload":{"works":[{"artistData":[{"artistName":"Bill Evans"},{"artistName":"Miles Davis"}],"tracks":[{"singleFieldTrackTitle":"Davis, M: So What","duration":"9:07"}]}]}}"""
+                )
+                else -> FakeSpotify.html(request, """{"status":"error","code":54}""", code = 404)
+            }
+        }
+        val album = resolve("https://www.prestomusic.com/jazz/products/8269533--kind-of-blue") as Resolution.Resolved
+        assertEquals("https://streaming.prestomusic.com/album/8269533", album.link.url)
+        assertEquals(
+            MusicMetadata(
+                "Kind Of Blue", "Miles Davis", ItemType.ALBUM, "https://img/m.jpg",
+                tracks = listOf(MusicMetadata("So What", "Miles Davis", artworkUrl = "https://img/m.jpg", lengthMs = 547_000))
+            ),
+            album.metadata
+        )
+        // One it doesn't have.
+        assertEquals(AppError.NOT_FOUND, (resolve("https://streaming.prestomusic.com/album/1") as Resolution.Failed).error)
+    }
 }

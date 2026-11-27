@@ -24,8 +24,9 @@ import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -64,20 +65,38 @@ import androidx.compose.material3.ProvideTextStyle
 /** What's drawn over the screen, the last on top; null where dialogs and sheets are windows. */
 private val LocalOverlays = staticCompositionLocalOf<Overlays?> { null }
 
-private class Overlays(val screen: FocusRequester) {
+/**
+ * What's drawn over a screen, the last on top. As the last is put away, [putAway] is told whether it had
+ * an opener of its own to give the remote back to, and says whether it gave the remote somewhere itself.
+ */
+internal class Overlays(private val putAway: (own: Boolean) -> Boolean) {
+    val screen = FocusRequester()
     val shown = mutableStateListOf<Overlay>()
+
+    /** Whether a dialog or sheet is shown now, rather than as of the last recomposition. */
+    val any get() = shown.isNotEmpty()
+
+    /** [overlay] put away: the remote goes back to its opener, unless the last one, with none of its own, was given somewhere. */
+    fun gone(overlay: Overlay) {
+        val own = overlay.opener !== screen
+        if (shown.isEmpty() && putAway(own)) return
+        runCatching { overlay.opener.requestFocus() }
+    }
 }
 
+/** Room for dialogs and sheets over a screen, kept where [putAway] can say where the remote goes as the last goes. */
+@Composable
+internal fun rememberOverlays(putAway: (own: Boolean) -> Boolean) = remember { Overlays(putAway) }
+
 /** One dialog or sheet shown, and what to give the remote back to when it's put away. */
-private class Overlay(val content: State<@Composable () -> Unit>, val opener: FocusRequester) {
+internal class Overlay(val content: State<@Composable () -> Unit>, val opener: FocusRequester) {
     val focus = FocusRequester()
 }
 
-/** Draws [content], the screen, with room over it for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
+/** Draws [content], the screen, with room over it in [overlays] for [ScreenAlert]s and [ScreenSheet]s, where [inside]. */
 @Composable
-internal fun WithOverlays(inside: Boolean, content: @Composable () -> Unit) {
+internal fun WithOverlays(inside: Boolean, overlays: Overlays, content: @Composable () -> Unit) {
     if (!inside) return content()
-    val overlays = remember { Overlays(FocusRequester()) }
     CompositionLocalProvider(LocalOverlays provides overlays) {
         Box {
             Box(Modifier.focusRequester(overlays.screen).focusGroup()) { content() }
@@ -93,11 +112,6 @@ private fun OverlayFrame(overlay: Overlay) {
     LaunchedEffect(Unit) {
         withFrameNanos {}
         if (!focused) overlay.focus.requestFocus()
-    }
-    // Once it's gone, the remote goes back to what opened it.
-    DisposableEffect(overlay) {
-        // Gone with the screen it was over, when it's that that put it away.
-        onDispose { runCatching { overlay.opener.requestFocus() } }
     }
     Box(
         Modifier
@@ -127,7 +141,12 @@ private fun InOverlay(overlays: Overlays, opener: FocusRequester?, content: @Com
     DisposableEffect(overlays) {
         val overlay = Overlay(latest, opener ?: overlays.shown.lastOrNull()?.focus ?: overlays.screen)
         overlays.shown.add(overlay)
-        onDispose { overlays.shown.remove(overlay) }
+        // Once it's gone, the remote goes back to what opened it, before what gives it somewhere else once it's gone,
+        // like the song picker, which so has the last word. Gone with the screen it was over, when it's that that put it away.
+        onDispose {
+            overlays.shown.remove(overlay)
+            overlays.gone(overlay)
+        }
     }
 }
 
@@ -163,7 +182,7 @@ internal fun ScreenSheet(onDismiss: () -> Unit, opener: FocusRequester? = null, 
         // Open all the way, so one back closes it rather than lowering it halfway first. Kept clear of the
         // status bar by hand: Material's own pads its top by however much of it the sheet is under, so one
         // about as tall as the screen grew as it was dragged up, which moved it again, and it shook.
-        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = Modifier.statusBarsPadding(), content = content)
+        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberBottomSheetState(SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)), modifier = Modifier.statusBarsPadding(), content = content)
     } else {
         InOverlay(overlays, opener) { InlineSheet(onDismiss, content = content) }
     }

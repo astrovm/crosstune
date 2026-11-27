@@ -198,6 +198,7 @@ internal object MusicLinks {
         host.isOn("soundcloud.com") -> MusicService.SOUNDCLOUD
         host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
         host.isOn("audiomack.com") -> MusicService.AUDIOMACK
+        host.isOn("prestomusic.com") || host.isOn("prestoclassical.co.uk") -> MusicService.PRESTO_MUSIC
         else -> null
     }
 
@@ -232,6 +233,7 @@ internal object MusicLinks {
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             host == "audiomack.com" || host == "www.audiomack.com" -> audiomack(segments)
+            host in prestoHosts -> presto(segments)
             host == "shazam.com" || host == "www.shazam.com" -> shazamSong(segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
@@ -296,6 +298,27 @@ internal object MusicLinks {
         if (segments.size != 3) return null
         val type = mapOf("song" to ItemType.TRACK, "album" to ItemType.ALBUM, "playlist" to ItemType.PLAYLIST)[segments[1]] ?: return null
         return MusicLink(MusicService.AUDIOMACK, type, "${segments[0]}/${segments[2]}", "https://audiomack.com/${segments.joinToString("/")}")
+    }
+
+    /** Presto's app and shop, and the shop's old name, which still sends its links there. */
+    private val prestoHosts = setOf(
+        "streaming.prestomusic.com", "prestomusic.com", "www.prestomusic.com",
+        "prestoclassical.co.uk", "www.prestoclassical.co.uk", "secure.prestoclassical.co.uk"
+    )
+
+    /**
+     * A Presto Music album, as its app shares it, streaming.prestomusic.com/album/{code}, or as its shop links it,
+     * www.prestomusic.com/{genre}/products/{code}--{name}, whatever the shop puts before that. Either opens as the
+     * app's, which the app opens.
+     */
+    private fun presto(segments: List<String>): MusicLink? {
+        val products = segments.indexOf("products")
+        val code = when {
+            segments.size == 2 && segments[0] == "album" -> segments[1]
+            products > 0 && products == segments.size - 2 -> segments.last().substringBefore("--")
+            else -> null
+        }?.takeIf { numericIdRegex.matches(it) } ?: return null
+        return MusicLink(MusicService.PRESTO_MUSIC, ItemType.ALBUM, code, Presto.albumUrl(code))
     }
 
     /** music.apple.com/{region}/{song|album|artist|playlist}/{slug}/{id}, where album?i= is a song. */

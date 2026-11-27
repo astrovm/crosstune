@@ -43,6 +43,27 @@ class LyricsFinderTest {
     private fun words(song: MusicMetadata) = (found(song) as? Lyrics.Found)?.words
 
     @Test
+    fun lyricsSavedForABlankPlayerIdOnMainAreFoundWithOrWithoutALink() {
+        val file = File.createTempFile("lyrics-blank-id", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        for (id in listOf("", "  ")) {
+            val mainKey = "${LyricsFinder.CACHE_VERSION}\u0000song\u0000band\u0000$id"
+            runBlocking { cache.put(mainKey, """{"words":"Saved sheet","lines":[],"provisional":false}""") }
+        }
+        runBlocking { cache.save() }
+        val finder = LyricsFinder(fake.client(), "test", cache = LookupCache(file, Dispatchers.Unconfined), busyPauseMs = 0)
+        for (id in listOf("", "  ")) {
+            for (url in listOf(null, "https://music.youtube.com/watch?v=abcdefghijk")) {
+                val result = runBlocking { finder.firstLook(MusicMetadata("Song", "Band", recordingId = id, url = url)) }
+                assertEquals("Saved sheet", (result.lyrics as Lyrics.Found).words)
+                assertTrue(result.final)
+                assertFalse(result.fallback)
+            }
+        }
+        file.delete()
+    }
+
+    @Test
     fun duplicatedCopiesCannotOutvoteTheCurrentTimings() {
         val copy = lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 309.0)
         remixTimedEarly(copy, copy, copy, storeSeconds = 318.483)
@@ -126,7 +147,7 @@ class LyricsFinderTest {
                 assertEquals(false, answer?.markedInstrumental)
             }
         }
-        val differentAlbum = song.copy(lengthMs = 200_000, instrumentalAlbum = "Another Album (Instrumentals)")
+        val differentAlbum = song.copy(lengthMs = 200_000, album = "Another Album (Instrumentals)")
         respond((listOf(sung) + marked).joinToString(",", "[", "]"))
         val answer = found(differentAlbum) as? Lyrics.Found
         assertEquals("First\nSecond", answer?.words)
@@ -141,7 +162,7 @@ class LyricsFinderTest {
         respond("[$sung,$marked,$marked]")
         assertEquals("First\nSecond", heldBack(found(song.copy(lengthMs = 200_000))))
         // Unless the recording playing is named as on an album of instrumentals: then only that album's copies are its own.
-        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)"))))
+        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, album = "Album (Instrumentals)"))))
     }
 
     @Test
@@ -153,12 +174,12 @@ class LyricsFinderTest {
         val spelled = onAlbum(lasting(instrumentalCopy(), 200.0), "Album (Instrumental)")
         for (marked in listOf(listOf(blank, blank), listOf(blank, spelled))) {
             respond((listOf(sung) + marked).joinToString(",", "[", "]"))
-            assertEquals("First\nSecond", heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = album))))
+            assertEquals("First\nSecond", heldBack(found(song.copy(lengthMs = 200_000, album = album))))
         }
         // A blank album is no excuse for another length.
         val longer = lasting(instrumentalCopy(), 320.0)
         respond("[$sung,$longer,$longer]")
-        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, instrumentalAlbum = album))))
+        assertEquals(null, heldBack(found(song.copy(lengthMs = 200_000, album = album))))
     }
 
     @Test
@@ -188,9 +209,9 @@ class LyricsFinderTest {
         try {
             val cache = LookupCache(file, Dispatchers.Unconfined)
             val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
-            val kept = song.copy(lengthMs = 200_000, instrumentalAlbum = "Album (Instrumentals)")
+            val kept = song.copy(lengthMs = 200_000, album = "Album (Instrumentals)")
             // The other app says the same recording is a second longer and spells the album in the singular.
-            val played = kept.copy(lengthMs = 201_000, instrumentalAlbum = "Album (Instrumental)")
+            val played = kept.copy(lengthMs = 201_000, album = "Album (Instrumental)")
             fake.handler = { throw IOException("offline") }
             runBlocking {
                 cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(kept)}", """{"words":"Studio words","lines":[],"marked":true}""")
@@ -212,10 +233,10 @@ class LyricsFinderTest {
             val album = "Album (Instrumentals)"
             runBlocking {
                 for (length in listOf(200_000L, 320_000L)) {
-                    val key = "${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(song.copy(lengthMs = length, instrumentalAlbum = album))}"
+                    val key = "${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(song.copy(lengthMs = length, album = album))}"
                     cache.put(key, """{"words":"Words at $length","lines":[]}""")
                 }
-                val sheets = finder.cachedLineSets(song.copy(lengthMs = 200_000, instrumentalAlbum = album))
+                val sheets = finder.cachedLineSets(song.copy(lengthMs = 200_000, album = album))
                 assertEquals(listOf(listOf("Words at 200000")), sheets)
             }
         } finally {
@@ -229,14 +250,14 @@ class LyricsFinderTest {
         val sung = onAlbum(lasting(timedOnLrclib, 200.0), "Album")
         val marked = onAlbum(lasting(instrumentalCopy(), 200.0), album)
         respond("[$sung,$marked,$marked]")
-        val answer = found(song.copy(lengthMs = 200_000, instrumentalAlbum = album)) as? Lyrics.Found
+        val answer = found(song.copy(lengthMs = 200_000, album = album)) as? Lyrics.Found
         assertEquals("First\nSecond", answer?.words)
         assertEquals(false, answer?.markedInstrumental)
     }
 
     @Test
     fun offlineFallbackDoesNotBorrowBetweenASungAndAnInstrumentalAlbum() {
-        val instrumental = song.copy(instrumentalAlbum = "Album (Instrumentals)")
+        val instrumental = song.copy(album = "Album (Instrumentals)")
         fake.handler = { throw IOException("offline") }
         for ((previous, playing) in listOf(instrumental to song, song to instrumental)) {
             val file = File.createTempFile("lyrics", ".json")
@@ -1940,6 +1961,17 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun everyStoreThatWritesANamesScriptIsKnown() {
+        val han = setOf("JP", "TW", "HK", "CN")
+        assertEquals(
+            listOf(setOf("KR"), han + "KR", setOf("JP") + han, setOf("JP"), han, emptySet()),
+            listOf("아일릿", "사랑 愛", "夜に駆ける", "ヨアソビ", "米津玄師", "Magnetic").map(SongNames::storesWriting)
+        )
+        // A Japanese song as Korea's store writes its artist is still Japan's.
+        assertEquals(setOf("JP", "KR"), SongNames.storesWriting("終わらない歌더 블루 하츠") - (han - "JP"))
+    }
+
+    @Test
     fun netEaseHavingNoSuchSongWithLrclibDownIsntNone() {
         fake.handler = { request ->
             val url = request.url
@@ -2891,6 +2923,11 @@ class LyricsFinderTest {
         assertEquals("lrclib, timed by lrclib", better.source)
         val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
         assertEquals(LyricsFinder.FirstLook(better, final = true), again)
+        // Put in time by hand as first found, they're kept so for good instead, with no more lookups (Issue #1164).
+        runBlocking { finder.keep(remix, first.lyrics) }
+        val askedThen = fake.requestedUrls.size
+        assertEquals(LyricsFinder.FirstLook(first.lyrics, final = true), runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) })
+        assertEquals(askedThen, fake.requestedUrls.size)
         file.delete()
     }
 

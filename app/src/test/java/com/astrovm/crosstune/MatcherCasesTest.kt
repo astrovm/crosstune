@@ -586,6 +586,23 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun discoNotesOnSongsAlbumsAndVideosNeedLinkEvidenceInEveryPickerMode() {
+        val title = "Fake Song (DISCOバージョン)"
+        val fixtures = listOf(
+            Case("track note", "song0", lengthMs = 447_000, japan = japanese(title), songs = listOf(row(title, length = "7:27"))),
+            Case("album note", "song0", songs = listOf(row("Fake Song", "Album (Disco Ver.)", length = "7:27"))),
+            Case("video note", "video0", videos = listOf(video("Fake Song (ディスコ版)", "7:27")))
+        )
+        for (case in fixtures) {
+            for (picked in listOf(null, 0, SAYS_NONE)) {
+                assertEquals(case.what, null, find(case.copy(picked = picked)))
+                assertEquals(case.what, null, find(case.copy(linkMs = 281_200, picked = picked)))
+                assertEquals(case.what, case.main, find(case.copy(linkMs = 447_000, picked = picked)))
+            }
+        }
+    }
+
+    @Test
     fun theRecordingChecksKeepKnownTitlesAndRequireAnActualLiveLabel() {
         val cases = listOf(
             Case("part named on album", "song0", title = "Fake Song (Part 2)", songs = listOf(row("Fake Song", "Fake Song (Part 2)"))),
@@ -634,6 +651,16 @@ class MatcherCasesTest {
         assertEquals(listOf("song0", "song0", "song1"), listOf(
             withAlternate("偽の歌 (Remix)"), withAlternate("偽の歌 (リミックス)"), withAlternate("偽の歌 (feat. Piano Man)")
         ))
+    }
+
+    @Test
+    fun aLinkedCatalogLengthDoesNotClearTheDiscoNote() {
+        val source = Case("live length from Apple", "song0", lengthMs = 210_000, linkMs = 237_000,
+            editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"))
+        val named = row("偽の歌", length = "3:30")
+        fun alternate(album: String) = row("偽の歌 (feat. Piano Man)", album, length = "4:03")
+        assertEquals("song1", find(source.copy(songs = listOf(named, alternate("Live at Budokan")))))
+        assertEquals("song0", find(source.copy(songs = listOf(named, alternate("Live at Budokan (Disco Version)")))))
     }
 
     @Test

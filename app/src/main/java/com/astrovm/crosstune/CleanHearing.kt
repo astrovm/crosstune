@@ -35,7 +35,7 @@ internal class CleanFirst(private val clean: Microphone?, private val played: Mi
         /** A tenth of a second. */
         private const val PROBE_STEP = ShazamSignature.SAMPLE_RATE / 10
 
-        /** Off by this much from silence is still silence. */
+        /** Off by this much from silence is still silence. scripts/syncreplay/syncreplay.py takes it the same, and a test there checks. */
         private const val QUIET = 2
     }
 }
