@@ -1406,15 +1406,16 @@ internal object Readings {
         // Before the particles that mark a noun: the が that joins two clauses ends one, すげえが、弟は.
         endsPhrase(after) -> Place.PREDICATE
         after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
-        after.kind == "名詞" && after.subkind != "非自立" -> Place.MODIFIES
+        // Any noun after it, こと as much as 奴: あめえこと is 甘いこと.
+        after.kind == "名詞" -> Place.MODIFIES
         else -> Place.OTHER
     }
 
     /** A past verb followed only by its particles and a filler, as in きたねえ. */
     private fun pastVerb(span: List<Piece>): Boolean {
         if (span.first().kind != "動詞") return false
-        val past = span.getOrNull(1) ?: return false
-        return past.kind == "助動詞" && past.base == "た" && span.drop(2).all { it.kind in setOf("助詞", "フィラー") }
+        val past = span.getOrNull(1)
+        return past?.kind == "助動詞" && past.base == "た" && span.drop(2).all { it.kind in setOf("助詞", "フィラー") }
     }
 
     /**
@@ -1436,7 +1437,6 @@ internal object Readings {
         }
         // ぐれえ can be a form of ぐれる or ぐらい, so keep the dictionary's split.
         if (adjective?.base == "ぐろい") return null
-        if (drawnNoun(span) && after.firstOrNull()?.let { it.kind == "動詞" || it.subkind == "動詞非自立的" } == true) return null
         val noun = shiftedNoun(text)
         if (noun?.subkind == "代名詞") return noun
         val place = placeBefore(after.firstOrNull())
@@ -1446,16 +1446,13 @@ internal object Readings {
         // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
         // なめえ alone is 名前.
         val alone = span.first().kind != "動詞" && ahead.lastOrNull()?.kind != "名詞"
-        return byPlace(noun, allowedAdjective, place, drawnNoun(span), alone)
+        return byPlace(noun, allowedAdjective, place, alone)
     }
 
-    /**
-     * Which of [noun] and [adjective] a shifted word is in [place], or null for the dictionary's pieces. Where the
-     * noun stands, the dictionary's own one [drawn] out stays: あめーが is あめ, candy, as likely as 甘え.
-     */
-    private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, drawn: Boolean, alone: Boolean): Piece? = when {
+    /** Which of [noun] and [adjective] a shifted word is in [place], or null for the dictionary's pieces. */
+    private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, alone: Boolean): Piece? = when {
         noun != null && adjective != null -> adjective.takeIf { place == Place.PREDICATE || place == Place.MODIFIES }
-        noun != null -> noun.takeIf { !drawn && (place == Place.ARGUMENT || alone) }
+        noun != null -> noun.takeIf { place == Place.ARGUMENT || alone }
         else -> adjective?.takeIf { place != Place.ARGUMENT }
     }
 
@@ -1471,10 +1468,6 @@ internal object Readings {
             else -> false
         }
     }
-
-    /** A noun the dictionary read, drawn out: あめー, as あめ and ー. */
-    private fun drawnNoun(span: List<Piece>): Boolean =
-        span.first().kind == "名詞" && span.size > 1 && span.drop(1).all { piece -> piece.surface.all { it == 'ー' } }
 
     private data class ShiftedMatch(val end: Int, val word: Piece, val particles: List<Piece> = emptyList())
 

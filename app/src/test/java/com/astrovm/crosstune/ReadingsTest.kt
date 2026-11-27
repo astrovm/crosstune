@@ -215,6 +215,10 @@ class ReadingsTest {
             assertEquals("だせる", Readings.words("だせえ服", Script.JAPANESE).first().lookup)
             assertEquals("dase e fuku", Readings.of(listOf("だせえ服"), Script.JAPANESE).single().romanized)
             assertEquals("majide sugee", Readings.of(listOf("まじですげえ"), Script.JAPANESE).single().romanized)
+            // まじ before うぜえ is its own word, and まじう, the dictionary's form of まじ, stays one where it is one.
+            assertEquals(listOf("まじ", "うぜえ"), Readings.words("まじうぜえ", Script.JAPANESE).map { it.text })
+            assertEquals("maji uzee", Readings.of(listOf("まじうぜえ"), Script.JAPANESE).single().romanized)
+            assertEquals("majiu", Readings.of(listOf("まじう"), Script.JAPANESE).single().romanized)
             assertEquals("すごい", Readings.words("すごくすげえ", Script.JAPANESE).last().lookup)
             assertEquals("ose e", Readings.of(listOf("押せえ"), Script.JAPANESE).single().romanized)
             val negative = Readings.words("死にたかねえのはお互い様！", Script.JAPANESE)
@@ -351,6 +355,10 @@ class ReadingsTest {
             // Adjectives IPADIC lacks, from JMdict's colloquial ones.
             Triple("うぜえ", "うぜえ", "うざい"), Triple("うぜー", "うぜー", "うざい"), Triple("これはうぜえよ", "うぜえ", "うざい"),
             Triple("ちょれえ", "ちょれえ", "ちょろい"),
+            // A noun after a word that is a noun or an adjective, 甘え or 甘い, takes the adjective.
+            Triple("君はあめえこと", "あめえ", "あまい"), Triple("金をあめえ奴", "あめえ", "あまい"),
+            // A particle that starts the line joins the word: ね and みい.
+            Triple("ねみい", "ねみい", "ねむい"),
             // A particle after a noun joins the word when what follows it is no word: お前 か っけ え.
             Triple("お前かっけえ", "かっけえ", "かっこいい"), Triple("疲れてねみい", "ねみい", "ねむい"),
             // A verb split from a word, after て, is no helper verb.
