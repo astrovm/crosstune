@@ -515,6 +515,15 @@ class MatcherCasesTest {
     }
 
     @Test
+    fun aStudioAlbumNameDoesNotClearAnExplicitLiveTrackLabel() {
+        val row = row("偽の歌 (ライヴ)")
+        val search = Case("live track on studio album", null, japan = japanese("偽の歌"), songs = listOf(row),
+            videos = listOf(video("Fake Song (English Version)")), picked = 0)
+        assertEquals(null, find(search))
+        assertEquals("song0", find(search.copy(title = "Fake Song (Live)", japan = japanese("偽の歌 (ライヴ)"))))
+    }
+
+    @Test
     fun aShortVideoCannotReplaceTheWholeCatalogRecording() {
         val search = Case("a short video", null, videos = listOf(video("Fake Song", length = "0:30")), picked = 0)
         assertEquals(null, find(search))
@@ -567,9 +576,11 @@ class MatcherCasesTest {
 
     @Test
     fun thePickerCanRecognizeATranslatedTitleBeforeItsLyricsCaption() {
-        val case = Case("lyrics captions", "video0", title = "Let's go travel", japan = japanese("旅に出よう"), picked = 0,
-            videos = listOf(video("Fake Band (偽バンド) - Let's go travel (여행을 떠나요) Lyrics [Color Coded Han/Rom/Eng]", channel = "Fan")))
-        assertEquals("video0", find(case))
+        val case = Case("lyrics captions", "video0", title = "Let's go travel", japan = japanese("旅に出よう"), picked = 0)
+        for (caption in listOf(" Lyrics", " Lyrics　Video", " ".repeat(20_000) + "LYRICS")) {
+            val title = "Fake Band (偽バンド) - Let's go travel (여행을 떠나요)$caption [Color Coded Han/Rom/Eng]"
+            assertEquals("video0", find(case.copy(videos = listOf(video(title, channel = "Fan")))))
+        }
         assertEquals(null, find(case.copy(videos = listOf(video("Fake Band - Other Song (여행을 떠나요) Lyrics [Color Coded]", channel = "Fan")))))
     }
 
@@ -1406,7 +1417,8 @@ class MatcherCasesTest {
             "1 rightly doubted cyrillic" to "song1",
             "1 pick in its script" to "song1",
             "1 pick passes" to "song1",
-            "1 pick fails" to "song1",
+            // Both rows are live, and the second has a different title.
+            "1 pick fails" to null,
             "1 pick another song" to "song1",
             "9 live half" to null,
             "2 live half" to null,

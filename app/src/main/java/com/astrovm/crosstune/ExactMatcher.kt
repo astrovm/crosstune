@@ -991,7 +991,8 @@ internal class ExactMatcher(
         if (karaokeAlbum(album) && names.titles.none { karaokeAlbum(it) }) return true
         val take = pickedVideoTake(row.name, names) ?: Takes.Take.LIVE.takeIf { liveAlbum(album) }
         if (take != null && names.titles.none { namesTake(it, take) }) {
-            return take != Takes.Take.LIVE || names.linkedEdition?.live != true && names.corroboratingAlbum != SongNames.normalize(album)
+            val catalogNamesThisTake = names.takeOnAlbum && names.corroboratingAlbum == SongNames.normalize(album)
+            return take != Takes.Take.LIVE || names.linkedEdition?.live != true && !catalogNamesThisTake
         }
         return false
     }
@@ -1838,12 +1839,24 @@ internal class ExactMatcher(
     private fun namesTake(title: String, take: Takes.Take): Boolean = take == Takes.saysAnotherTake(title) || take == Takes.Take.LIVE && saysLive(title)
 
     private fun explicitlyNamedVideo(row: Row, names: Names): Boolean = SongNames.titleNames(withoutShowCredit(row.name)).any { title ->
-        val beforeCaption = SongNames.bareTitle(title).replace(VIDEO_LYRICS_CAPTION, "")
+        val beforeCaption = withoutLyricsCaption(SongNames.bareTitle(title))
         val base = SongNames.bareTitle(beforeCaption).substringBefore('～')
         names.titles.any { known ->
             SongNames.sameVersion(known, title) || SongNames.same(known, base) ||
                 samePart(numberedPartBeforeNotes(known), numberedPartBeforeNotes(title))
         }.let { it || sameLatinSpelling(base, names) || videoReadingMatches(base, names) } && !videoNamesDifferentEdition(title, names)
+    }
+
+    /** Read from the end so a long run of spaces before the caption is only read once. */
+    private fun withoutLyricsCaption(title: String): String {
+        val beforeVideo = title.beforeTrailingWord("video") ?: title
+        return beforeVideo.beforeTrailingWord("lyrics") ?: title
+    }
+
+    private fun String.beforeTrailingWord(word: String): String? {
+        val start = length - word.length
+        if (start < 1 || !isPatternSpace(this[start - 1]) || !endsWith(word, ignoreCase = true)) return null
+        return substring(0, start).trimEnd(::isPatternSpace)
     }
 
     private fun videoReadingMatches(title: String, names: Names): Boolean =
@@ -2577,7 +2590,6 @@ internal class ExactMatcher(
         private const val ALIAS_BRACKETS = "()（）[]［］{}｛｝【】〔〕「」『』〈〉《》〘〙〚〛"
         private val NEUTRAL_ALIAS_WORDS = setOf("original", "remaster", "remastered", "mono", "stereo")
         private val PRESENTATION_VIDEO_SUFFIXES = setOf("mv", "musicvideo", "officialmusicvideo", "musicvideo4kupgrade")
-        private val VIDEO_LYRICS_CAPTION = phoneRegex("\\s+lyrics(?:\\s+video)?$", RegexOption.IGNORE_CASE)
         private val SHOW_CREDIT = phoneRegex(
             """[-–—(（]?\s{0,3}+(?:(?:TV ?アニメ|アニメ|映画|ドラマ)[「『][^「」『』]*+[」』](?:オープニング(?:テーマ)?|エンディング(?:テーマ)?|主題歌|OP|ED)|(?:TV Anime "[^"]*+" (?:Opening|Ending) Theme|From "[^"]*+"))[)）]?""",
             RegexOption.IGNORE_CASE
