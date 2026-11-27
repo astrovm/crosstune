@@ -137,6 +137,37 @@ class YouTubeMusicAdEndTest {
         assertFalse(history.waitsFor(next))
     }
 
+    @Test
+    fun aResetCannotCrossQueueItemsThroughAnUnknownId() {
+        val history = YouTubeMusicAdEnd()
+        val old = item(20_000, 26)
+        val next = item(40_000, 27)
+        history.heard(old, PlaybackClock(0, 10_000), 10_000, 10_000)
+        history.heard(old.copy(queueId = null), PlaybackClock(0, 30_000), 30_000, 30_000)
+        history.heard(next, PlaybackClock(0, 30_000), 30_020, 30_020)
+        assertNull(history.heard(next, PlaybackClock(0, 30_500), 30_500, 30_500))
+    }
+
+    @Test
+    fun aRateChangeAtTheCurrentPositionCannotConfirmARestart() {
+        val pending = pendingRestart()
+        assertNull(pending.heard(item(40_000), PlaybackClock(400, 30_400, speed = 2f), 30_400, 30_400))
+    }
+
+    @Test
+    fun aLateRefreshMayOnlyConfirmAStartWithinTheWindow() {
+        val late = pendingRestart()
+        assertNull(late.heard(item(40_000), PlaybackClock(100, 31_900), 31_900, 31_900))
+        val onTime = pendingRestart()
+        assertEquals(item(20_000), onTime.heard(item(40_000), PlaybackClock(500, 31_900), 31_900, 31_900))
+    }
+
+    private fun pendingRestart() = YouTubeMusicAdEnd().apply {
+        heard(item(20_000), PlaybackClock(0, 10_000), 10_000, 10_000)
+        heard(item(20_000), PlaybackClock(0, 30_000), 30_000, 30_000)
+        heard(item(40_000), PlaybackClock(0, 30_000), 30_000, 30_000)
+    }
+
     private fun item(length: Long, id: Long = 451) = YouTubeMusicAdEnd.Item("Same title", "Same artist", length, id)
 
     private data class Capture(

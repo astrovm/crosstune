@@ -122,6 +122,7 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
             val oldest = seen.keys().next()
             seen.remove(oldest)
             identities.remove(oldest)
+            fresh.keys.removeAll { it.first == oldest }
         }
         preferences.edit { putString(KEY, seen.toString()); putString(IDENTITIES_KEY, identities.toString()) }
         return chosen

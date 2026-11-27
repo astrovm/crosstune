@@ -17,7 +17,7 @@ internal class YouTubeMusicAdEnd {
 
     private data class Report(val item: Item, val clock: PlaybackClock?)
     private data class Reset(val at: Long, val clock: PlaybackClock)
-    private data class End(val at: Long, val old: Item, val next: Item, val before: PlaybackClock?, val first: PlaybackClock?)
+    private data class End(val at: Long, val old: Item, val next: Item, val before: PlaybackClock?, val first: PlaybackClock?, val deadlineElapsed: Long)
 
     private var last: Report? = null
     private var reset: Reset? = null
@@ -25,7 +25,9 @@ internal class YouTubeMusicAdEnd {
 
     val waitingSince: Long? get() = end?.at
 
-    fun waitsFor(item: Item): Boolean = end?.let { it.next == item && it.first != null } == true
+    val sawReset: Boolean get() = end?.first != null
+
+    fun waitsFor(item: Item): Boolean = sawReset && end?.next == item
 
     /**
      * Records the current getter, including on a late callback. [clock] is null for a pause or
@@ -33,9 +35,11 @@ internal class YouTubeMusicAdEnd {
      * when the new start is confirmed, so a tentative length change cannot erase a saved length.
      */
     fun heard(item: Item, clock: PlaybackClock?, at: Long, elapsed: Long): Item? {
-        val previous = last
-        last = Report(item, clock)
-        if (previous == null || !previous.item.sameTrack(item) || clock == null) {
+        val previous = last?.takeIf { it.item.sameTrack(item) }
+        // An unknown queue ID does not erase the last known ID for the same title and artist.
+        val identified = if (item.queueId == null) item.copy(queueId = previous?.item?.queueId) else item
+        last = Report(identified, clock)
+        if (previous == null || clock == null) {
             reset = null
             end = null
             return null
@@ -55,7 +59,7 @@ internal class YouTubeMusicAdEnd {
 
     private fun advanceEnd(item: Item, clock: PlaybackClock, elapsed: Long): Item? {
         val pending = end ?: return null
-        if (pending.next != item) {
+        if (pending.next != item || clock.start() >= pending.deadlineElapsed) {
             end = null
             return null
         }
@@ -81,11 +85,12 @@ internal class YouTubeMusicAdEnd {
     private fun beginEnd(previous: Report, item: Item, clock: PlaybackClock, first: PlaybackClock?, at: Long, elapsed: Long): End? {
         val old = previous.item
         if (old.length <= 0 || item.length <= 0 || abs(item.length - old.length) <= SteadyLengths.SAME_MS) return null
-        if (first != null) return End(at, old, item, null, first)
-        val playing = previous.clock ?: return null
         val time = maxOf(elapsed, clock.atMs)
+        val deadline = time + AD_END_MS
+        if (first != null) return End(at, old, item, null, first, deadline)
+        val playing = previous.clock ?: return null
         val continuing = clock.playing && abs(clock.positionAt(time) - playing.positionAt(time)) <= SAME_CLOCK_MS
-        return if (continuing && playing.reachesEnd(old, time)) End(at, old, item, playing, null) else null
+        return if (continuing && playing.reachesEnd(old, time)) End(at, old, item, playing, null, deadline) else null
     }
 
     // Project the last playing clock, not the time since we first heard this item. Time paused does not count.
@@ -97,5 +102,5 @@ internal class YouTubeMusicAdEnd {
     private fun PlaybackClock.start(): Long = if (playing) atMs - (positionMs / speed.toDouble()).toLong() else atMs
 
     private fun PlaybackClock.startsAfter(first: PlaybackClock): Boolean =
-        if (first.playing) start() - first.start() > SAME_CLOCK_MS else positionAt(first.atMs) <= first.positionMs
+        if (first.playing) first.positionAt(atMs) - positionMs > SAME_CLOCK_MS * first.speed else positionAt(first.atMs) <= first.positionMs
 }

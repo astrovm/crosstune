@@ -424,8 +424,8 @@ internal class MediaSessionPlayback(
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
-    /** The clock each app, by package, last fell behind on. */
-    private val late = ConcurrentHashMap<String, LateClock>()
+    /** The clock each Android media session last fell behind on. */
+    private val late = ConcurrentHashMap<MediaSession.Token, LateClock>()
     private val notedClocks = ConcurrentHashMap<String, NotedClock>()
     // A session can publish the next item's clock before its name. Only compare IDs while it is watched.
     private data class QueueMetadata(val id: Long, val title: String?, val artist: String?, val renamedAt: Long? = null,
@@ -503,8 +503,8 @@ internal class MediaSessionPlayback(
         val old = history.heard(adItem(metadata, state), clock, SystemClock.uptimeMillis(), now()) ?: return
         lengths.forget(old.title.orEmpty(), old.artist.orEmpty(), old.length, packageName)
         // Another screen may have seen the provisional origin before the length, and learnt its lead.
-        val learnt = late[packageName]
-        if (learnt != null && clock != null && learnt.ahead(clock) != null) late.remove(packageName, learnt)
+        val learnt = late[sessionToken]
+        if (learnt != null && clock != null && learnt.ahead(clock) != null) late.remove(sessionToken, learnt)
         restarts.merge(sessionToken, 1L, Long::plus)
     }
 
@@ -716,7 +716,7 @@ internal class MediaSessionPlayback(
                     followed?.unregisterCallback(callback)
                     modesWatched()
                     followed = playing
-                    clocks.switchTo(playing?.packageName)
+                    clocks.switchTo(playing)
                     playing?.registerCallback(callback, handler)
                     // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
                     modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
@@ -803,16 +803,18 @@ internal class MediaSessionPlayback(
         private var ending = false
         private var learningAllowed = true
 
-        fun switchTo(app: String?) {
+        fun switchTo(controller: MediaController?) {
             adEnded = false
             restart = 0L
             ending = false
-            begin(app)
+            begin(controller)
         }
 
-        /** From here on [app]'s clock, with nothing kept of the one before. */
-        fun begin(app: String?) {
-            clocks = steadyClock(app) { learningAllowed }
+        private fun begin(controller: MediaController?) {
+            val token = controller?.sessionToken
+            clocks = SteadyClock(token?.let(late::get), notedClocks.getOrPut(controller?.packageName.orEmpty(), ::NotedClock)) {
+                if (token != null && learningAllowed) late[token] = it
+            }
             movesSeen = moves
         }
 
@@ -823,21 +825,16 @@ internal class MediaSessionPlayback(
          */
         fun of(controller: MediaController, said: Following): PlaybackClock {
             val latest = restarts[controller.sessionToken] ?: 0L
-            val inWindow = synchronized(queueWatchers) { adEnds[controller.sessionToken]?.waitingSince != null }
+            val inWindow = synchronized(queueWatchers) { adEnds[controller.sessionToken]?.sawReset == true }
             val restarted = latest != restart
             learningAllowed = !inWindow && !ending && !restarted
             ending = inWindow
             restart = latest
             val starts = said.ad || adEnded || restarted
             adEnded = said.ad
-            if (starts || moves !== movesSeen) begin(controller.packageName)
+            if (starts || moves !== movesSeen) begin(controller)
             return clocks.of(said.clock)
         }
-    }
-
-    /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
-    private fun steadyClock(app: String?, mayLearn: () -> Boolean) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) {
-        if (app != null && mayLearn()) late[app] = it
     }
 
     /**
@@ -1143,7 +1140,9 @@ internal class MediaSessionPlayback(
     override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
 
     private fun activeSessions(): List<MediaController> = sessions.getActiveSessions(listener).also { controllers ->
-        covers.retainSessions(controllers.map { it.sessionToken }.toSet())
+        val active = controllers.map { it.sessionToken }.toSet()
+        late.keys.retainAll(active)
+        covers.retainSessions(active)
     }
 
     /**

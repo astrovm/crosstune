@@ -2416,6 +2416,55 @@ class PlaybackTest {
     }
 
     @Test
+    fun reopeningDuringARealLengthCorrectionKeepsTheSteadyClock() {
+        allow()
+        val track = MusicMetadata("Song", "Artist")
+        val music = youTubeMusic(track.title, track.artist, 20_000, updated = NOW - 20_000, item = 26)
+        val first = followed(track)
+        music.says(track.title, track.artist, 40_000)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 500, 26, position = 20_000, afterMs = 500)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        assertEquals(21_500L, first.now().clock.positionAt(NOW + 1_500))
+        assertEquals(21_500L, followed(track).now().clock.positionAt(NOW + 1_500))
+    }
+
+    @Test
+    fun anAdRestartLeavesAnotherSessionsMatchingClockCorrectionAlone() {
+        allow()
+        val ad = MusicMetadata("Faded", "Alan Walker")
+        val music = youTubeMusic(ad.title, ad.artist, 20_000, updated = NOW - 20_000, item = 26)
+        followed(ad)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW, 26)
+        music.says(ad.title, ad.artist, 40_000)
+        val track = MusicMetadata("Alone", "Alan Walker")
+        val other = youTubeMusic(track.title, track.artist, 60_000, updated = NOW, item = 27)
+        val first = followed(track)
+        other.isAt(PlaybackState.STATE_PLAYING, NOW + 500, 27)
+        assertEquals(500L, first.now().clock.positionAt(NOW + 500))
+        // Once this screen closes, it cannot relearn its correction from the other session's callbacks.
+        collecting.last().cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 500, 26)
+        assertEquals(listOf(40_000L), keptLengths(ad.title, ad.artist))
+        assertEquals(500L, followed(track).now().clock.positionAt(NOW + 500))
+    }
+
+    @Test
+    fun forgettingAnEvictedLengthCannotEvictAnotherRecordingIdentity() {
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        lengths.of("Evicted", "Artist", 20_000, "player")
+        repeat(500) { index ->
+            val title = "Track $index"
+            lengths.of(title, "Artist", 20_000, "player")
+            lengths.of(title, "Artist", 40_000, "player")
+            lengths.forget(title, "Artist", 20_000, "player")
+        }
+        assertTrue(lengths.known("Evicted", "Artist").isEmpty())
+        lengths.forget("Evicted", "Artist", 20_000, "player")
+        assertEquals(20_000L, lengths.of("Track 0", "Artist", 20_500))
+    }
+
+    @Test
     fun aSongSaidASecondLongerIsStillTheSameRecording() {
         allow()
         // YouTube Music says the same song is 220 seconds long, then 221.
