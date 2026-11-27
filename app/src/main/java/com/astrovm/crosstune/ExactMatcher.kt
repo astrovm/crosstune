@@ -984,10 +984,13 @@ internal class ExactMatcher(
         val catalog = names.linkedEdition ?: names.primaryEdition?.takeIf { sameRecordingLength(sourceLength, it.lengthMs) }
         val live = saysLive(metadata.title) || catalog?.live == true
         val artists = exact.map { it.second.details.first() }.toSet()
-        if (rows.any { row -> row.details.first() in artists && rowIsLive(row) != live && fitsReleaseLength(row, sourceLength) &&
-                onlyLiveTakeOf(row, metadata.title) }) return null
+        if (rows.any { row -> row.details.first() in artists && otherTakeFits(row, live, sourceLength, metadata.title) }) return null
         return exact.firstOrNull { disco.allows(it.second) && rowIsLive(it.second) == live }
     }
+
+    /** The song's other take, live where the link's isn't or the other way round, as long as the link. */
+    private fun otherTakeFits(row: Row, live: Boolean, sourceLength: Long, title: String) =
+        rowIsLive(row) != live && fitsReleaseLength(row, sourceLength) && onlyLiveTakeOf(row, title)
 
     /** The song's name with a live note and nothing else: no remix, no re-recording, as "Song - Live" is. */
     private fun onlyLiveTakeOf(row: Row, title: String): Boolean {
