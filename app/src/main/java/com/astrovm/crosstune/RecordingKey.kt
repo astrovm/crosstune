@@ -97,6 +97,8 @@ internal object RecordingKey {
  */
 internal class SteadyLengths(private val preferences: SharedPreferences) {
     private val seen: JSONObject by lazy { runCatching { JSONObject(preferences.getString(KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
+    /** Lengths removed as possible ads still identify recordings that were keyed before the removal. */
+    private val identities: JSONObject by lazy { runCatching { JSONObject(preferences.getString(IDENTITIES_KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
     /** The apps that said each new length in this run; a length said by another app is not an ad's alone. */
     private val fresh = mutableMapOf<Pair<String, Long>, MutableSet<String>>()
 
@@ -104,17 +106,25 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
     fun of(title: String, artist: String, lengthMs: Long, app: String = ""): Long {
         val key = keyOf(title, artist)
         val known = seen.optJSONArray(key) ?: JSONArray()
-        (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let {
-            fresh[key to it]?.add(app)
-            return it
+        val identity = identities.optJSONArray(key) ?: known
+        val matching = (0 until identity.length()).map(identity::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }
+        val chosen = matching ?: lengthMs
+        if ((0 until known.length()).any { known.getLong(it) == chosen }) {
+            fresh[key to chosen]?.add(app)
+            return chosen
         }
         seen.remove(key)
-        seen.put(key, known.put(lengthMs))
-        fresh[key to lengthMs] = mutableSetOf(app)
+        seen.put(key, known.put(chosen))
+        if (identity !== known && matching == null) identities.put(key, identity.put(chosen))
+        fresh[key to chosen] = mutableSetOf(app)
         // The songs heard longest ago go first once there are many.
-        while (seen.length() > MAX_SONGS) seen.remove(seen.keys().next())
-        preferences.edit { putString(KEY, seen.toString()) }
-        return lengthMs
+        while (seen.length() > MAX_SONGS) {
+            val oldest = seen.keys().next()
+            seen.remove(oldest)
+            identities.remove(oldest)
+        }
+        preferences.edit { putString(KEY, seen.toString()); putString(IDENTITIES_KEY, identities.toString()) }
+        return chosen
     }
 
     /** The lengths said before for the song, by any app. */
@@ -131,9 +141,11 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
         val key = keyOf(title, artist)
         if (fresh[key to lengthMs] != setOf(app)) return
         fresh.remove(key to lengthMs)
+        if (!identities.has(key)) identities.put(key, JSONArray(known(title, artist)))
+        while (identities.length() > MAX_SONGS) identities.remove(identities.keys().next())
         val kept = known(title, artist).filter { it != lengthMs }
         if (kept.isEmpty()) seen.remove(key) else seen.put(key, JSONArray(kept))
-        preferences.edit { putString(KEY, seen.toString()) }
+        preferences.edit { putString(KEY, seen.toString()); putString(IDENTITIES_KEY, identities.toString()) }
     }
 
     private fun keyOf(title: String, artist: String) = "${SongNames.normalize(title)}\u0000${SongNames.normalize(artist)}"
@@ -142,5 +154,6 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
         const val SAME_MS = 1_500L
         private const val MAX_SONGS = 500
         private const val KEY = "song_lengths"
+        private const val IDENTITIES_KEY = "song_length_identities"
     }
 }

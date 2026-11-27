@@ -2066,6 +2066,62 @@ class PlaybackTest {
     }
 
     @Test
+    fun aThirdLengthNearTheFirstKeepsTheRecordingKey() {
+        allow()
+        val song = MusicMetadata("Faded", "Alan Walker")
+        val music = youTubeMusic(song.title, song.artist, 212_532, updated = NOW, item = 26)
+        followed(song)
+        val pinned = checkNotNull(playback.recording(song))
+        val first = pinned.recordingId
+        val pinnedFollower = followed(pinned)
+        music.says(song.title, song.artist, 233_000)
+        music.says(song.title, song.artist, 213_000)
+        assertEquals(first, checkNotNull(playback.recording(song)).recordingId)
+        assertNotNull(pinnedFollower.last())
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        assertEquals(212_532L, lengths.of(song.title, song.artist, 213_000))
+    }
+
+    @Test
+    fun aSongAlreadyPlayingWhenItsLengthChangesCanPause() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.isAt(PlaybackState.STATE_PLAYING, NOW, 26)
+        music.says("Faded", "Alan Walker", 212_532)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW, 26, afterMs = 100)
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 500, 26, position = 500, afterMs = 400)
+        assertFalse(seen.now().ad)
+        assertEquals(PlaybackClock(500, NOW + 500, playing = false), seen.now().clock)
+    }
+
+    @Test
+    fun aSongPlayingAtTheBufferingTimestampCanPauseAfterTheLengthChanges() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.isAt(PlaybackState.STATE_BUFFERING, NOW + 160, 26, afterMs = 160)
+        music.says("Faded", "Alan Walker", 212_532)
+        music.isAt(PlaybackState.STATE_PLAYING, NOW + 160, 26)
+        music.isAt(PlaybackState.STATE_PAUSED, NOW + 560, 26, position = 400, afterMs = 400)
+        assertFalse(seen.now().ad)
+        assertEquals(PlaybackClock(400, NOW + 560, playing = false), seen.now().clock)
+    }
+
+    @Test
+    fun aLateAdCallbackStillRetimesTheSongAlreadyPlayingInTheGetter() {
+        allow()
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26)
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        music.isAt(PlaybackState.STATE_PLAYING, NOW, 26)
+        music.says("Faded", "Alan Walker", 212_532)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 500, 26, 0))
+        val old = recorded(PlaybackState.STATE_PLAYING, NOW, 26, 0)
+        shadowOf(music).callbacks.toList().forEach { it.onPlaybackStateChanged(old) }
+        assertEquals(NOW + 500, seen.now().clock.startedAt())
+    }
+
+    @Test
     fun aSongWhoseLengthIsPutRightAsItStartsPlaysOn() {
         allow()
         // Not from a recording: 1.2 s into a song, YouTube Music says another length for it, with no stop to load.
@@ -2310,6 +2366,33 @@ class PlaybackTest {
         // Kept the wrong way, it starts over.
         prefs.edit().putString("song_lengths", "not json").commit()
         assertEquals(201_000L, SteadyLengths(prefs).of("Song 500", "Band", 201_000))
+    }
+
+    @Test
+    fun retiredRecordingLengthsStayOrderedButDoNotNameAds() {
+        val prefs = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val lengths = SteadyLengths(prefs)
+        lengths.of("Faded", "Alan Walker", 212_532, "music")
+        lengths.forget("Faded", "Alan Walker", 212_532, "music")
+        lengths.of("Faded", "Alan Walker", 233_000, "music")
+        val again = SteadyLengths(prefs)
+        assertEquals(212_532L, again.of("Faded", "Alan Walker", 213_000))
+        assertEquals(233_000L, again.of("Faded", "Alan Walker", 234_000))
+        assertEquals(listOf(233_000L, 212_532L), again.known("Faded", "Alan Walker"))
+    }
+
+    @Test
+    fun retiredRecordingLengthsAreBounded() {
+        val prefs = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val lengths = SteadyLengths(prefs)
+        repeat(501) {
+            val title = "Ad $it"
+            lengths.of(title, "Band", 10_000, "music")
+            lengths.forget(title, "Band", 10_000, "music")
+        }
+        val again = SteadyLengths(prefs)
+        assertEquals(10_500L, again.of("Ad 0", "Band", 10_500))
+        assertEquals(10_000L, again.of("Ad 500", "Band", 10_500))
     }
 
     @Test
