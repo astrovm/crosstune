@@ -4518,12 +4518,17 @@ internal class MainViewModel(
         val target = uiState.lyricsFor?.let(RecordingKey::of)
         val draft = (manualReport as? ManualReportDraft.Song)?.takeIf { it.target == target && it.comment == comment }
             ?: ManualReportDraft.Song(target, comment, reportOn(sender, uiState.lyricsFor, comment).copy(id = java.util.UUID.randomUUID().toString()))
+        sendManual(draft) { sender.send(draft.report) }
+    }
+
+    /** Sends [draft] with [send], after the one sent before it. Only the last one sent says how it went. */
+    private fun sendManual(draft: ManualReportDraft, send: suspend () -> Delivery) {
         manualReport = draft
         uiState = uiState.copy(report = ReportStatus.SENDING)
         val previous = manualReportJob
         viewModelScope.launchKept({ manualReportJob = it }) {
             previous?.join()
-            val delivery = sender.send(draft.report)
+            val delivery = send()
             if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
         }
     }
@@ -4541,14 +4546,7 @@ internal class MainViewModel(
         val input = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
         val draft = (manualReport as? ManualReportDraft.Reading)?.takeIf { it.input == input }
             ?: ManualReportDraft.Reading(input, input.copy(id = java.util.UUID.randomUUID().toString()))
-        manualReport = draft
-        uiState = uiState.copy(report = ReportStatus.SENDING)
-        val previous = manualReportJob
-        viewModelScope.launchKept({ manualReportJob = it }) {
-            previous?.join()
-            val delivery = sender.send(draft.report)
-            if (manualReport === draft) uiState = uiState.copy(report = delivery.manualStatus)
-        }
+        sendManual(draft) { sender.send(draft.report) }
     }
 
     fun closeReport() {

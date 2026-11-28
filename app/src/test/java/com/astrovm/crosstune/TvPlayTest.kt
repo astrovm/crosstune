@@ -242,6 +242,38 @@ class TvPlayTest {
     }
 
     @Test
+    fun backThatTheKeyboardTookLeavesTheCoverAsItIs() {
+        launch()
+        val floating = playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        val view = overlays(floating.get()).single()
+        // The keyboard took the press to hide, and only its end comes here, as measured on a Samsung.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0, 0, 0, 0, KeyEvent.FLAG_CANCELED)))
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        // A whole press goes back, to the player, with its end marked canceled, as that phone sends it.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+        assertTrue(view.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0, 0, 0, 0, KeyEvent.FLAG_CANCELED)))
+        waitUntil { onPlayer() }
+        // And that press is spent: an end alone after it goes nowhere.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
+        composeRule.waitForIdle()
+        assertTrue(onPlayer())
+        // Nor does a press that began here and ended in another window count for an end that comes later.
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
+        view.isPressed = true
+        view.dispatchWindowFocusChanged(false)
+        // The view still does what any view does when its window loses focus, such as letting go of a touch.
+        assertFalse(view.isPressed)
+        view.dispatchWindowFocusChanged(true)
+        assertTrue(view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)))
+        composeRule.waitForIdle()
+        assertTrue(onPlayer())
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+    }
+
+    @Test
     fun onATvBackFromTheWordsLandsOnPauseAndFromThePlayerOnPlay() {
         launch()
         val floating = playCovered()
@@ -1061,6 +1093,42 @@ class TvPlayTest {
         val playButton = composeRule.onNode(hasContentDescription(play)).fetchSemanticsNode().boundsInRoot
         val microphone = composeRule.onNode(hasContentDescription(string(R.string.lyrics_listen_along))).fetchSemanticsNode().boundsInRoot
         assertTrue(playButton.left > microphone.right)
+    }
+
+    /**
+     * Issue #1288: on a phone, YouTube Music without Premium is covered by Crosstune's screen in a service's window,
+     * from which a sheet's window of its own crashed Crosstune, with "token null is not valid".
+     */
+    @Test
+    fun onAPhoneASheetOverTheCoverIsDrawnInItRatherThanInAWindowItCantOpen() {
+        playInFront()
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val started = shadowOf(app).nextStartedService
+        checkNotNull(controller) { "Expected controller to be non-null" }.pause().stop()
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = morpheMusic)
+        waitUntil { shown("Demo one") }
+        // Any window beside the cover would be one with no token, which Android refuses.
+        val windows = { Shadow.extract<ShadowWindowManagerImpl>(floating.get().getSystemService(WindowManager::class.java)).views.size }
+        val before = windows()
+
+        click(string(R.string.lyrics_about_song))
+        val report = hasContentDescription(string(R.string.report_problem)) and hasAnyAncestor(isDialog())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(before, windows())
+        // A dialog over the sheet, the report, stays in the cover too.
+        composeRule.onNode(report).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { shown(string(R.string.report_send)) }
+        assertEquals(before, windows())
+
+        // Back puts each away, as it does a window's.
+        pressBack(floating.get())
+        waitUntil { !shown(string(R.string.report_send)) }
+        pressBack(floating.get())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isEmpty() }
+        assertTrue(shown("Demo one"))
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
     }
 
     /** Whether the remote is on something in a dialog or a sheet. */

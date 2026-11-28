@@ -117,8 +117,9 @@ internal object Readings {
      * 28 to keep commands with an object or a person subject as verbs.
      * 29 to keep object commands before punctuation followed by another clause.
      * 30 to keep object commands across pauses and before spaces.
+     * 31 to look up かわええ as かわいい, and read 頭がいてえ as 頭 が いてえ with UniDic.
      */
-    const val VERSION = 30
+    const val VERSION = 31
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -1012,7 +1013,8 @@ internal object Readings {
             val a = mutableListOf(ours[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
-            val better = a.any { it.unknown } || keptWhole(a, b) || (a.size == 1 && b.size == 1 && (a[0].strayAffix(before) || nounNotAffix(a[0], b[0], before)))
+            val whole = keptWhole(a, b) && !verbInNoun(a, b, ours.getOrNull(i))
+            val better = a.any { it.unknown } || whole || (a.size == 1 && b.size == 1 && (a[0].strayAffix(before) || nounNotAffix(a[0], b[0], before)))
             out += if (better && b.none { it.unknown }) b else a
         }
         return out
@@ -1037,6 +1039,21 @@ internal object Readings {
 
     /** Words in kana a noun after can't be the second half of: いつか, a pronoun, and the names IPADIC makes up, いつの. */
     private val NOT_PLAIN_NOUNS = setOf("副詞可能", "代名詞", "固有名詞")
+
+    /**
+     * Whether UniDic's noun [b] takes in a particle and a verb IPADIC reads in [a], with the verb's ending after, [next]:
+     * 頭がいてえ is 頭 が いてえ, my head hurts, not 頭がい, the skull, as IPADIC's い goes on with て, and 頭がいたい goes
+     * on with たい. A noun made of words alone stays whole, 雨宿り あまやどり, whatever follows. [b] is one word here,
+     * as [keptWhole] has said so first.
+     */
+    private fun verbInNoun(a: List<Piece>, b: List<Piece>, next: Piece?): Boolean {
+        val afterVerb = next != null && when (next.kind) {
+            "助詞" -> next.subkind == "接続助詞" && next.surface in setOf("て", "で")
+            "助動詞" -> next.base in setOf("たい", "ます", "た")
+            else -> false
+        }
+        return afterVerb && a.last().kind == "動詞" && a.any { it.kind == "助詞" } && b.single().kind == "名詞"
+    }
 
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
     private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
@@ -1265,14 +1282,19 @@ internal object Readings {
         val stem = surface.dropLast(1)
         val before = stem.lastOrNull() ?: return emptyList()
         return when (surface.last()) {
+            // かわええ says かわいい's いい as ええ, as Kansai does, before the え said for わ, や or よ: not かわよい.
             // かっけえ shifts かっこいい's こ and says its いい as え.
-            'え', 'ー' -> shiftedE[before]?.let { row -> row.map { stem.dropLast(1) + it + "い" } + (stem.dropLast(1) + row.last() + "いい") }.orEmpty() +
+            'え', 'ー' -> listOfNotNull(saidEe(surface)) + shiftedE[before]?.let { row -> row.map { stem.dropLast(1) + it + "い" } + (stem.dropLast(1) + row.last() + "いい") }.orEmpty() +
                 if (isHan(before)) listOf(stem + "い") else emptyList()
             'い' -> listOfNotNull(shiftedI[before]?.let { stem.dropLast(1) + it + "い" }) +
                 if (before in shiftedI && stem.getOrNull(stem.lastIndex - 1)?.let(::isHan) == true) listOf(stem.dropLast(1) + "い") else emptyList()
             else -> emptyList()
         }
     }
+
+    /** The adjective in いい [surface] says with ええ: かわいい for かわええ and かわえー. One kana before, かええ, is too short to tell. */
+    private fun saidEe(surface: String): String? =
+        surface.dropLast(2).takeIf { it.length > 1 && surface[surface.length - 2] == 'え' }?.let { it + "いい" }
 
     /** JMdict's nouns in -ae with their written form, おまえ and お前, and its kana adjectives IPADIC can lack, ~うざい. */
     private val shiftedWords: Pair<List<String>, List<String>> by lazy {
@@ -1356,6 +1378,7 @@ internal object Readings {
             val ipadic = tokenizer.knownWord(root)?.takeIf { it.partOfSpeechLevel1 == "形容詞" && it.baseForm == root }
             val reading = ipadic?.reading ?: root.takeIf { it in shiftedKanaAdjectives } ?: continue
             val kana = hiragana(reading)
+            if (root == saidEe(surface)) return Piece(surface, kana.dropLast(2) + "ええ", "形容詞", "自立", root, reader = Reader.RULES)
             // The kana that shifts, and the ending said after it: こ and いい in かっこいい, ご and い in すごい.
             val ending = if (root.endsWith("いい")) 2 else 1
             val vowel = kana.getOrNull(kana.length - ending - 1) ?: continue
@@ -1385,15 +1408,16 @@ internal object Readings {
         // Before the particles that mark a noun: the が that joins two clauses ends one, すげえが、弟は.
         endsPhrase(after) -> Place.PREDICATE
         after.kind == "助詞" && after.surface in CASE_PARTICLES -> Place.ARGUMENT
-        after.kind == "名詞" && after.subkind != "非自立" -> Place.MODIFIES
+        // Any noun after it, こと as much as 奴: あめえこと is 甘いこと.
+        after.kind == "名詞" -> Place.MODIFIES
         else -> Place.OTHER
     }
 
     /** A past verb followed only by its particles and a filler, as in きたねえ. */
     private fun pastVerb(span: List<Piece>): Boolean {
         if (span.first().kind != "動詞") return false
-        val past = span.getOrNull(1) ?: return false
-        return past.kind == "助動詞" && past.base == "た" && span.drop(2).all { it.kind in setOf("助詞", "フィラー") }
+        val past = span.getOrNull(1)
+        return past?.kind == "助動詞" && past.base == "た" && span.drop(2).all { it.kind in setOf("助詞", "フィラー") }
     }
 
     /**
@@ -1415,7 +1439,6 @@ internal object Readings {
         }
         // ぐれえ can be a form of ぐれる or ぐらい, so keep the dictionary's split.
         if (adjective?.base == "ぐろい") return null
-        if (drawnNoun(span) && after.firstOrNull()?.let { it.kind == "動詞" || it.subkind == "動詞非自立的" } == true) return null
         val noun = shiftedNoun(text)
         if (noun?.subkind == "代名詞") return noun
         val place = placeBefore(after.firstOrNull())
@@ -1425,16 +1448,13 @@ internal object Readings {
         // Without a particle, a noun stands where the dictionary saw no verb and no noun before it:
         // なめえ alone is 名前.
         val alone = span.first().kind != "動詞" && ahead.lastOrNull()?.kind != "名詞"
-        return byPlace(noun, allowedAdjective, place, drawnNoun(span), alone)
+        return byPlace(noun, allowedAdjective, place, alone)
     }
 
-    /**
-     * Which of [noun] and [adjective] a shifted word is in [place], or null for the dictionary's pieces. Where the
-     * noun stands, the dictionary's own one [drawn] out stays: あめーが is あめ, candy, as likely as 甘え.
-     */
-    private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, drawn: Boolean, alone: Boolean): Piece? = when {
+    /** Which of [noun] and [adjective] a shifted word is in [place], or null for the dictionary's pieces. */
+    private fun byPlace(noun: Piece?, adjective: Piece?, place: Place, alone: Boolean): Piece? = when {
         noun != null && adjective != null -> adjective.takeIf { place == Place.PREDICATE || place == Place.MODIFIES }
-        noun != null -> noun.takeIf { !drawn && (place == Place.ARGUMENT || alone) }
+        noun != null -> noun.takeIf { place == Place.ARGUMENT || alone }
         else -> adjective?.takeIf { place != Place.ARGUMENT }
     }
 
@@ -1450,10 +1470,6 @@ internal object Readings {
             else -> false
         }
     }
-
-    /** A noun the dictionary read, drawn out: あめー, as あめ and ー. */
-    private fun drawnNoun(span: List<Piece>): Boolean =
-        span.first().kind == "名詞" && span.size > 1 && span.drop(1).all { piece -> piece.surface.all { it == 'ー' } }
 
     private data class ShiftedMatch(val end: Int, val word: Piece, val particles: List<Piece> = emptyList())
 

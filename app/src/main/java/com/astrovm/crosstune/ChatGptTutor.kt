@@ -218,21 +218,18 @@ internal class ChatGptTutor(
     suspend fun songsFor(description: String): List<Pair<String, String>>? {
         val model = chatGpt.model() ?: return null
         val key = "describe|$model|${description.trim().lowercase()}"
-        val kept = cache.getOrAsk(key) {
+        return songs(key) {
             // Tried on real descriptions with GPT-6-Luna: "plastic algo" found Plastic Love and "una
             // ciudad de la furia" Soda Stereo's, in about 3 s; searching the web found no more. A mood,
             // "rainy sunday city pop", gave 15 for a playlist, in about 12 s, still one for "plastic algo".
-            val reply = chatGpt.ask(
+            chatGpt.ask(
                 "You find songs from what someone remembers about them. The user sends a description, maybe vague, in any language. " +
                     "Name up to five songs that match it, most likely first, only real songs you're sure exist. " +
                     "When it describes a mood, a genre, a scene or a moment rather than one song, name $PLAYLIST_SONGS different songs that fit it instead, for a playlist. " +
                     "Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.",
                 description.trim()
             )
-            // None found isn't kept, so it's asked again another time.
-            (reply.array() ?: return null).takeIf { it.length() > 0 }?.toString()
-        } ?: return emptyList()
-        return JSONArray(kept).objects().mapNotNull(::named)
+        }
     }
 
     /**
@@ -419,21 +416,18 @@ internal class ChatGptTutor(
     suspend fun songsLike(song: MusicMetadata): List<Pair<String, String>>? {
         val model = chatGpt.model() ?: return null
         val key = "like|$model|${song.title}|${song.artist}"
-        val kept = cache.getOrAsk(key) {
+        return songs(key) {
             // Tried on real songs with GPT-6-Luna: Plastic Love gave twelve city pop songs, Miki
             // Matsubara's Stay With Me, Anri's Remember Summer Days, Junko Ohashi's Telephone Number,
             // in about 8 s; one named twice in two ways, so no song is asked for twice.
-            val reply = chatGpt.ask(
+            chatGpt.ask(
                 "You recommend songs. The user sends a song they like, as title and artist. Name 12 other songs like it, by other artists too, in the same language and close in sound, mood and era, " +
                     "mixing well known and lesser known ones, no song twice. Only real songs you're sure exist. " +
                     "Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.",
                 "${song.title} by ${song.artist}",
                 effort = "low"
             )
-            // None found isn't kept, so it's asked again another time.
-            (reply.array() ?: return null).takeIf { it.length() > 0 }?.toString()
-        } ?: return emptyList()
-        return JSONArray(kept).objects().mapNotNull(::named)
+        }
     }
 
     /**
@@ -462,6 +456,15 @@ internal class ChatGptTutor(
         effort = "low",
         onText = onText
     )
+
+    /** The songs [ask] names, as title to artist, kept under [key]; null when it couldn't say. */
+    private suspend fun songs(key: String, ask: suspend () -> ChatGptReply): List<Pair<String, String>>? {
+        val kept = cache.getOrAsk(key) {
+            // None found isn't kept, so it's asked again another time.
+            (ask().array() ?: return null).takeIf { it.length() > 0 }?.toString()
+        } ?: return emptyList()
+        return JSONArray(kept).objects().mapNotNull(::named)
+    }
 
     /** A song named in [json] by its title and artist, or null when either is missing. */
     private fun named(json: JSONObject): Pair<String, String>? {

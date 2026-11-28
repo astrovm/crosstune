@@ -163,10 +163,7 @@ internal class LookupCache(
     private fun write(file: File, json: String) {
         try {
             file.parentFile?.mkdirs()
-            // Written aside first, so a crash midway never leaves a broken file.
-            val temporary = File(file.path + ".tmp")
-            temporary.writeText(json)
-            temporary.renameTo(file)
+            file.writeWhole(json)
         } catch (_: IOException) {
             // Not kept, it's just looked up again.
         }

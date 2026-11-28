@@ -592,7 +592,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // On the move to another screen, the one left has nothing to wait for.
     LaunchedEffect(moving.targetState) { if (moving.targetState != waiting) waiting = null }
     CompositionLocalProvider(LocalCovers provides actions.covers, LocalMainFocus provides focuses.of(Screen.MAIN)) {
-    WithOverlays(inside = state.phone == Phone.TV, overlays) {
+    // Covering another app, the screen is in a service's window, where a dialog's own window would crash Crosstune.
+    WithOverlays(inside = state.phone == Phone.TV || !inAnActivity(), overlays) {
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
@@ -1316,17 +1317,7 @@ private fun SongSearchSheet(
         title = { Text(stringResource(R.string.song_search_title)) },
         text = {
             if (state.isSearchingSongs) {
-                Column {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(
-                        stringResource(R.string.loading_text),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .padding(top = 10.dp)
-                            .semantics { liveRegion = LiveRegionMode.Polite }
-                    )
-                }
+                Waiting(stringResource(R.string.loading_text))
             } else {
                 Column {
                     // ChatGPT's picks come in a moment later, ahead of the others.
@@ -1383,17 +1374,7 @@ private fun SongSearchSheet(
 @Composable
 private fun StatusSection(state: UiState, actions: ScreenActions) {
     AnimatedVisibility(visible = state.isLoading || state.isMatching, enter = Motion.appear, exit = Motion.disappear) {
-        Column(modifier = Modifier.padding(top = 20.dp)) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Text(
-                text = stringResource(if (state.isLoading) R.string.loading_text else R.string.matching_text),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .semantics { liveRegion = LiveRegionMode.Polite }
-            )
-        }
+        Waiting(stringResource(if (state.isLoading) R.string.loading_text else R.string.matching_text), Modifier.padding(top = 20.dp))
     }
 
     // Keyed on whether there's one, so a fixed error fades out with its message still on it.
@@ -1809,17 +1790,23 @@ private fun QueueProgress(progress: Pair<Int, Int>?, modifier: Modifier = Modifi
     LaunchedEffect(progress) { progress?.let { last = it } }
     val shown = progress ?: last
     AnimatedVisibility(visible = progress != null, enter = Motion.appear, exit = Motion.disappear) {
-        Column(modifier = modifier.padding(top = 16.dp)) {
-            LinearProgressIndicator(progress = { shown.first.toFloat() / shown.second }, modifier = Modifier.fillMaxWidth())
-            Text(
-                stringResource(R.string.play_all_progress, shown.first, shown.second),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .semantics { liveRegion = LiveRegionMode.Polite }
-            )
-        }
+        Waiting(stringResource(R.string.play_all_progress, shown.first, shown.second), modifier.padding(top = 16.dp)) { shown.first.toFloat() / shown.second }
+    }
+}
+
+/** A bar with what's waited for said under it, and read out as it changes. [progress] is how far it got, when that's known. */
+@Composable
+private fun Waiting(text: String, modifier: Modifier = Modifier, progress: (() -> Float)? = null) {
+    Column(modifier = modifier) {
+        if (progress == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) else LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 10.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+        )
     }
 }
 

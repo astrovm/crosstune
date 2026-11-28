@@ -1641,6 +1641,78 @@ class PlaybackTest {
     }
 
     @Test
+    fun aFollowerThatHeardNeitherAdEndStillTakesTheSongsOwnStart() {
+        allow()
+        // Issue #1291: paused just in, it's followed here; another screen alone hears two ads end before the song.
+        val music = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW, item = 26, state = PlaybackState.STATE_PAUSED)
+        shadowOf(music).setPlaybackState(recorded(PlaybackState.STATE_PAUSED, NOW, 26, 300))
+        val seen = followed(MusicMetadata("Faded", "Alan Walker"))
+        assertEquals(PlaybackClock(300, NOW, playing = false), seen.now().clock)
+        val here = shadowOf(music).callbacks.toList()
+        followed(MusicMetadata("Alone", "Alan Walker"))
+        val elsewhere = shadowOf(music).callbacks.filter { it !in here }
+        fun heardElsewhere(at: Long, position: Long = 0) {
+            val state = recorded(PlaybackState.STATE_PLAYING, at, 26, position)
+            shadowOf(music).setPlaybackState(state)
+            elsewhere.forEach { it.onPlaybackStateChanged(state) }
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        fun saidElsewhere(lengthMs: Long) {
+            val metadata = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Faded")
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, "Alan Walker").putString(MediaMetadata.METADATA_KEY_ALBUM, "")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, lengthMs).build()
+            shadowOf(music).setMetadata(metadata)
+            elsewhere.forEach { it.onMetadataChanged(metadata) }
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        heardElsewhere(NOW + 1_000, position = 300)
+        // The first ad ends: at its start again, the next one's length, then its own start half a second on.
+        heardElsewhere(NOW + 20_700)
+        saidElsewhere(40_000)
+        heardElsewhere(NOW + 21_200)
+        // The second ends into the song the same way.
+        heardElsewhere(NOW + 61_200)
+        saidElsewhere(200_000)
+        heardElsewhere(NOW + 61_700)
+        assertTrue(seen.now().clock == PlaybackClock(300, NOW, playing = false))
+        // Then this screen hears it play: from the song's start, not from where it was paused, as it would if two ends
+        // looked like none.
+        here.forEach { it.onPlaybackStateChanged(music.playbackState) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(PlaybackClock(0, NOW + 61_700), seen.now().clock)
+    }
+
+    @Test
+    fun anotherSessionsAdEndIsTakenOnlyOnceItsOwnWaitIsOver() {
+        allow()
+        // Issue #1291: two sessions' ads end half a second apart, so each waits till its own time is up.
+        val faded = youTubeMusic("Faded", "Alan Walker", 20_000, updated = NOW - 20_000, item = 26)
+        val alone = youTubeMusic("Alone", "Alan Walker", 20_000, updated = NOW - 19_500, item = 27)
+        val seen = followed(MusicMetadata("Alone", "Alan Walker"))
+        faded.isAt(PlaybackState.STATE_PLAYING, NOW, 26)
+        faded.says("Faded", "Alan Walker", 40_000)
+        alone.isAt(PlaybackState.STATE_PLAYING, NOW + 500, 27, afterMs = 500)
+        alone.says("Alone", "Alan Walker", 40_000)
+        assertEquals(NOW + 500, seen.now().clock.startedAt())
+        // The song's own start, half a second on, that only asking tells.
+        shadowOf(alone).setPlaybackState(recorded(PlaybackState.STATE_PLAYING, NOW + 1_000, 27, 0))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AD_END_MS - 500))
+        assertEquals(NOW + 500, seen.now().clock.startedAt())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+        assertEquals(NOW + 1_000, seen.now().clock.startedAt())
+    }
+
+    @Test
+    fun makingRoomForASongKeepsTheOthersLengthsForgettable() {
+        // Issue #1291: the oldest song goes to make room; a length YouTube Music alone said of another can still turn out an ad's.
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        repeat(501) { lengths.of("Song $it", "Band", 200_000, "music") }
+        assertTrue(lengths.known("Song 0", "Band").isEmpty())
+        lengths.forget("Song 1", "Band", 200_000, "music")
+        assertTrue(lengths.known("Song 1", "Band").isEmpty())
+    }
+
+    @Test
     fun anAdThatEndsWithNoStopToLoadIsFollowedFromWhereYouTubeMusicSaysNext() {
         allow()
         // On the Samsung, 2026-11-26: a 10 s ad into a 13 s one, with no stop to load between them.
