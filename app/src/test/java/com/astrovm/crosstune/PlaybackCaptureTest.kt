@@ -178,6 +178,31 @@ class PlaybackCaptureTest {
         }
     }
 
+    @Test
+    fun letGoOfWhileAndroidIsStillAskedItsNotKeptForACoverThatsGone() {
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val listening = Executors.newSingleThreadExecutor()
+        try {
+            val kept = listening.submit { PlaybackCapture.keep(app) }
+            val asked = waitFor { shadowOf(app).nextStartedActivity }
+            // The cover goes before Android answers.
+            PlaybackCapture.letGo()
+            val ask = Robolectric.buildActivity(CaptureAsk::class.java, asked).create().get()
+            val given = Intent().putExtras(Bundle().apply { putBinder("android.media.projection.extra.EXTRA_MEDIA_PROJECTION", Binder()) })
+            shadowOf(ask).receiveResult(shadowOf(ask).nextStartedActivityForResult.intent, Activity.RESULT_OK, given)
+            Robolectric.buildService(CaptureService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1)
+            kept.get(1, TimeUnit.SECONDS)
+            // Nothing holds it, so it goes a minute on, with nobody left to let go of it.
+            ShadowLooper.idleMainLooper(59, TimeUnit.SECONDS)
+            assertNull(shadowOf(app).nextStoppedService)
+            ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS)
+            assertEquals(CaptureService::class.java.name, shadowOf(app).nextStoppedService.component?.className)
+        } finally {
+            listening.shutdownNow()
+        }
+    }
+
     /** What [find] finds, once it does, while the main thread runs. */
     private fun <T : Any> waitFor(find: () -> T?): T {
         repeat(200) {

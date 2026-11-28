@@ -403,6 +403,7 @@ internal class MainViewModel(
 
     override fun onCleared() {
         cards.release()
+        coverSound?.letGo()
         stopWatchingOneTap?.invoke()
         preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
     }

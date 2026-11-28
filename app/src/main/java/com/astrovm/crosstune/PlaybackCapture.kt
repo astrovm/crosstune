@@ -143,6 +143,7 @@ private object Projections {
     private var projection: MediaProjection? = null
     private var users = 0
     private var kept = false
+    private var letGoOf = 0
     private var asking: CountDownLatch? = null
     private var refusedAt: Long? = null
     private var app: Context? = null
@@ -183,14 +184,15 @@ private object Projections {
 
     /** One more use of the projection, by nothing that listens, until [unkeep]. */
     fun keep(context: Context) {
-        synchronized(this) { if (kept) return }
+        val before = synchronized(this) { if (kept) return else letGoOf }
         take(context) ?: return
-        // Taken twice at once, one's enough.
-        synchronized(this) { if (kept) letGo() else kept = true }
+        // Taken twice at once, one's enough; and let go of while Android was asked, as the cover went, nothing's left to keep it for.
+        synchronized(this) { if (kept || letGoOf != before) letGo() else kept = true }
     }
 
     @Synchronized
     fun unkeep() {
+        letGoOf++
         if (!kept) return
         kept = false
         letGo()
