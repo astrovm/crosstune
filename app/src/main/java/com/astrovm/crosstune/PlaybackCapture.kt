@@ -26,6 +26,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -102,6 +103,10 @@ internal class PlaybackCapture(private val context: Context) : Microphone {
     }
 
     companion object {
+        /** A no from Android is forgotten, so a test starts and ends without another's. */
+        @VisibleForTesting
+        fun forget() = Projections.forget()
+
         /** Whether Shizuku or root allowed it, so Android won't ask, and the microphone's allowed. */
         @RequiresApi(Build.VERSION_CODES.Q)
         fun allowed(context: Context): Boolean =
@@ -130,6 +135,8 @@ private object Projections {
             app = context.applicationContext
             main.removeCallbacks(end)
             projection?.let { users++; return it }
+            // Asking opens a screen, and an app that only plays in front stops once anything opens over it: under the cover, it isn't asked.
+            if (FloatingLyricsService.covering) return null
             // Refused moments ago, it's not asked again for each listen.
             refusedAt?.let { if (SystemClock.elapsedRealtime() - it < RETRY_MS) return null }
             asking ?: CountDownLatch(1).also {
@@ -171,6 +178,11 @@ private object Projections {
         asking = null
         // Given too late for whoever asked, it's still let go of in time.
         if (users == 0) main.postDelayed(end, LINGER_MS)
+    }
+
+    @Synchronized
+    fun forget() {
+        refusedAt = null
     }
 
     @Synchronized

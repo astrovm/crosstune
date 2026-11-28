@@ -5,6 +5,8 @@ import android.app.Activity
 import android.app.AppOpsManager
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,6 +24,17 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 class PlaybackCaptureTest {
     private val app = ApplicationProvider.getApplicationContext<Application>()
+
+    /** A no another test left is gone, as the tests share it. */
+    @Before
+    fun withNoNoYet() = PlaybackCapture.forget()
+
+    /** The grant is back as a phone has it, and a no is forgotten, whatever a test left, as the tests share them. */
+    @After
+    fun withoutTheGrant() {
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_DEFAULT
+        PlaybackCapture.forget()
+    }
 
     @Test
     fun withoutShizukuOrRootsGrantNothingIsCapturedOrAsked() {
@@ -67,6 +80,30 @@ class PlaybackCaptureTest {
             assertNull(capture.open())
             assertNull(shadowOf(app).nextStartedActivity)
         } finally {
+            listening.shutdownNow()
+        }
+    }
+
+    @Test
+    fun coveringAnAppThatOnlyPlaysInFrontItAsksNothingAsTheAskWouldStopIt() {
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val capture = PlaybackCapture(app)
+        val listening = Executors.newSingleThreadExecutor()
+        FloatingLyricsService.covering = true
+        try {
+            assertNull(capture.open())
+            assertNull(shadowOf(app).nextStartedActivity)
+            // The cover gone, the next listen asks again: under it, that wasn't taken as a no.
+            FloatingLyricsService.covering = false
+            val heard = listening.submit<Recording?> { capture.open() }
+            val asked = waitFor { shadowOf(app).nextStartedActivity }
+            assertEquals(CaptureAsk::class.java.name, asked.component?.className)
+            val ask = Robolectric.buildActivity(CaptureAsk::class.java, asked).create().get()
+            shadowOf(ask).receiveResult(shadowOf(ask).nextStartedActivityForResult.intent, Activity.RESULT_CANCELED, null)
+            assertNull(heard.get(1, TimeUnit.SECONDS))
+        } finally {
+            FloatingLyricsService.covering = false
             listening.shutdownNow()
         }
     }

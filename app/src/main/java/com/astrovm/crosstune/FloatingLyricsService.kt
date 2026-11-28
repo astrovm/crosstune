@@ -555,6 +555,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         var host: FloatingHost? = null
 
         /** Whether it covers another app, rather than float the words over it, so Crosstune lets go of a cover only. */
+        @Volatile
         var covering = false
 
         const val ACTION_UNLOCK = "com.astrovm.crosstune.floating.UNLOCK"
