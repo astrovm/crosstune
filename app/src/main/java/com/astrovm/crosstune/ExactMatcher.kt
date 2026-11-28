@@ -989,26 +989,40 @@ internal class ExactMatcher(
         val named = exact.ifEmpty { known }
         val fitting = named.filter { it.id != null && it.id !in names.rejectedCandidates && fitsReleaseLength(it, sourceLength) && disco.allows(it) }
         val group = fitting.groupBy(::candidateName).values.firstOrNull() ?: return null
-        val linkAlbums = listOfNotNull(metadata.album).filter(String::isNotBlank)
-        val live = saysLive(metadata.title) || names.linkedEdition?.live == true || linkAlbums.any(::liveRelease)
-        // A live link's rows are live: only a version the link doesn't say itself, "Song (Live Remix)", is another.
-        val versioned = Takes.saysAnotherVersionBesidesLive(metadata.title)
-        val plain = group.filter { row ->
-            rowIsLive(row) == live && if (live) versioned || !Takes.saysAnotherVersionBesidesLive(row.name) else !pickerNamesDifferentSongTake(row, names)
-        }
-        fun asLong(row: Row) = sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength)
-        fun nearest(among: List<Row>) = among.firstOrNull { sourceLength != null && asLong(it) } ?: among.firstOrNull()
-        // An album's name, as it is and then without its "(2019 Remaster)". A store's album only picks a row as long as the link.
-        fun onAlbum(albums: List<String>, anyLength: Boolean) = listOf<(String) -> String>({ it }, SongNames::withoutEditionTag).firstNotNullOfOrNull { named ->
-            albums.firstNotNullOfOrNull { album -> plain.firstOrNull { row ->
-                (anyLength || asLong(row)) && SongNames.normalize(named(row.details.getOrNull(1).orEmpty())) == SongNames.normalize(named(album))
-            } }
-        }
+        val plain = withoutOtherTakes(group, metadata, names)
         // Names a store didn't finish prove no row by its place in the list: there, only an album picks.
         val listed = plain.takeIf { exact.isNotEmpty() || names.complete }.orEmpty()
-        val first = onAlbum(linkAlbums + listOfNotNull(names.corroboratingAlbum, names.editionAlbum), false) ?: onAlbum(linkAlbums, true)
-            ?: nearest(listed) ?: return null
+        val first = pickedByAlbum(plain, metadata, names) ?: nearest(listed, sourceLength) ?: return null
         return sourceEdition(plain.filter { it.name == first.name && it.details == first.details }, names.sourceExplicit)
+    }
+
+    /** [group] without the takes the link doesn't say: the live rows of a studio link, the studio rows of a live one. */
+    private fun withoutOtherTakes(group: List<Row>, metadata: MusicMetadata, names: Names): List<Row> {
+        val live = saysLive(metadata.title) || names.linkedEdition?.live == true || liveRelease(metadata.album.orEmpty())
+        // A live link's rows are live: only a version the link doesn't say itself, "Song (Live Remix)", is another.
+        val versioned = Takes.saysAnotherVersionBesidesLive(metadata.title)
+        fun another(row: Row) = if (live) !versioned && Takes.saysAnotherVersionBesidesLive(row.name) else pickerNamesDifferentSongTake(row, names)
+        return group.filter { rowIsLive(it) == live && !another(it) }
+    }
+
+    private fun asLongAsLink(row: Row, sourceLength: Long?) = sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength)
+
+    private fun nearest(rows: List<Row>, sourceLength: Long?): Row? =
+        rows.firstOrNull { sourceLength != null && asLongAsLink(it, sourceLength) } ?: rows.firstOrNull()
+
+    /**
+     * The row on the link's album, or on a store's, as it's named and then without its "(2019 Remaster)". A store's album
+     * only picks a row as long as the link; the link's own picks one a few seconds off too.
+     */
+    private fun pickedByAlbum(plain: List<Row>, metadata: MusicMetadata, names: Names): Row? {
+        val linkAlbums = listOfNotNull(metadata.album).filter(String::isNotBlank)
+        fun onAlbum(albums: List<String>, anyLength: Boolean) = listOf<(String) -> String>({ it }, SongNames::withoutEditionTag).firstNotNullOfOrNull { named ->
+            albums.firstNotNullOfOrNull { album -> plain.firstOrNull { row ->
+                (anyLength || asLongAsLink(row, metadata.linkLengthMs)) &&
+                    SongNames.normalize(named(row.details.getOrNull(1).orEmpty())) == SongNames.normalize(named(album))
+            } }
+        }
+        return onAlbum(linkAlbums + listOfNotNull(names.corroboratingAlbum, names.editionAlbum), false) ?: onAlbum(linkAlbums, true)
     }
 
     /**
@@ -1300,13 +1314,17 @@ internal class ExactMatcher(
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         val base = sameName.firstOrNull() ?: first
         val edition = linkedEditionInAnotherScript(base, abroad, names.linkedEdition)?.takeIf { disco.allows(it) }
-        // A store's album, not the link's own, picks no row seconds off the link while another row is as long as it.
-        val named = chooseNamedRecording(sameName, metadata.album ?: names.corroboratingAlbum, metadata.title, disco, names.sourceExplicit)?.takeIf { row ->
-            metadata.album != null || sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength) || sameName.none { sameRecordingLength(it.lengthMs, sourceLength) }
-        }
+        val named = chooseNamedRecording(sameName, metadata.album ?: names.corroboratingAlbum, metadata.title, disco, names.sourceExplicit)
+            .takeUnless { anotherIsAsLong(it, sameName, metadata) }
         return edition ?: named ?: pickKnownStudioBesideLive(sameName, names)
             ?: sourceLength?.let { sourceNamesBilingualRelease(sameName, metadata.title, it) }
             ?: equivalentAlbumReleases(sameName, names, recording.live).singleOrNull()
+    }
+
+    /** A store's album, not the link's own, picks no row seconds off the link while another row is as long as it. */
+    private fun anotherIsAsLong(row: Row?, rows: List<Row>, metadata: MusicMetadata): Boolean {
+        val sourceLength = metadata.linkLengthMs?.takeIf { metadata.album == null } ?: return false
+        return !sameRecordingLength(row?.lengthMs, sourceLength) && rows.any { sameRecordingLength(it.lengthMs, sourceLength) }
     }
 
     private fun sourceNamesBilingualRelease(rows: List<Row>, title: String, length: Long): Row? {
