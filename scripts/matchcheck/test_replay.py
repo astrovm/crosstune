@@ -6,8 +6,10 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import collect
 import replay
 
 # Lemon, as Apple's US store names it, and Japan's; with rows YouTube Music gave for "Lemon 米津玄師" (issue #1103).
@@ -18,6 +20,55 @@ LYRICS_VIDEO = {"id": "Kl5G4bAwpOg", "name": "Lemon - 米津玄師｜歌詞あ�
 
 
 class RightIdsTest(unittest.TestCase):
+    def test_artist_alias_capture_rejects_ambiguity_and_search_hints(self):
+        one = {"artists": [{"id": "artist-1", "name": "米津玄師", "aliases": [{"name": "Kenshi Yonezu", "type": "Artist name"},
+                                                          {"name": "Other", "type": "Search hint"}]}]}
+        self.assertEqual(["Kenshi Yonezu", "米津玄師"], replay.checked_artist_aliases("米津玄師", one))
+        self.assertEqual([], replay.checked_artist_aliases("米津玄師", {"artists": one["artists"] * 2}))
+
+    def test_a_longer_medley_with_an_extra_song_is_not_the_three_song_recording(self):
+        song = {"title": "After 5 Crash / Tokyo Tower / Hatsukoi", "artist": "Toshiki Kadomatsu", "native": []}
+        short = {"id": "short", "name": "After 5 Crash / Tokyo Tower / 初恋 - After 5 Crash / Tokyo Tower / Hatsukoi",
+                 "details": ["Toshiki Kadomatsu", "After 5 Crash / Tokyo Tower / Hatsukoi", "6:44"]}
+        long = {"id": "long", "name": "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best",
+                "details": ["Toshiki Kadomatsu", "Inherit The Life II", "10:06"]}
+        self.assertEqual(["short"], replay.right_ids(song, [short, long], []))
+        long_song = dict(song, title="After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best")
+        self.assertEqual(["long"], replay.right_ids(long_song, [short, long], []))
+
+    def test_a_result_far_from_the_recordings_length_is_not_it(self):
+        song = {"title": "Long Hope Philia", "artist": "Masaki Suda", "native": [], "lengthMs": 296_000}
+        edit = {"id": "edit", "name": "Long Hope Philia", "details": ["Masaki Suda", "Long Hope Philia (TV Size)", "1:35"], "lengthMs": 95_000}
+        full = {"id": "full", "name": "Long Hope Philia", "details": ["Masaki Suda", "Long Hope Philia", "4:58"], "lengthMs": 298_000}
+        late = dict(full, id="late", lengthMs=305_000)
+        self.assertEqual(["full"], replay.right_ids(song, [edit, full, late], []))
+        # A video may open with more, but not a minute more; one that says no length may be it.
+        video = {"id": "video", "name": "Long Hope Philia", "details": ["Masaki Suda", "1M views", "5:40"], "lengthMs": 340_000}
+        long_video = dict(video, id="long", lengthMs=342_000)
+        untimed = dict(video, id="untimed", lengthMs=None)
+        self.assertEqual(["untimed", "video"], replay.right_ids(song, [], [video, long_video, untimed]))
+        # A song collected without its length is judged by its name, as before.
+        self.assertEqual(["edit", "full", "late"], replay.right_ids(dict(song, lengthMs=None), [edit, full, late], []))
+
+    def test_the_checked_fairuz_alias_names_only_her_rows(self):
+        song = {"title": "Kifak Inta", "artist": "Fairouz", "native": []}
+        own = {"id": "own", "name": "Kifak Inta", "details": ["Fairuz", "Kifak Inta", "3:32"]}
+        other = {"id": "other", "name": "Kifak Inta", "details": ["Other", "Kifak Inta", "3:32"]}
+        self.assertEqual(["own"], replay.right_ids(song, [own, other], []))
+        self.assertEqual(["own"], replay.right_ids(song, [], [own]))
+
+    def test_editions_and_native_names_do_not_cross_artists(self):
+        us = [
+            {"trackName": "Lisa", "artistId": 1, "trackTimeMillis": 200_000},
+            {"trackName": "Lisa", "artistId": 2, "trackTimeMillis": 272_707},
+            {"trackName": "Lisa", "artistId": 1, "trackTimeMillis": 201_000},
+            {"trackName": "Lisa", "artistId": 2, "trackTimeMillis": 200_000},
+        ]
+        self.assertEqual([200_000, 201_000], collect.edition_lengths(us, us[0]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[1]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[2]))
+        self.assertNotEqual(collect.recording_key(us[0]), collect.recording_key(us[3]))
+
     def test_a_fans_lyrics_video_is_wrong_where_the_song_is_there(self):
         self.assertEqual(["3NNhrqHZqlI", "SX_ViT4Ra7k"], replay.right_ids(LEMON, [SONG], [OWN_VIDEO, LYRICS_VIDEO]))
 
@@ -66,9 +117,23 @@ class PrepareTest(unittest.TestCase):
                 [prepared] = json.load(kept)
             self.assertEqual([raw, dict(compact, artist={"name": "Kenshi Yonezu"})], prepared["deezer"])
 
+    @patch("replay.cached_deezer")
+    @patch("replay.ytm_path")
+    def test_latin_query_requires_the_captured_answers(self, ytm, deezer):
+        song = dict(LEMON, askedArtist="米津玄師", query="Lemon 米津玄師")
+        ytm.return_value = "kept.json"
+        deezer.side_effect = [[{"title": "Lemon"}], [{"id": 1}]]
+        [extra] = replay.latin_queries("/corpus", [song])
+        self.assertEqual("Lemon Kenshi Yonezu", extra["query"])
+        self.assertEqual("Kenshi Yonezu", extra["askedArtist"])
+        self.assertEqual([{"title": "Lemon"}], extra["deezer"])
+        self.assertEqual("米津玄師", song["askedArtist"])
+        ytm.return_value = None
+        self.assertEqual([], replay.latin_queries("/corpus", [song]))
+
     def test_the_answers_kept_are_named_where_in_the_folder_so_a_copy_of_it_finds_them(self):
         with tempfile.TemporaryDirectory() as out:
-            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon Kenshi Yonezu")
+            song = dict(LEMON, id=1, album="Lemon - Single", lengthMs=255_000, editionsMs=[], query="Lemon 米津玄師", askedArtist="米津玄師", ytmSongs=True, ytmVideos=True, deezerAnswered=True, deezerArtistsAnswered=True)
             with open(os.path.join(out, "songs.json"), "w", encoding="utf-8") as kept:
                 json.dump([song], kept)
             os.mkdir(os.path.join(out, "raw"))
@@ -80,13 +145,16 @@ class PrepareTest(unittest.TestCase):
                 with open(os.path.join(out, "raw", key + ".json"), "w", encoding="utf-8") as kept:
                     json.dump({}, kept)
             with contextlib.redirect_stderr(io.StringIO()):
-                replay.prepare(out)
+                replay.prepare(out, require_answers=True)
             with open(os.path.join(out, "replay.json"), encoding="utf-8") as kept:
                 [prepared] = json.load(kept)
             for name in ("songs", "videos", "songs-ja"):
                 self.assertFalse(os.path.isabs(prepared[name]))
                 self.assertTrue(prepared[name].startswith("raw" + os.sep))
                 self.assertTrue(os.path.isfile(os.path.join(out, prepared[name])))
+            self.assertEqual("米津玄師", prepared["artist"])
+            self.assertEqual(255_000, prepared["lengthMs"])
+            self.assertEqual("Lemon 米津玄師", prepared["query"])
 
     def test_answers_never_kept_are_none(self):
         with tempfile.TemporaryDirectory() as out:
@@ -107,6 +175,52 @@ class PrepareTest(unittest.TestCase):
                 [prepared] = json.load(kept)
             self.assertTrue(prepared["appleDown"])
             self.assertEqual(255_000, prepared["sourceLengthMs"])
+
+            with self.assertRaisesRegex(ValueError, "Missing YouTube Music or Deezer answer"):
+                replay.prepare(out, require_answers=True)
+
+
+class RunTest(unittest.TestCase):
+    @patch("replay.subprocess.run")
+    def test_both_apple_states_are_requested_in_one_build(self, run):
+        run.return_value.stdout = "/checkout\n"
+        replay.run("/corpus", "head", both=True, require_proofs=True, probe=True)
+        env = run.call_args_list[1].kwargs["env"]
+        self.assertEqual("1", env["MATCHCHECK_BOTH"])
+        self.assertEqual("head", env["MATCHCHECK_LABEL"])
+        self.assertEqual("1", env["MATCHCHECK_REQUIRE_PROOFS"])
+        self.assertEqual("1", env["MATCHCHECK_PROBE"])
+
+    @patch("replay.collect.fetch")
+    def test_candidate_searches_are_captured_by_store_and_term(self, fetch):
+        fetch.return_value = {"results": [{"trackId": 17}]}
+        with tempfile.TemporaryDirectory() as out:
+            with open(os.path.join(out, "missing-proofs.json"), "w", encoding="utf-8") as missing:
+                json.dump(["JP|ジェラス 八神純子"], missing)
+            with open(os.path.join(out, "missing-aliases.json"), "w", encoding="utf-8") as missing:
+                json.dump([], missing)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            with open(os.path.join(out, "candidate-proofs.json"), encoding="utf-8") as kept:
+                self.assertEqual({"JP|ジェラス 八神純子": [{"trackId": 17}]}, json.load(kept))
+            self.assertIn("country=JP", fetch.call_args.args[1])
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            self.assertEqual(1, fetch.call_count)
+            with open(os.path.join(out, "candidate-proofs.json"), "w", encoding="utf-8") as kept:
+                json.dump({"JP|ジェラス 八神純子": {}}, kept)
+            with contextlib.redirect_stderr(io.StringIO()):
+                replay.capture_proofs(out)
+            self.assertEqual(2, fetch.call_count)
+
+    @patch("replay.collect.fetch", return_value=None)
+    def test_a_failed_candidate_search_is_not_saved_as_empty(self, fetch):
+        with tempfile.TemporaryDirectory() as out:
+            with open(os.path.join(out, "missing-proofs.json"), "w", encoding="utf-8") as missing:
+                json.dump(["JP|song artist"], missing)
+            with self.assertRaisesRegex(ValueError, "Apple did not answer"):
+                replay.capture_proofs(out)
+            self.assertFalse(os.path.exists(os.path.join(out, "candidate-proofs.json")))
 
 
 if __name__ == "__main__":

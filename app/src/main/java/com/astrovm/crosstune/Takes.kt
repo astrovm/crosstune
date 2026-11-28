@@ -14,13 +14,20 @@ internal object Takes {
      * The take a tag of [name] says it is: "(ライブ)", "(Live from Budokan)", "- Live", "(オフ・ヴォーカル)", "(TV Size)". Only
      * how a tag starts, or ends in a remix or a cover, counts, so a show's name inside one, "(TVアニメ「ライブ」オープニング
      * テーマ)", and a credit, "(with Live Crew)", say nothing, nor a tag that is an [artists] own name, "(Live Crew)". Null when no
-     * tag does.
+     * tag does. The picker can investigate an unclear credit when [includeUnclearLive] is false.
      */
-    fun saysAnotherTake(name: String, artists: Collection<String> = emptyList()): Take? {
+    fun saysAnotherTake(name: String, artists: Collection<String> = emptyList(), includeUnclearLive: Boolean = true): Take? {
         val named = artists.flatMap(SongNames::artistNames).map(SongNames::normalize)
-        val takes = tagsOf(name).filter { tag -> SongNames.normalize(tag).let { letters -> named.none { letters == it } } }.mapNotNull(::takeOfTag)
+        val takes = tagsOf(name).filter { tag -> SongNames.normalize(tag).let { letters -> named.none { letters == it } } }
+            .mapNotNull { takeOfTag(it, includeUnclearLive) }
         return takes.firstOrNull { it == Take.LIVE } ?: takes.firstOrNull()
     }
+
+    /** A video's recording notes are separate from subtitles, upload language and remaster notes. */
+    fun videoRecordingNotes(name: String): Set<String> =
+        tagsOf(name).map { tag ->
+            SongNames.normalize(tag.takeWhile { it !in TAG_BRACKET_OPENS }).let { if (it == "fromthefirsttake") "thefirsttake" else it }
+        }.filter { it in VIDEO_RECORDINGS }.toSet()
 
     /**
      * [title] says it's another version, a cover, karaoke, a remix, by a word or a mark anywhere in it, but not for the word
@@ -77,21 +84,33 @@ internal object Takes {
         return cuts.zip(cuts.drop(1) + name.length) { from, to -> name.substring(from, to) }
     }
 
-    private fun takeOfTag(tag: String): Take? {
+    private fun takeOfTag(tag: String, includeUnclearLive: Boolean): Take? {
         val letters = SongNames.normalize(tag).trimStart { it.isDigit() }
         val words = SongNames.wordList(tag).dropWhile { it.all(Char::isDigit) }
         val first = words.firstOrNull()
         val spoken = words.take(2).joinToString("")
         return when {
             letters.isEmpty() -> null
-            first in LIVE_FIRST_WORDS || spoken in LIVE_PAIRS || LIVE_MARKS.any(letters::startsWith) -> Take.LIVE
+            liveTag(first, words, includeUnclearLive) || spoken in LIVE_PAIRS || LIVE_MARKS.any(letters::startsWith) -> Take.LIVE
             first in OTHER_FIRST_WORDS || spoken in OTHER_PAIRS || words.lastOrNull() in OTHER_LAST_WORDS ||
                 OTHER_MARKS.any(letters::startsWith) -> Take.OTHER
             else -> null
         }
     }
 
+    private fun liveTag(first: String?, words: List<String>, includeUnclearLive: Boolean): Boolean {
+        if (first !in LIVE_FIRST_WORDS) return false
+        if (first != "live" || includeUnclearLive || words.size == 1) return true
+        val following = words[1]
+        return following in LIVE_NOTE_WORDS || following.all(Char::isDigit)
+    }
+
     private val LIVE_FIRST_WORDS = setOf("live", "vivo", "directo")
+    private val LIVE_NOTE_WORDS = setOf("at", "from", "in", "on", "version", "ver", "performance", "acoustic", "recording", "remix")
+    private val VIDEO_RECORDINGS = listOf(
+        "English Version", "Japanese Version", "Korean Version", "Spanish Version", "Versión Español", "Reprise",
+        "THE FIRST TAKE", "Christmas Version", "クリスマスバージョン", "Ballad Version", "バラードバージョン"
+    ).map(SongNames::normalize).toSet()
     private val LIVE_PAIRS = setOf("envivo", "aovivo")
     private val LIVE_MARKS = listOf("ライブ", "ライヴ", "现场", "現場", "演唱会", "演唱會", "라이브").map(SongNames::normalize)
     private val OTHER_FIRST_WORDS = setOf(

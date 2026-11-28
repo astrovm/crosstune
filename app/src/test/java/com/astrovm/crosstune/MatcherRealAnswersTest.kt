@@ -39,6 +39,9 @@ class MatcherRealAnswersTest {
     @Volatile
     private var localizedSearchDown = false
 
+    @Volatile
+    private var artistAliasesDown = false
+
     /** Serve just the saved lyrics upload, as if YouTube Music had only that video. */
     @Volatile
     private var onlySpringDayFan = false
@@ -80,14 +83,23 @@ class MatcherRealAnswersTest {
         assertEquals(mapOf("itunes.apple.com/search" to 6, "itunes.apple.com/lookup" to 2), apple())
     }
 
-    // Issue #1102: with Apple and the localized search down, nothing says Kenshi Yonezu is 米津玄師. That's no answer, not "none". So it
+    // Issue #1102: with Apple down, Deezer links Kenshi Yonezu to 米津玄師 when the known length fits.
+    @Test
+    fun lemonOpensWhenAppleIsDownAndDeezerNamesTheSameRecording() {
+        appleDown = { true }
+        assertEquals(LEMON_SONG, find(LEMON, 256_000L))
+        assertEquals(LEMON_SONG, find(LEMON, null))
+    }
+
+    // Issue #1102: with Apple, the localized search and MusicBrainz down, nothing says Kenshi Yonezu is 米津玄師. That's no answer, not "none". So it
     // isn't remembered as missing, and it's asked again, when Apple answers. Not at once, as a practice card asks again
     // straight away: then nothing's asked, as Apple is likely still down.
     @Test
     fun lemonIsAskedAgainWhenAppleWasDown() {
         localizedSearchDown = true
-        val matcher = matcher()
+        artistAliasesDown = true
         for (length in listOf(null, 256_000L, 280_000L)) {
+            val matcher = matcher()
             val song = LEMON.metadata.copy(lengthMs = length)
             appleDown = { true }
             assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
@@ -117,26 +129,25 @@ class MatcherRealAnswersTest {
         assertEquals(PRETENDER.opens, find(PRETENDER, null))
     }
 
-    // With Apple down, a queue's song is asked of each service once: two searches of YouTube Music, each store's, and
-    // Deezer's, not all of them twice, as it is when a search fails.
+    // With Apple down, a queue's song is asked once: two searches of YouTube Music, each store's, and Deezer's track
+    // and artist searches. Deezer's answer names the song, so there is no second attempt.
     @Test
     fun aQueuesSongIsAskedOnceWhileAppleIsDown() {
         appleDown = { true }
         localizedSearchDown = true
         val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(LEMON.metadata)) {} }
-        assertEquals(null, queue)
-        assertEquals(mapOf("api.deezer.com/search/track" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 4), asked.groupingBy { it }.eachCount())
+        assertEquals(LEMON_SONG, queue?.url)
+        assertEquals(mapOf("api.deezer.com/search/track" to 1, "api.deezer.com/search/artist" to 1, "itunes.apple.com/search" to 6, "music.youtube.com/youtubei/v1/search" to 2, "www.youtube.com/watch_videos" to 1), asked.groupingBy { it }.eachCount())
     }
 
-    // Issue #1103: Japan's store finds the song, but the US store, the only one that names 米津玄師 Kenshi Yonezu, fails. Then
-    // J -KARAOKE's lyrics video, which names 米津玄師, isn't taken for it, and the song is asked again.
+    // Issue #1103: Japan's store finds the song, but the US store fails. Deezer names its artist and Japan's length
+    // corroborates it, so the song opens, not J -KARAOKE's lyrics video.
     @Test
     fun lemonOpensNoFansVideoWhenTheUsStoreFailed() {
         val matcher = matcher()
         val song = LEMON.metadata.copy(lengthMs = 280_000L)
         appleDown = { url -> url.queryParameter("country") == "US" }
-        val duringOutage = runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) }
-        assertTrue(duringOutage == ExactMatcher.Match.Failed || duringOutage == ExactMatcher.Match.WaitingForNames)
+        assertEquals(ExactMatcher.Match.Found(LEMON_SONG, lasting = false), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
         appleDown = { false }
         clock += ExactMatcher.UNSURE_FOR_MS
         assertEquals(ExactMatcher.Match.Found(LEMON_SONG), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) })
@@ -163,13 +174,20 @@ class MatcherRealAnswersTest {
 
     private fun matcher(): ExactMatcher {
         fake.handler = ::answer
-        return ExactMatcher(fake.client(), "US", missingForMs = 60 * 60_000L, now = { clock }, timeoutMs = WHILE_MS)
+        return ExactMatcher(fake.client(), "US", missingForMs = 60 * 60_000L, now = { clock }, timeoutMs = WHILE_MS, artistAliases = ::artistAliases)
     }
 
     private fun find(song: Kept, lengthMs: Long?): String? {
         kept = song
         fake.handler = ::answer
-        return runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = WHILE_MS).find(MusicService.YOUTUBE_MUSIC, song.metadata.copy(lengthMs = lengthMs)) }
+        return runBlocking { ExactMatcher(fake.client(), "US", timeoutMs = WHILE_MS, artistAliases = ::artistAliases).find(MusicService.YOUTUBE_MUSIC, song.metadata.copy(lengthMs = lengthMs)) }
+    }
+
+    // The two artist names in MusicBrainz's captured artist search are independent of Deezer's answer.
+    private suspend fun artistAliases(name: String): Set<String>? = when {
+        artistAliasesDown -> null
+        name == "米津玄師" -> setOf("米津玄師", "Kenshi Yonezu")
+        else -> emptySet()
     }
 
     private fun apple() = asked.filter { it.startsWith("itunes.apple.com") }.groupingBy { it }.eachCount()
@@ -177,6 +195,9 @@ class MatcherRealAnswersTest {
     private fun answer(request: Request): Response {
         val url = request.url
         asked += url.host + url.encodedPath
+        if (url.host == "www.youtube.com" && url.encodedPath == "/watch_videos") {
+            return FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=3NNhrqHZqlI").build()
+        }
         val answers = kept.answers
         val term = kept.term
         val served = when (url.host) {
@@ -184,7 +205,11 @@ class MatcherRealAnswersTest {
                 if (appleDown(url)) throw IOException("Apple is down")
                 apple(url, answers.getJSONObject("apple"), term)
             }
-            "api.deezer.com" -> answers.getJSONObject("deezer").takeIf { url.encodedPath == "/search/track" && url.queryParameter("q") == term }
+            "api.deezer.com" -> when {
+                url.encodedPath == "/search/track" && url.queryParameter("q") == term -> answers.getJSONObject("deezer")
+                url.encodedPath == "/search/artist" && url.queryParameter("q") == kept.metadata.artist -> answers.optJSONObject("deezerArtists")
+                else -> null
+            }
             "music.youtube.com" -> JSONObject(FakeSpotify.bodyOf(request)).takeIf { it.optString("query") == term }?.let { body ->
                 val language = body.getJSONObject("context").getJSONObject("client").getString("hl")
                 val videos = body.optString("params") == VIDEOS

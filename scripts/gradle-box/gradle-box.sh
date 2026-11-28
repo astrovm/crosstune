@@ -353,7 +353,7 @@ if [[ -n ${SONGCHECK_DIR:-} ]]; then
 fi
 # So are the matcher's, as they're what the services answered (scripts/matchcheck/replay.py).
 if [[ -n ${MATCHCHECK_DIR:-} ]]; then
-    box+=(-v "$MATCHCHECK_DIR:$MATCHCHECK_DIR" -e "MATCHCHECK_DIR=$MATCHCHECK_DIR" -e "MATCHCHECK_LABEL=${MATCHCHECK_LABEL:-head}")
+    box+=(-v "$MATCHCHECK_DIR:$MATCHCHECK_DIR" -e "MATCHCHECK_DIR=$MATCHCHECK_DIR" -e "MATCHCHECK_LABEL=${MATCHCHECK_LABEL:-head}" -e "MATCHCHECK_APPLE_DOWN=${MATCHCHECK_APPLE_DOWN:-0}" -e "MATCHCHECK_BOTH=${MATCHCHECK_BOTH:-0}" -e "MATCHCHECK_REQUIRE_PROOFS=${MATCHCHECK_REQUIRE_PROOFS:-0}" -e "MATCHCHECK_PROBE=${MATCHCHECK_PROBE:-0}")
 fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")

@@ -16,17 +16,20 @@ import org.robolectric.shadows.ShadowCloseGuard
  * Holds the YouTube Music matcher to what `origin/main` opens, so a change that takes a right row away, or opens
  * a wrong one or nothing in its place, fails here first. Every made-up input the reviews of PR #947 tried, with
  * what main opened for it ([Case.main]); and a matrix and made-up searches, each in every one of [MODES], held to
- * what main opened for each, kept in the test's resources (see [onMain]).
+ * what main opened for each, kept in the test's resources (see [onMain]), except the named improvements below.
  *
  * A change to the matcher that changes what opens has to make those again on its own code, with [onMain], and
  * show in its PR the counts the matrix and the searches print, main against it, as the judge here only guesses
- * which row is right.
+ * which row is right; and write a few of them again from its own code, with [writeSnapshot], for PIT's runs.
  */
 @RunWith(RobolectricTestRunner::class)
 class MatcherCasesTest {
 
     /** Set on main, where the matrix and the made-up searches write what main opens, to be kept as [MATRIX] and [FUZZ]. */
     private val onMain = false
+
+    /** Set where the matcher changed what opens, to write [SNAPSHOT] again from this branch (see [aFewSearchesOpenWhatThisBranchOpened]). */
+    private val writeSnapshot = false
 
     /**
      * Each how many cells of the matrix and made-up searches run: one in [SAMPLED], as all of them take minutes, but all
@@ -474,6 +477,271 @@ class MatcherCasesTest {
     )
 
     @Test
+    fun filteringAnOffLengthSongKeepsAnArtistVideoThePickerCanIdentify() {
+        val cases = fuzzed()
+        for (index in listOf(81, 116)) {
+            assertEquals("case $index", "video0", find(cases[index].modes[1]))
+        }
+    }
+
+    @Test
+    fun filteringAnOffLengthTitleDoesNotSubstituteAnotherWrongAnswer() {
+        val cases = fuzzed()
+        val main = stored(FUZZ)
+        val wrong = mutableListOf<String>()
+        for (index in listOf(2, 38, 50, 51, 54, 56, 96, 99, 265, 674, 847, 914, 1118, 1146, 1401,
+            1450, 1545, 1619, 1735, 2043, 2161, 2643, 2691, 3074, 3308, 3773, 3885)) {
+            val search = cases[index]
+            val before = requireNotNull(main[index.toString()])
+            search.modes.forEachIndexed { mode, case ->
+                val old = before[mode].takeUnless { it == "-" }
+                val now = find(case)
+                if (now != old && search.verdict(now) == WRONG) wrong += "case $index, ${MODES[mode]}: $old -> $now, $case"
+            }
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun withholdingANamedRerecordingDoesNotOfferASongWithNeitherName() {
+        val case = fuzzed()[380].modes[2]
+        assertEquals(null, find(case))
+        assertEquals("song0", find(case.copy(songs = listOf(row("Daemon", length = "1:34")))))
+    }
+
+    @Test
+    fun thePickerDoesNotSubstituteAnotherUnprovedTakeForARejectedVideo() {
+        val search = Case("other takes", null, songs = listOf(row("偽の歌", "Live at Budokan"), row("別の歌 (Karaoke)")),
+            videos = listOf(video("Fake Song (English Version)"), video("別の歌")))
+        assertEquals(listOf(null, null), (0..1).map { find(search.copy(picked = it)) })
+        assertEquals("song1", find(search.copy(japan = japanese("偽の歌"), picked = 1, songs = listOf(search.songs.first(), row("偽の歌")))))
+    }
+
+    @Test
+    fun aStudioAlbumNameDoesNotClearAnExplicitLiveTrackLabel() {
+        val row = row("偽の歌 (ライヴ)")
+        val search = Case("live track on studio album", null, japan = japanese("偽の歌"), songs = listOf(row),
+            videos = listOf(video("Fake Song (English Version)")), picked = 0)
+        assertEquals(null, find(search))
+        assertEquals("song0", find(search.copy(title = "Fake Song (Live)", japan = japanese("偽の歌 (ライヴ)"))))
+    }
+
+    @Test
+    fun aShortVideoCannotReplaceTheWholeCatalogRecording() {
+        val search = Case("a short video", null, videos = listOf(video("Fake Song", length = "0:30")), picked = 0)
+        assertEquals(null, find(search))
+        assertEquals("video0", find(search.copy(title = "Fake Song (TV Size)", lengthMs = 30_000,
+            videos = listOf(video("Fake Song (TV Size)", length = "0:30")))))
+    }
+
+    @Test
+    fun filteringAnOffLengthTitleDoesNotSelectAnotherSong() {
+        val search = fuzzed()[1199]
+        assertEquals(emptyList<String>(), search.modes.take(6).mapIndexedNotNull { mode, case ->
+            val answer = find(case)
+            "${MODES[mode]}: $answer".takeIf { answer == "song1" }
+        })
+        for (index in listOf(429, 573)) {
+            val case = fuzzed()[index]
+            assertTrue("picker case $index", case.verdict(find(case.modes[2])) != WRONG)
+        }
+    }
+
+    @Test
+    fun aSourceTitleInAnUnknownTagDoesNotProveAnotherSong() {
+        val case = Case("unproved tag", null, title = "I Want To Know", lengthMs = 211_888, linkMs = 211_888,
+            songs = listOf(row("다른 노래(I want to know)", "Another Album", length = "3:30")))
+        assertEquals(null, find(case))
+    }
+
+    @Test
+    fun aTitleInParenthesesCanNameTheSourceRecording() {
+        val case = Case("parenthesized title", "song0", title = "I Want To Know", lengthMs = 211_888, linkMs = 211_888,
+            editions = listOf("Live" to 270_000), korea = "알고 싶어요" to "Fake Band", songs = listOf(
+                row("알고 싶어요(I want to know)", "I Want to Know", length = "3:30"),
+                row("I want to know (알고 싶어요)", "Live", length = "4:30")
+            ))
+        assertEquals("song0", find(case))
+        assertEquals("song0", find(case.copy(editions = emptyList(), korea = null)))
+        assertEquals(null, find(case.copy(songs = listOf(row("알고 싶어요(I want to know) (Live)", "Live", length = "3:30")))))
+    }
+
+    @Test
+    fun theTimedBilingualReleaseWinsWhenOnlyItFitsTheLinkedLength() {
+        val title = "Madonna Tachi no Lullaby"
+        val bilingual = "聖母たちのララバイ - $title"
+        val case = Case("bilingual releases", "song1", title = title, lengthMs = 259_002,
+            linkMs = 259_002, songs = listOf(row(bilingual, "GOLDEN BEST", length = "4:23"),
+                row(bilingual, "Yugure kara...Hitori", length = "4:20")))
+        assertEquals("song1", find(case))
+        // Both as long as the link, nothing tells them apart: the first opens, as on main.
+        assertEquals("song0", find(case.copy(linkMs = 261_000)))
+    }
+
+    /** 8 s from the link is still its length; a row further off, listed first, is not it. */
+    @Test
+    fun aRowEightSecondsFromTheLinkIsTheLinksLength() {
+        val case = Case("8 s off", "song1", lengthMs = null, linkMs = 248_000, songs = listOf(row("Fake Song", length = "5:00"), row("Fake Song", length = "4:00")))
+        assertEquals("song1", find(case))
+    }
+
+    /** Where the songs listed are of another length, the artist's video 8 s from the link is still the song. */
+    @Test
+    fun anArtistsVideoEightSecondsFromTheLinkFitsItBesideASongOfAnotherLength() {
+        val case = Case("video 8 s off", "video0", lengthMs = null, linkMs = 248_000, songs = listOf(row("Fake Song", length = "3:00")),
+            videos = listOf(video("Fake Song", "4:00")))
+        assertEquals("video0", find(case))
+    }
+
+    /** Only a video less than half as long as the recording is too short to be the song: half is not less. */
+    @Test
+    fun aVideoHalfAsLongAsTheRecordingCanStillBeTheSong() {
+        val case = Case("half as long", "video0", lengthMs = 240_000, videos = listOf(video("Fake Song", "2:00")))
+        assertEquals("video0", find(case))
+        assertEquals(null, find(case.copy(videos = listOf(video("Fake Song", "1:59")))))
+    }
+
+    /** A disco version opens only for a link that asks for one: otherwise the first row, as on main. */
+    @Test
+    fun aDiscoVersionOpensOnlyForALinkThatAsksForIt() {
+        val songs = listOf(row("Fake Song"), row("Fake Song (Disco Version)"))
+        assertEquals("song1", find(Case("disco asked", "song1", title = "Fake Song (Disco Version)", lengthMs = null, songs = songs)))
+        val plain = Case("disco not asked", "song0", lengthMs = null, songs = listOf(row("Fake Song"), row("Fake Song", album = "Fake Album (Disco Version)")))
+        assertEquals("song0", find(plain))
+    }
+
+    /** A live link opens the one live row of the song's name, not the studio row before it. */
+    @Test
+    fun aLiveLinkOpensTheOneLiveRowOfTheSongsName() {
+        val case = Case("live asked", "song1", title = "Fake Song (Live)", lengthMs = null, songs = listOf(row("Fake Song"), row("Fake Song", album = "Live at Budokan")))
+        assertEquals("song1", find(case))
+    }
+
+    /** A dash before the song's own name is the title, not a take: "Short Hair" is no short version. */
+    @Test
+    fun aVideoOfASongNamedLikeATakeIsStillTheSong() {
+        val case = Case("short hair", "video0", title = "Short Hair", picked = 0, videos = listOf(video("Fake Band - Short Hair", channel = "Fan")))
+        assertEquals("video0", find(case))
+        assertEquals(null, find(case.copy(title = "Fake Song", videos = listOf(video("Fake Song - Short Version", channel = "Fan")))))
+    }
+
+    /** A video named in kana, as the song's Japanese name reads, is the song, lyrics caption or not; kanji are no reading. */
+    @Test
+    fun aVideoNamedAsTheJapaneseNameReadsIsTheSong() {
+        val case = Case("kana video", "video0", title = "Kakusei", japan = japanese("覚醒"), picked = 0)
+        for (title in listOf("かくせい", "カクセイ", "かくせい Lyrics", "かくせい lyrics video")) {
+            assertEquals(title, "video0", find(case.copy(videos = listOf(video(title, channel = "Fan")))))
+        }
+        assertEquals("video0", find(case.copy(title = "Coffee", japan = japanese("珈琲"), videos = listOf(video("コーヒー", channel = "Fan")))))
+        assertEquals(null, find(case.copy(videos = listOf(video("覚醒する", channel = "Fan")))))
+        assertEquals(null, find(case.copy(videos = listOf(video("かくせい Lyrics Video Lyrics", channel = "Fan")))))
+    }
+
+    /** The picker offers no row it can't know is the song, such as another artist's or another part, and offers the one row that may be. */
+    @Test
+    fun thePickerOffersOnlyRowsThatMayBeTheSong() {
+        val pick = Case("picker", null, picked = 0, lengthMs = null)
+        assertEquals("another artist", null, find(pick.copy(songs = listOf(row("Fake Song", artist = "Other Band")))))
+        assertEquals("another part", null, find(pick.copy(songs = listOf(row("Fake Song Part 2", artist = "偽バンド")))))
+        val live = pick.copy(album = "Live at Budokan", lengthMs = 240_000, linkMs = 240_000)
+        assertEquals("the live edition's take", "song0",
+            find(live.copy(songs = listOf(row("Fake Song", "Live at Budokan", "偽バンド", "4:00")))))
+        val twice = listOf(row("別の名", artist = "偽バンド"), row("別の名", "Other Album", "偽バンド"))
+        assertEquals("one of two alike", null, find(pick.copy(lengthMs = 90_000, songs = twice)))
+        assertEquals("the one by itself", "song0", find(pick.copy(lengthMs = 90_000, songs = twice.take(1))))
+    }
+
+
+    /**
+     * Of two rows of the song's Japanese name, the usual release beside a best-of carries the same studio take, so the first
+     * opens; and where Apple has two editions, the row at its edition's length, not the live one, is the song.
+     */
+    @Test
+    fun theUsualReleaseBesideABestOfIsTheSong() {
+        val case = Case("best of", "song0", album = "Original Album", japan = japanese("偽の歌"),
+            songs = listOf(row("偽の歌", "Fake Album"), row("偽の歌", "The Best")))
+        assertEquals("song0", find(case))
+        val editions = case.copy(editions = listOf("Other Album" to 200_000), songs = listOf(row("偽の歌", "Live at Budokan"), row("偽の歌", "Fake Album")))
+        assertEquals("song1", find(editions))
+    }
+
+
+    /** Apple's album tells two rows of the song's Japanese name apart. */
+    @Test
+    fun applesAlbumTellsTwoRowsOfTheJapaneseNameApart() {
+        val case = Case("album", "song1", japan = japanese("偽の歌"), songs = listOf(row("偽の歌", "Other Album"), row("偽の歌", "Fake Album")))
+        assertEquals("song1", find(case))
+    }
+
+    /** A row from a karaoke album is someone else's take: the picker doesn't offer it, unless the song's name says karaoke. */
+    @Test
+    fun thePickerLeavesOutAKaraokeAlbumsRow() {
+        val case = Case("karaoke album", null, picked = 0, songs = listOf(row("Fake Song", album = "Karaoke Hits", artist = "偽バンド")))
+        assertEquals(null, find(case))
+        assertEquals("song0", find(case.copy(songs = listOf(row("Fake Song", artist = "偽バンド")))))
+        assertEquals("song0", find(case.copy(title = "Fake Song (Karaoke)", songs = listOf(row("Fake Song (Karaoke)", album = "Karaoke Hits", artist = "偽バンド")))))
+    }
+
+    @Test
+    fun thePickerCanRecognizeATranslatedTitleBeforeItsLyricsCaption() {
+        val case = Case("lyrics captions", "video0", title = "Let's go travel", japan = japanese("旅に出よう"), picked = 0)
+        for (caption in listOf(" Lyrics", " Lyrics　Video", " ".repeat(20_000) + "LYRICS")) {
+            val title = "Fake Band (偽バンド) - Let's go travel (여행을 떠나요)$caption [Color Coded Han/Rom/Eng]"
+            assertEquals("video0", find(case.copy(videos = listOf(video(title, channel = "Fan")))))
+        }
+        assertEquals(null, find(case.copy(videos = listOf(video("Fake Band - Other Song (여행을 떠나요) Lyrics [Color Coded]", channel = "Fan")))))
+    }
+
+    @Test
+    fun aBilingualTitleKeepsTheSourceLengthWhenOtherEditionsAreLonger() {
+        assertEquals("kakusei", Readings.of(listOf("覚醒"), Script.JAPANESE).single().typed)
+        assertEquals(false, SongNames.saysAnotherVersion("AWAKENING（覚醒） - Awakening (Kakusei)", "Awakening", "Fake Band"))
+        val case = Case("bilingual edition", "song2", title = "Awakening", lengthMs = 152_907, linkMs = 152_907,
+            editions = listOf("Awakening" to 222_000), songs = listOf(
+                row("Awakening", "Awakening", length = "3:42"),
+                row("AWAKENING（覚醒） - Awakening (Kakusei)", "Awakening", length = "2:29"),
+                row("AWAKENING（覚醒） - Awakening (Kakusei)", "Awakening (Special Edition)", length = "2:33")
+            ))
+        assertEquals("song2", find(case))
+    }
+
+    @Test
+    fun filteringRowsDoesNotReplaceAnUnprovedOrRightResultWithAWrongOne() {
+        val cases = fuzzed()
+        val main = stored(FUZZ)
+        val indices = listOf(77, 104, 172, 354, 706, 805, 824, 1234, 1631, 1827, 2247, 2347, 2417, 2466, 2663, 2883, 3239, 3518)
+        val wrong = mutableListOf<String>()
+        for (index in indices) {
+            val case = cases[index]
+            val before = requireNotNull(main[index.toString()])
+            case.modes.forEachIndexed { mode, search ->
+                val was = before[mode].takeUnless { it == "-" }
+                val actual = found(search).id
+                if (case.verdict(was) != WRONG && case.verdict(actual) == WRONG) {
+                    wrong += "case $index, ${MODES[mode]}: $was -> $actual, source ${search.linkMs}"
+                }
+            }
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun filteringAnOffLengthRowDoesNotOpenAnUnrelatedResult() {
+        val cases = fuzzed()
+        val checks = mapOf(573 to listOf(2), 958 to listOf(2), 1199 to (0..5).toList(), 2626 to listOf(2),
+            3598 to listOf(2), 3620 to listOf(2), 3961 to listOf(2))
+        val wrong = mutableListOf<String>()
+        for ((index, modes) in checks) {
+            val case = cases[index]
+            for (mode in modes) {
+                val result = found(case.modes[mode])
+                if (case.verdict(result.id) == WRONG) wrong += "case $index, ${MODES[mode]} opened ${result.id}: ${case.modes[mode]}"
+            }
+        }
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
     fun latinAccentsDoNotMakeAnUnrelatedTitleAnotherScript() {
         val accented = before.single { it.what == "945 accent" }
         val equivalentAccent = accented.copy(title = "Cancion Falsa", main = "song0")
@@ -513,7 +781,6 @@ class MatcherCasesTest {
             search.copy(what = "no album anywhere", album = "", songs = listOf(search.songs[0], row("用餘生去愛", "", "Jacky Cheung", "4:15"))),
             search.copy(what = "only Deezer knows a length", lengthMs = null, deezerSeconds = 254),
             search.copy(what = "another edition", editions = listOf("Live at Budokan" to 254_239)),
-            search.copy(what = "link has another length", linkMs = 300_000),
             search.copy(what = "fan video", videos = listOf(video("用餘生去愛 - The Rest Of Time", "4:21", "Fan"))),
             search.copy(what = "video has no time", videos = listOf(video("用餘生去愛 - The Rest Of Time", "", "Jacky Cheung"))),
             search.copy(what = "video too long", videos = listOf(video("用餘生去愛 - The Rest Of Time", "5:21", "Jacky Cheung"))),
@@ -528,6 +795,16 @@ class MatcherCasesTest {
             val actual = find(case)
             "${case.what}: $actual".takeIf { actual != "song0" }
         })
+        assertEquals(null, find(search.copy(what = "link has another length", linkMs = 300_000)))
+    }
+
+    /** A link that says it's 0:00 long says no length: what opens is what opens for one that gives none. */
+    @Test
+    fun aLinkOfNoLengthOpensWhatALinkWithoutOneDoes() {
+        val cases = (tenth + ninth + plain + eighth + seventh + sixth + fifth + fourth + third + second + first + before).filter { it.linkMs == null }
+        assertTrue(cases.size > 100)
+        val withoutLength = cases.map(::find)
+        assertEquals(withoutLength, cases.map { find(it.copy(linkMs = 0)) })
     }
 
     @Test
@@ -536,6 +813,53 @@ class MatcherCasesTest {
         val wrong = cases.map { it to find(it) }.filter { (case, found) -> found != case.opens }
             .map { (case, found) -> "${case.what}: ${case.opens}, not $found" + (case.knownWrong?.let { ", where main is wrong: Issue #$it" } ?: "") }
         assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun thePickerCannotChooseALiveRecordingWhenSameNamedRowsAreAmbiguous() {
+        val case = Case("ambiguous studio and live", null, album = "",
+            songs = listOf(row("偽の歌"), row("偽の歌", "Live at Budokan")), picked = 1)
+        assertEquals(null, find(case))
+    }
+
+    @Test
+    fun anArtistTeaserOrOtherLanguageDoesNotDisplaceIdenticalSongRows() {
+        val rows = listOf(row("偽の歌"), row("偽の歌"))
+        for (label in listOf("Teaser", "English Version", "THE FIRST TAKE")) {
+            val clip = video("Fake Song ($label)", if (label == "Teaser") "0:30" else "1:30")
+            assertEquals(label, "song0", find(Case("same displayed songs", "song0", songs = rows, videos = listOf(clip))))
+        }
+    }
+
+    @Test
+    fun anAmbiguousSongCannotFallThroughToAShortTeaser() {
+        val case = Case("ambiguous songs and teaser", null, album = "",
+            songs = listOf(row("偽の歌"), row("偽の歌", "Another Album")), videos = listOf(video("Fake Song (Teaser)", "0:30")))
+        assertEquals(null, find(case))
+    }
+
+    @Test
+    fun duplicateSongsOutsideTheKnownLengthDoNotHideTheMatchingVideo() {
+        val case = Case("off-length duplicates", null, title = "Kokoro",
+            songs = listOf(row("Tokyo", "Karaoke Picks", length = "3:00"), row("Tokyo", length = "0:30")),
+            videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")),
+            chooses = { rows -> rows.indexOfFirst { it.startsWith("Kokoro |") }.takeIf { it >= 0 } })
+        assertEquals("video1", find(case))
+    }
+
+    @Test
+    fun aNamedVideoIsOfferedBeforeAnUnrelatedVideo() {
+        val case = Case("known video before picker", null, title = "Kokoro",
+            songs = listOf(row("Tokyo", "Karaoke Picks", length = "3:00"), row("Tokyo", length = "0:30")),
+            videos = listOf(video("Chijimu (Official Video)", "1:34", "偽バンド"), video("Kokoro", "1:32", "偽バンド")), picked = 0)
+        assertEquals("video1", find(case))
+    }
+
+    @Test
+    fun aKnownPartAndSourceAlbumDistinguishRows() {
+        val case = Case("part and album", null, title = "Fake Song Pt.2", japan = japanese("偽の歌 Pt.2"),
+            songs = listOf(row("偽の歌 Part 2"), row("偽の歌 Part 2", "Live Best")))
+        assertEquals("song0", find(case))
     }
 
     @Test
@@ -637,7 +961,8 @@ class MatcherCasesTest {
             ))
         val unrelatedAlbum = Case("album number", null, title = "Fake Song (Part 2)",
             songs = listOf(row("Fake Song", "Unrelated Album (Part 2)")), picked = 0)
-        assertEquals(listOf("song0", null), listOf(find(remix), find(unrelatedAlbum)))
+        // The album-length match is a remix and the named studio row is the 3:30 edition, not the linked 4:00 one.
+        assertEquals(listOf(null, null), listOf(find(remix), find(unrelatedAlbum)))
         assertEquals(false, found(unrelatedAlbum).asked)
     }
 
@@ -648,7 +973,7 @@ class MatcherCasesTest {
         fun withAlternate(title: String) = find(live.copy(songs = listOf(
             row("偽の歌", length = "3:30"), row(title, "Live at Budokan", length = "4:00")
         )))
-        assertEquals(listOf("song0", "song0", "song1"), listOf(
+        assertEquals(listOf(null, null, "song1"), listOf(
             withAlternate("偽の歌 (Remix)"), withAlternate("偽の歌 (リミックス)"), withAlternate("偽の歌 (feat. Piano Man)")
         ))
     }
@@ -660,7 +985,16 @@ class MatcherCasesTest {
         val named = row("偽の歌", length = "3:30")
         fun alternate(album: String) = row("偽の歌 (feat. Piano Man)", album, length = "4:03")
         assertEquals("song1", find(source.copy(songs = listOf(named, alternate("Live at Budokan")))))
-        assertEquals("song0", find(source.copy(songs = listOf(named, alternate("Live at Budokan (Disco Version)")))))
+        assertEquals(null, find(source.copy(songs = listOf(named, alternate("Live at Budokan (Disco Version)")))))
+    }
+
+    @Test
+    fun aRerecordedLiveAlbumCannotReplaceTheNamedSong() {
+        val live = Case("rerecorded live album", "song0", lengthMs = 210_000, linkMs = 240_000,
+            editions = listOf("Live at Budokan" to 240_000), japan = japanese("偽の歌"), songs = listOf(
+                row("偽の歌", length = "3:30"), row("偽の歌 (ライブ)", "Live at Budokan From THE FIRST TAKE", length = "4:00")
+            ))
+        assertEquals(null, find(live))
     }
 
     @Test
@@ -715,7 +1049,12 @@ class MatcherCasesTest {
     )
 
     /** A row or video of the matrix: its name, the version it is ([OTHER] for another song), its album, length and channel. */
-    private class Kind(val key: String, val name: String, val version: String, val album: String = "Fake Album", val length: String = "1:30", val channel: String = "Fake Band")
+    private class Kind(val key: String, val name: String, val version: String, val album: String = "Fake Album", val length: String = LENGTH, val channel: String = "Fake Band") {
+        companion object {
+            /** How long a row or video is, unless it says otherwise, as the song's own recording is. */
+            const val LENGTH = "1:30"
+        }
+    }
 
     private val songsOfTheMatrix = listOf(
         Song("plain", "Fake Song", null, "", "偽の歌", "にせのうた"),
@@ -806,7 +1145,7 @@ class MatcherCasesTest {
 
     /**
      * Every song of the matrix, with no rows, one or two, each of every kind, with one video of each kind or none, in each
-     * of [MODES]: nothing breaks the rules of [broken], against what main opened, [MATRIX], written by this test on main
+     * of [MODES]: no [regressions] against what main opened, [MATRIX], written by this test on main
      * (see [onMain]). So main's right row never gives way to a wrong one or to nothing; how each cell is judged (see
      * [isIt]), main against now, is only counted, for the PR that changes what opens.
      */
@@ -817,60 +1156,99 @@ class MatcherCasesTest {
         val main = if (onMain) emptyMap() else stored(MATRIX)
         val worse = mutableListOf<String>()
         val counts = sortedMapOf<String, Int>()
-        var cells = 0
-        val drawn = songsOfTheMatrix.flatMap { song ->
-            val kinds = rowsOf(song)
-            (kinds + null).flatMap { first -> (kinds + null).flatMap { second -> videosOf(song).map { video -> Triple(first, second, video) } } }
-                .filter { (first, second) -> (first != null || second == null) && cells++ % every == 0 && (only.isEmpty() || song.key in only) }
-                .map { song to it }
-        }
+        val rightLosses = mutableListOf<String>()
+        val drawn = matrixCells().filterIndexed { index, (song) -> index % every == 0 && (only.isEmpty() || song.key in only) }
         assertEquals("Songs -PmatcherSongs names that the matrix doesn't have", emptySet<String>(), only - songsOfTheMatrix.map { it.key }.toSet())
         assertTrue("No cell of the matrix drawn", drawn.isNotEmpty())
-        val searched = drawn.inParallel { (song, cell) ->
-            val (first, second, video) = cell
-            val rows = listOfNotNull(first, second)
-            fun length(kind: Kind) = if (kind.version == "live") song.liveLength else kind.length
-            fun shownRow(kind: Kind) = row(kind.name, kind.album, song.artist, length(kind))
-            fun shownVideo(kind: Kind) = video(kind.name, length(kind), song.artist)
-            val right = rows.filter { isIt(it, song) }.map(::shownRow) + listOfNotNull(video).filter { isIt(it, song) }.map(::shownVideo)
-            val case = Case(
-                "", null, title = song.title, japan = song.japan?.let { it to song.artist }, editions = song.editions, songs = rows.map(::shownRow),
-                videos = listOfNotNull(video).map(::shownVideo)
-            )
-            val modes = listOf(
-                case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
-                case.copy(chooses = { shown -> shown.indexOfFirst { it !in right } }), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true),
-                alone(case)
-            )
-            modes.map(::found)
-        }
+        val searched = drawn.inParallel { (song, cell) -> matrixModes(song, cell).map(::found) }
         for ((at, results) in drawn.zip(searched)) {
             val (song, cell) = at
             val (first, second, video) = cell
             val rows = listOfNotNull(first, second)
-            val key = listOf(song.key, first?.key ?: "-", second?.key ?: "-", video?.key ?: "-").joinToString(" ")
+            val key = cellKey(song, cell)
             opened += "$key\t${results.joinToString(" ") { it.id ?: "-" }}"
             if (onMain) continue
             val was = requireNotNull(main[key]) { key }.map { it.takeIf { id -> id != "-" } }
-            worse += broken(key, results, was)
             fun verdict(id: String?) = when {
                 id == null -> NOTHING
                 isIt(if (id.startsWith("video")) requireNotNull(video) else rows[id.removePrefix("song").toInt()], song) -> RIGHT
                 else -> WRONG
             }
+            // The matrix has no independent proof for a newly chosen row where main found nothing.
+            worse += regressions(key, results, was, ::verdict, requireExistingAnswer = true)
             results.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = verdict(then) to verdict(now.id)
-                if (before == RIGHT && after != RIGHT && mode == 0) println("Right result changed: $key, $then -> ${now.id}")
+                if (before == RIGHT && after == NOTHING) rightLosses += "$key\t${MODES[mode]}\t$then"
+                if (before == RIGHT && after != RIGHT) println("Right result changed: $key, ${MODES[mode]}, $then -> ${now.id}")
+                if (before == WRONG && after == WRONG && then != now.id) counts.merge("${MODES[mode]}: different wrong row", 1, Int::plus)
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
         written(MATRIX, opened)
+        written("matcher-right-losses", rightLosses)
         println("Main -> now, cells:\n" + counts.entries.joinToString("\n"))
         assertEquals("${worse.size} worse: " + worse.take(WORSE_SHOWN).joinToString("\n"), 0, worse.size)
     }
 
+    /** Every cell of the matrix: a song, with no rows, one or two, each of every kind, and one video of each kind or none. */
+    private fun matrixCells(): List<Pair<Song, Triple<Kind?, Kind?, Kind?>>> = songsOfTheMatrix.flatMap { song ->
+        val kinds = rowsOf(song)
+        (kinds + null).flatMap { first -> (kinds + null).flatMap { second -> videosOf(song).map { video -> Triple(first, second, video) } } }
+            .filter { (first, second) -> first != null || second == null }
+            .map { song to it }
+    }
+
+    private fun cellKey(song: Song, cell: Triple<Kind?, Kind?, Kind?>) =
+        listOf(song.key, cell.first?.key ?: "-", cell.second?.key ?: "-", cell.third?.key ?: "-").joinToString(" ")
+
+    /** A cell's search in each of [MODES]. */
+    private fun matrixModes(song: Song, cell: Triple<Kind?, Kind?, Kind?>): List<Case> {
+        val (first, second, video) = cell
+        val rows = listOfNotNull(first, second)
+        fun length(kind: Kind) = if (kind.version == "live") song.liveLength else kind.length
+        fun shownRow(kind: Kind) = row(kind.name, kind.album, song.artist, length(kind))
+        fun shownVideo(kind: Kind) = video(kind.name, length(kind), song.artist)
+        val right = rows.filter { isIt(it, song) }.map(::shownRow) + listOfNotNull(video).filter { isIt(it, song) }.map(::shownVideo)
+        // The link says how long the song's own recording is, as one from Spotify or Apple Music does, so what the
+        // matcher does with a length, and with rows of other lengths, is held to main too.
+        val case = Case(
+            "", null, title = song.title, japan = song.japan?.let { it to song.artist }, editions = song.editions, songs = rows.map(::shownRow),
+            videos = listOfNotNull(video).map(::shownVideo), linkMs = lengthMs(if (song.version == "live") song.liveLength else Kind.LENGTH)
+        )
+        return listOf(
+            case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
+            case.copy(chooses = { shown -> shown.indexOfFirst { it !in right } }), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true),
+            alone(case)
+        )
+    }
+
     /**
-     * Made-up searches, the same each run (see [fuzzed]), each in every one of [MODES], break no rule of [broken], against
+     * A few of the matrix's cells and of the made-up searches, in every one of [MODES], open what this branch opened,
+     * [SNAPSHOT]: the matrix and the searches above judge a change against main, but skip PIT's runs, so here a change
+     * PIT makes to what opens is caught. A change to the matcher that changes what opens writes it again, with
+     * [writeSnapshot], into app/build/, to be kept in the test's resources; what changed shows in its diff.
+     */
+    @Test
+    fun aFewSearchesOpenWhatThisBranchOpened() {
+        val cells = matrixCells().filterIndexed { index, _ -> index % SNAPSHOT_EVERY == 0 }
+        val searches = fuzzed().withIndex().filter { it.index % SNAPSHOT_EVERY == 0 }
+        val opened = cells.inParallel { (song, cell) -> matrixModes(song, cell).map(::found) }
+            .zip(cells) { found, (song, cell) -> "${cellKey(song, cell)}\t${found.joinToString(" ") { it.id ?: "-" }}" } +
+            searches.inParallel { it.value.modes.map(::found) }
+                .zip(searches) { found, (index) -> "search $index\t${found.joinToString(" ") { it.id ?: "-" }}" }
+        val text = opened.joinToString("\n", postfix = "\n")
+        if (writeSnapshot) {
+            java.util.zip.GZIPOutputStream(java.io.File("build/$SNAPSHOT.tsv.gz").outputStream()).use { it.write(text.toByteArray()) }
+            return
+        }
+        val kept = requireNotNull(javaClass.getResourceAsStream("/$SNAPSHOT.tsv.gz")) { SNAPSHOT }.use { stream ->
+            java.util.zip.GZIPInputStream(stream).bufferedReader().readText()
+        }
+        assertEquals(kept, text)
+    }
+
+    /**
+     * Made-up searches, the same each run (see [fuzzed]), each in every one of [MODES], have no [regressions] against
      * what main opened, [FUZZ], written by this test on main (see [onMain]); and as the search knows which it made right
      * (see [Fuzzed.verdict]), how each is judged, main against now, is counted, for the PR that changes what opens.
      */
@@ -889,18 +1267,57 @@ class MatcherCasesTest {
             if (onMain) return@forEach
             val was = requireNotNull(main["$index"]) { "$index" }.map { it.takeIf { id -> id != "-" } }
             val key = "$index ${fuzzed.song.title}: ${fuzzed.modes.first().songs} ${fuzzed.modes.first().videos}"
-            broken += broken(key, found, was)
+            broken += regressions(key, found, was, fuzzed::verdict) { mode, id -> sourceRulesOut(fuzzed.modes[mode], id) }
             found.zip(was).forEachIndexed { mode, (now, then) ->
                 val (before, after) = fuzzed.verdict(then) to fuzzed.verdict(now.id)
                 if (before == RIGHT && after != RIGHT) {
                     println("Right result changed: $key, ${MODES[mode]}, source ${fuzzed.modes[mode].linkMs}, $then -> ${now.id}")
                 }
+                if (before == WRONG && after == WRONG && then != now.id) counts.merge("${MODES[mode]}: different wrong row", 1, Int::plus)
+                if (before == UNKNOWN && after == UNKNOWN && then != now.id) counts.merge("${MODES[mode]}: different unproved row", 1, Int::plus)
                 counts.merge("${MODES[mode]}: $before -> $after", 1, Int::plus)
             }
         }
         written(FUZZ, opened)
         println("Main -> now, made-up searches:\n" + counts.entries.joinToString("\n"))
         assertEquals("${broken.size} broken: " + broken.take(WORSE_SHOWN).joinToString("\n"), 0, broken.size)
+    }
+
+    @Test
+    fun theNamedArtistVideoStillWinsTheTwoEarlierReviewCases() {
+        val cases = fuzzed()
+        val isuzu = cases[1870].modes.map(::found)
+        assertEquals(emptyList<String>(), broken("Isuzu", isuzu, List(MODES.size) { "video1" }))
+        assertEquals("video1", find(cases[3242].modes[2]))
+    }
+
+    /**
+     * A right row is an improvement. A move from no answer, a right answer or an unproved answer to a wrong one is worse.
+     * Swapping two already wrong rows doesn't improve accuracy. Also fail an automatic substitution when the source's time
+     * disproves the first row. The caller separately counts changes within the same verdict and apparent losses that time explains.
+     */
+    private fun regressions(
+        key: String, found: List<Found>, was: List<String?>, verdict: (String?) -> String,
+        requireExistingAnswer: Boolean = false,
+        ruledOut: (Int, String?) -> Boolean = { _, _ -> false }
+    ): List<String> = found.indices.mapNotNull { mode ->
+        val now = found[mode]
+        val then = was[mode]
+        val signedOut = SIGNED_OUT[mode]
+        val previous = verdict(then)
+        val current = verdict(now.id)
+        val lostAnswer = current == NOTHING && previous == RIGHT && !ruledOut(mode, then)
+        val substitutedWrong = !now.asked && then != now.id && ruledOut(mode, then)
+        val newWrong = current == WRONG && (previous != WRONG || substitutedWrong)
+        val changedUnproved = current == UNKNOWN && (previous == RIGHT || previous == NOTHING)
+        val unprovedNewAnswer = requireExistingAnswer && then == null && now.id != null
+        when {
+            lostAnswer || newWrong || changedUnproved || unprovedNewAnswer ->
+                "$key, ${MODES[mode]}: ${now.id ?: NOTHING} ($current), main ${then ?: NOTHING} ($previous)"
+            now.asked && verdict(was[signedOut]) == RIGHT && !ruledOut(signedOut, was[signedOut]) ->
+                "$key, ${MODES[mode]}: picker asked, but main opened ${was[signedOut]} without it"
+            else -> null
+        }
     }
 
     /**
@@ -1007,6 +1424,18 @@ class MatcherCasesTest {
 
     /** How long "1:30" is. */
     private fun lengthMs(length: String): Long = length.split(":").let { (minutes, seconds) -> (minutes.toLong() * 60 + seconds.toLong()) * MS }
+
+    /**
+     * Whether the link's length rules out what main opened: a row or a video more than [ExactMatcher.SAME_LENGTH_MS] off it,
+     * as the matcher keeps every row within that of the link, so a loss of one closer is no loss the length explains.
+     */
+    private fun sourceRulesOut(case: Case, id: String?): Boolean {
+        val source = case.linkMs ?: return false
+        val video = id?.startsWith("video") ?: return false
+        val index = id.removePrefix(if (video) "video" else "song").toInt()
+        val shown = (if (video) case.videos else case.songs)[index]
+        return kotlin.math.abs(lengthMs(shown.substringAfterLast(" • ")) - source) > ExactMatcher.SAME_LENGTH_MS
+    }
 
     /** The versions [said] by a name, a tag and an album, each null or "" where it says none. */
     private fun versionsOf(vararg said: String?): Set<String> = said.filterNotNull().filter(String::isNotEmpty).toSet()
@@ -1115,19 +1544,25 @@ class MatcherCasesTest {
          * of the song is no longer taken for it (Issues #945, #983 and #992).
          */
         val CHANGED: Map<String, String?> = mapOf(
+            // The only named studio row is the 3:30 recording. The linked edition is 4:00.
+            "2 unrelated live title" to null,
+            "2 live title without live album" to null,
+            "2 two possible live takes" to null,
+            // Two Apple editions share a length and neither names the other-script result.
+            "2 ambiguous Apple editions" to null,
             "9 budokan" to "song1",
             "9 budokan picked" to "song1",
             "9 op size" to "song1",
             "9 op size picked" to "song1",
             "plain live" to "song1",
             "plain live asked" to "song1",
-            "plain first plain" to "song1",
+            "plain first plain" to null,
             "plain song's subtitle" to "song1",
             "plain song's credit" to "song1",
             "plain tagged" to "song1",
             "plain other script" to "song1",
             "plain live album" to null,
-            "plain live in name" to "song1",
+            "plain live in name" to null,
             "plain not as close" to "song1",
             "plain not as close though shorter" to "song1",
             "plain closer though longer" to "song1",
@@ -1136,7 +1571,8 @@ class MatcherCasesTest {
             "1 rightly doubted cyrillic" to "song1",
             "1 pick in its script" to "song1",
             "1 pick passes" to "song1",
-            "1 pick fails" to "song1",
+            // Both rows are live, and the second has a different title.
+            "1 pick fails" to null,
             "1 pick another song" to "song1",
             "9 live half" to null,
             "2 live half" to null,
@@ -1183,6 +1619,9 @@ class MatcherCasesTest {
         const val SLOW_PICK_MS = 1L
         const val MATRIX = "matcher-matrix"
         const val FUZZ = "matcher-fuzz"
+        const val SNAPSHOT = "matcher-snapshot"
+        /** One in this many of the matrix's cells and of the made-up searches is in [SNAPSHOT]: some seconds, for each change PIT makes. */
+        const val SNAPSHOT_EVERY = 211
         const val SAYS_NONE = -1
         const val MS = 1_000L
         const val FUZZ_SEED = 947

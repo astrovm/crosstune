@@ -3,7 +3,9 @@
 
     python3 scripts/matchcheck/replay.py prepare OUT       # OUT/replay.json: what each song is served, and which results are right
     python3 scripts/matchcheck/replay.py prepare OUT --apple-down --source-length
-    python3 scripts/matchcheck/replay.py run OUT LABEL      # MatchReplayTest in the Gradle box, in this checkout: OUT/replay-LABEL.json
+    python3 scripts/matchcheck/replay.py prepare OUT --require-answers  # fail if a search wasn't captured
+    python3 scripts/matchcheck/replay.py run OUT LABEL [--apple-down | --both]  # --both writes LABEL-up and LABEL-down
+    python3 scripts/matchcheck/replay.py capture-proofs OUT  # capture candidate searches recorded by a probe run
     python3 scripts/matchcheck/replay.py table OUT LABEL [--against OTHER] [-v]
 
 Each song is looked for on YouTube Music as a link from another service would ask for it: by its
@@ -13,6 +15,7 @@ Music with the songs and videos it gave. Four ways:
 1. "names": the JP, KR and TW names served; "latin": not, as when a store has no other name.
 2. "alone": no ChatGPT; "asked": ChatGPT picks a right result when it's shown one, and none otherwise.
 
+A collected length is passed to the matcher. With --apple-down every Apple request fails.
 A song result is right when one of its names is a name a store gives the song, by its artist. A video
 is right when it's named so, says no other version, and is the artist's; or names the artist, where
 no song result and no video of the artist's is right, as someone else's lyrics video is no match where
@@ -32,7 +35,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unicodedata
+import urllib.parse
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze
@@ -55,6 +61,8 @@ def ytm_path(out, query, params, language="en"):
 
 # What YouTube adds to an artist's own channel's name, as ExactMatcher's CHANNEL_SUFFIXES: "Band - Topic", "BandVEVO".
 CHANNEL_SUFFIXES = {"topic", "vevo", "official", "music", "tv"}
+# Qobuz names the same artist both ways on this album: https://www.qobuz.com/us-en/album/kifak-inta-fairuz/mx9y215fx1z8a
+ARTIST_ALIASES = {"fairouz": {"fairuz"}, "fairuz": {"fairouz"}}
 # SongNames' leadingArticle, artistSeparator and conjunction, which split a credit into its artists.
 LEADING_ARTICLE = re.compile(r"^the\s+", re.IGNORECASE)
 CREDIT_SEPARATOR = re.compile(r"\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*", re.IGNORECASE)
@@ -82,13 +90,28 @@ def own_channel(uploader, credits):
     return any(channel == a or (channel.startswith(a) and channel[len(a):] in CHANNEL_SUFFIXES) for a in names)
 
 
+# How far a result may be from the collected recording's length and still be it: ExactMatcher's SAME_LENGTH_MS for a song
+# result, and its PICKED_VIDEO_LENGTH_MS for a video, which may open or end with more.
+SONG_LENGTH_MS = 8_000
+VIDEO_LENGTH_MS = 45_000
+
+
+def as_long(row, song, tolerance):
+    """Whether a result is as long as the song's recording, give or take [tolerance]; one that says no length may be."""
+    wanted, length = song.get("lengthMs"), row.get("lengthMs")
+    return not wanted or length is None or abs(length - wanted) <= tolerance
+
+
 def right_ids(song, results, videos):
-    """The videoIds of the song results and videos that are the song."""
+    """The videoIds of the song results and videos that are the song: named so, and as long as its recording, as a
+    1:35 TV edit is no 4:56 recording, whatever its name."""
     native = {analyze.bare(n["title"]) for n in song["native"]} | {analyze.normalize(n["title"]) for n in song["native"]}
     wanted = analyze.artists(song["artist"]) | {a for n in song["native"] for a in analyze.artists(n["artist"])}
+    wanted |= {alias for artist in wanted for alias in ARTIST_ALIASES.get(artist, set())}
 
     def by_eye(row):
-        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE
+        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE or (
+            song["artist"] == "Toshiki Kadomatsu" and (song["title"], row["name"]) in analyze.RIGHT_MEDLEYS)
 
     def named(row):
         parts = analyze.title_names(row["name"]) + [p for p in QUOTED.split(row["name"]) if p.strip()]
@@ -103,12 +126,13 @@ def right_ids(song, results, videos):
         return analyze.says_another_version_of(row["name"], titles, song["artist"])
 
     # Checked by eye, it's the song, whatever its name says: "(Directors Edit Version)" for "(Director's Edit Version)".
-    ids = {r["id"] for r in results if r["id"] and (by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
+    ids = {r["id"] for r in results if r["id"] and as_long(r, song, SONG_LENGTH_MS) and (
+        by_eye(r) or (named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)))}
     named_only = set()
     for v in videos:
-        if not v["id"] or not named(v) or says_another(v):
+        if not v["id"] or not named(v) or says_another(v) or not as_long(v, song, VIDEO_LENGTH_MS):
             continue
-        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]]):
+        if own_channel(v["details"][0], [song["artist"]] + [n["artist"] for n in song["native"]] + list(wanted)):
             ids.add(v["id"])
         elif any(a in analyze.normalize(v["name"]) for a in wanted):
             named_only.add(v["id"])
@@ -128,13 +152,42 @@ def deezer_row(row):
     return row if isinstance(artist, dict) else dict(row, artist={"name": artist})
 
 
-def prepare(out, *, apple_down=False, source_length=False):
+def cached_deezer(out, path, query):
+    params = urllib.parse.urlencode({"q": query, "limit": 10})
+    kept = raw_path(out, f"https://api.deezer.com/{path}?{params}", None)
+    answer = read_json(kept) if kept else None
+    return answer.get("data") if isinstance(answer, dict) and "error" not in answer else None
+
+
+def latin_queries(out, songs):
+    """Add Latin-artist searches only when both services' actual answers were captured."""
+    found = []
+    for song in songs:
+        if song.get("askedArtist", song["artist"]) == song["artist"]:
+            continue
+        query = f"{song['title']} {song['artist']}"
+        if not ytm_path(out, query, collect.YTM_SONGS) or not ytm_path(out, query, collect.YTM_VIDEOS):
+            continue
+        tracks = cached_deezer(out, "search/track", query)
+        artists = cached_deezer(out, "search/artist", song["artist"])
+        if not isinstance(tracks, list) or not isinstance(artists, list):
+            continue
+        found.append(dict(song, askedArtist=song["artist"], query=query, deezer=tracks, deezerArtists=artists,
+                          ytmSongs=True, ytmVideos=True, deezerAnswered=True, deezerArtistsAnswered=True))
+    return found
+
+
+def prepare(out, require_answers=False, also_latin=False, *, apple_down=False, source_length=False):
     with open(os.path.join(out, "songs.json"), encoding="utf-8") as kept:
         songs = json.load(kept)
+    if also_latin:
+        songs += latin_queries(out, songs)
     replay = []
     for song in songs:
         query = song["query"]
         songs_path, videos_path = ytm_path(out, query, collect.YTM_SONGS), ytm_path(out, query, collect.YTM_VIDEOS)
+        if require_answers and (not songs_path or not videos_path or not song.get("ytmSongs") or not song.get("ytmVideos") or not song.get("deezerAnswered") or not song.get("deezerArtistsAnswered")):
+            raise ValueError(f"Missing YouTube Music or Deezer answer for {query}")
         results = analyze.rows(read_json(songs_path)) if songs_path else []
         videos = analyze.rows(read_json(videos_path)) if videos_path else []
         names = {r["id"]: f"{r['name']} | {' • '.join(r['details'])}" for r in results + videos if r["id"]}
@@ -144,12 +197,12 @@ def prepare(out, *, apple_down=False, source_length=False):
         localized = {f"songs-{language}": os.path.relpath(path, out) for language in ("ja", "ko", "zh-TW")
                      if (path := ytm_path(out, query, collect.YTM_SONGS, language))}
         replay.append({
-            "title": song["title"], "artist": song["artist"],
+            "title": song["title"], "artist": song.get("askedArtist", song["artist"]), "lengthMs": song["lengthMs"], "query": query,
             "appleDown": apple_down, "sourceLengthMs": song["lengthMs"] if source_length else None,
             "us": [{"trackId": song["id"], "trackName": song["title"], "artistName": song["artist"], "collectionName": song["album"], "trackTimeMillis": ms}
                    for ms in (song["editionsMs"] or [song["lengthMs"]])],
             "native": native,
-            "deezer": [deezer_row(row) for row in song.get("deezer", [])],
+            "deezer": [deezer_row(row) for row in song.get("deezer", [])], "deezerArtists": song.get("deezerArtists", []),
             # Where in out, so a copy of the folder, as another task's or the build box's, still finds them.
             "songs": songs_path and os.path.relpath(songs_path, out), "videos": videos_path and os.path.relpath(videos_path, out),
             "right": right_ids(song, results, videos), "names": names,
@@ -160,13 +213,74 @@ def prepare(out, *, apple_down=False, source_length=False):
     print(f"{len(replay)} songs, {sum(1 for s in replay if s['right'])} with a right result", file=sys.stderr)
 
 
-def run(out, label):
+def run(out, label, apple_down=False, both=False, require_proofs=False, probe=False):
     """MatchReplayTest in the checkout this is run in, which may be another, e.g. origin/main's, with the same test file
     and gradle-box.sh; run again each time, as Gradle doesn't see that what it's served changed."""
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
+    env = dict(os.environ, MATCHCHECK_DIR=os.path.abspath(out), MATCHCHECK_LABEL=label, MATCHCHECK_APPLE_DOWN="1" if apple_down else "0", MATCHCHECK_BOTH="1" if both else "0", MATCHCHECK_REQUIRE_PROOFS="1" if require_proofs else "0", MATCHCHECK_PROBE="1" if probe else "0", GRADLE_BOX_MEMORY=os.environ.get("GRADLE_BOX_MEMORY", "7"))
     subprocess.run(["nice", "-n", "10", os.path.join(root, "scripts/gradle-box/gradle-box.sh"), "--max-workers=2",
                     ":app:testDebugUnitTest", "--tests", "*MatchReplayTest", "--rerun"], cwd=root, env=env, check=True)
+
+
+def capture_proofs(out):
+    """Capture the exact additional Apple searches the probe replay needed."""
+    missing = read_json(os.path.join(out, "missing-proofs.json"))
+    path = os.path.join(out, "candidate-proofs.json")
+    proofs = read_json(path) if os.path.exists(path) else {}
+    for key in missing:
+        store, term = key.split("|", 1)
+        if isinstance(proofs.get(key), list):
+            continue
+        query = urllib.parse.urlencode({"term": term, "entity": "song", "limit": 10, "country": store})
+        answer = collect.fetch(out, "https://itunes.apple.com/search?" + query, pause=0.3)
+        if answer is None or not isinstance(answer.get("results"), list):
+            raise ValueError(f"Apple did not answer candidate search {key}")
+        proofs[key] = answer["results"]
+        with open(path, "w", encoding="utf-8") as kept:
+            json.dump(proofs, kept, ensure_ascii=False)
+    print(f"{len(missing)} candidate searches, {len(proofs)} answers kept", file=sys.stderr)
+    capture_aliases(out)
+
+
+def checked_artist_aliases(name, answer):
+    """Match the MusicBrainz parser: one exact artist and artist-name aliases, not search hints."""
+    matches = []
+    for artist in answer.get("artists", []):
+        if not artist.get("id", "").strip():
+            continue
+        names = {artist.get("name", "")} | {a.get("name", "") for a in artist.get("aliases", []) if a.get("type") == "Artist name"}
+        names.discard("")
+        if any(normalized(n) == normalized(name) for n in names):
+            matches.append(names)
+    return sorted(matches[0]) if len(matches) == 1 else []
+
+
+def capture_aliases(out):
+    missing = read_json(os.path.join(out, "missing-aliases.json"))
+    path = os.path.join(out, "artist-aliases.json")
+    aliases = read_json(path) if os.path.exists(path) else {}
+    for name in missing:
+        if isinstance(aliases.get(name), list):
+            continue
+        quoted = name.replace('"', '').replace('\\', '')
+        url = "https://musicbrainz.org/ws/2/artist?" + urllib.parse.urlencode({"query": f'artist:"{quoted}"', "limit": 10, "fmt": "json"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Crosstune/1 (https://github.com/astrovm/crosstune)", "Accept": "application/json"})
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    answer = json.load(response)
+                break
+            except (OSError, ValueError) as error:
+                if attempt == 3:
+                    raise ValueError(f"MusicBrainz did not answer artist search {name}: {error}") from error
+                time.sleep(2 * (attempt + 1))
+        if not isinstance(answer.get("artists"), list):
+            raise ValueError(f"MusicBrainz did not answer artist search {name}")
+        aliases[name] = checked_artist_aliases(name, answer)
+        with open(path, "w", encoding="utf-8") as kept:
+            json.dump(aliases, kept, ensure_ascii=False)
+        time.sleep(1)
+    print(f"{len(missing)} artist searches, {len(aliases)} answers kept", file=sys.stderr)
 
 
 MODES = ("names, alone", "names, asked", "latin, alone", "latin, asked")
@@ -215,18 +329,25 @@ def table(out, label, against=None, verbose=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("prepare", "run", "table"))
+    parser.add_argument("action", choices=("prepare", "run", "capture-proofs", "table"))
     parser.add_argument("out")
     parser.add_argument("label", nargs="?", default="head")
     parser.add_argument("--against")
-    parser.add_argument("--apple-down", action="store_true", help="fail Apple requests in the prepared replay")
     parser.add_argument("--source-length", action="store_true", help="use the collected length as the link's length")
+    parser.add_argument("--apple-down", action="store_true", help="make Apple requests fail")
+    parser.add_argument("--both", action="store_true", help="write LABEL-up and LABEL-down in one run")
+    parser.add_argument("--require-answers", action="store_true", help="fail preparation if a YouTube Music answer is missing")
+    parser.add_argument("--require-proofs", action="store_true", help="fail the replay if a candidate Apple search is missing")
+    parser.add_argument("--probe", action="store_true", help="record all candidate searches without using saved proofs")
+    parser.add_argument("--also-latin", action="store_true", help="add captured Latin-artist queries for the same songs")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.action == "prepare":
-        prepare(args.out, apple_down=args.apple_down, source_length=args.source_length)
+        prepare(args.out, args.require_answers, args.also_latin, apple_down=args.apple_down, source_length=args.source_length)
     elif args.action == "run":
-        run(args.out, args.label)
+        run(args.out, args.label, args.apple_down, args.both, args.require_proofs, args.probe)
+    elif args.action == "capture-proofs":
+        capture_proofs(args.out)
     else:
         table(args.out, args.label, args.against, args.verbose)
 

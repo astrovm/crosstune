@@ -74,6 +74,24 @@ class TakesTest {
     }
 
     @Test
+    fun thePickerCanInvestigateCreditsButNotExplicitLiveNotes() {
+        assertNull(Takes.saysAnotherTake("Song (Live Crew)", includeUnclearLive = false))
+        for (name in listOf("Song (Live)", "Song (Live from Budokan)", "Song (Live 2023)", "Song (ライブ)")) {
+            assertEquals(name, Takes.Take.LIVE, Takes.saysAnotherTake(name, includeUnclearLive = false))
+        }
+    }
+
+    @Test
+    fun videoNotesDistinguishEditionsFromSubtitlesAndRemasters() {
+        assertEquals(setOf("englishversion", "reprise"), Takes.videoRecordingNotes("Song (English Version) - Reprise (Remastered)"))
+        assertEquals(emptySet<String>(), Takes.videoRecordingNotes("Song (English Subtitles) (Remastered)"))
+        assertEquals(setOf("thefirsttake"), Takes.videoRecordingNotes("Song (THE FIRST TAKE) - From THE FIRST TAKE"))
+        for ((english, japanese) in listOf("Christmas Version" to "クリスマス・バージョン", "Ballad Version" to "バラードバージョン")) {
+            assertEquals(setOf(SongNames.normalize(english), SongNames.normalize(japanese)), Takes.videoRecordingNotes("Song ($english) - $japanese"))
+        }
+    }
+
+    @Test
     fun aSongsOwnNameMayHoldTheWordLiveButNoOtherVersionWord() {
         assertFalse(Takes.saysAnotherVersionBesidesLive("Live Forever"))
         assertFalse(Takes.saysAnotherVersionBesidesLive("Fake Song"))

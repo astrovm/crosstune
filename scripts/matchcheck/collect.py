@@ -7,7 +7,10 @@ names, found by the same length to the millisecond. For each song, YouTube Music
 video search and Deezer's search are asked as the app asks them. Every answer is kept in
 OUT/raw, so replay.py can serve it again without the network.
 
-    python3 scripts/matchcheck/collect.py OUT [--per-artist N]
+    python3 scripts/matchcheck/collect.py OUT [--per-artist N] [--native-artist]
+
+With --native-artist, search by the US title and a native-store artist, to exercise names written
+otherwise. Songs without another artist name are skipped.
 
 Nothing is sent but searches by an artist's or a song's name.
 """
@@ -82,17 +85,33 @@ def ytm(out, query, params):
 def deezer(out, query):
     """Deezer's track search, asked as the app asks it: "title artist", ten results."""
     asked = urllib.parse.urlencode({"q": query, "limit": 10})
-    return (fetch(out, "https://api.deezer.com/search/track?" + asked, pause=0.3) or {}).get("data", [])
+    answer = fetch(out, "https://api.deezer.com/search/track?" + asked, pause=0.3)
+    return None if answer is None or "error" in answer else answer.get("data", [])
+
+
+def deezer_artists(out, artist):
+    asked = urllib.parse.urlencode({"q": artist, "limit": 10})
+    answer = fetch(out, "https://api.deezer.com/search/artist?" + asked, pause=0.3)
+    return None if answer is None or "error" in answer else answer.get("data", [])
 
 
 def latin(text):
     return all(ord(c) < 0x250 or not c.isalpha() for c in text)
 
 
+def recording_key(song):
+    return song.get("artistId"), song.get("trackTimeMillis")
+
+
+def edition_lengths(songs, song):
+    return sorted({other["trackTimeMillis"] for other in songs if other["trackName"] == song["trackName"] and other.get("artistId") == song.get("artistId") and other.get("trackTimeMillis")})
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("out")
     parser.add_argument("--per-artist", type=int, default=4)
+    parser.add_argument("--native-artist", action="store_true", help="search with the artist's native name")
     args = parser.parse_args()
     os.makedirs(os.path.join(args.out, "raw"), exist_ok=True)
     songs = []
@@ -101,27 +120,45 @@ def main():
         native = {}
         for store in STORES:
             for r in apple_search(args.out, artist, store):
-                if r.get("kind") == "song" and not latin(r.get("trackName", "")):
-                    native.setdefault(r["trackTimeMillis"], []).append({"store": store, "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", "")})
+                if r.get("kind") == "song" and r.get("artistId") and r.get("trackTimeMillis") and not latin(r.get("trackName", "")):
+                    native.setdefault(recording_key(r), []).append({"store": store, "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", "")})
         picked = []
         for r in us:
-            if not latin(r["trackName"]) or r["trackTimeMillis"] not in native:
+            key = recording_key(r)
+            if not r.get("artistId") or not latin(r["trackName"]) or key not in native:
                 continue
-            if any(p["title"] == r["trackName"] for p in picked):
+            # The app removes some edition tags before it searches. Keep plain titles here so the
+            # captured query can be checked against the app's own searchQuery in MatchReplayTest.
+            if args.native_artist and (any(mark in r["trackName"] for mark in "([") or " - " in r["trackName"]):
+                continue
+            if args.native_artist and not any(n["artist"] and not latin(n["artist"]) and n["artist"] != r["artistName"] for n in native[key]):
+                continue
+            if any(p["title"] == r["trackName"] and p["artistId"] == r["artistId"] for p in picked):
                 continue
             picked.append({
                 "id": r["trackId"], "title": r["trackName"], "artist": r["artistName"], "album": r.get("collectionName", ""),
-                "lengthMs": r["trackTimeMillis"], "native": native[r["trackTimeMillis"]],
-                "editionsMs": sorted({o["trackTimeMillis"] for o in us if o["trackName"] == r["trackName"] and o.get("trackTimeMillis")}),
+                "artistId": r["artistId"], "lengthMs": r["trackTimeMillis"], "native": native[key],
+                "editionsMs": edition_lengths(us, r),
             })
             if len(picked) >= args.per_artist:
                 break
         print(f"{artist}: {len(us)} in US, {len(native)} native lengths, {len(picked)} picked", file=sys.stderr)
         for song in picked:
-            query = f"{song['title']} {song['artist']}"
-            song["ytmSongs"] = ytm(args.out, query, YTM_SONGS) is not None
-            song["ytmVideos"] = ytm(args.out, query, YTM_VIDEOS) is not None
-            song["deezer"] = [{"title": d.get("title"), "artist": d.get("artist", {}).get("name"), "duration": d.get("duration")} for d in deezer(args.out, query)]
+            native_artist = next((n["artist"] for n in song["native"] if n["artist"] and not latin(n["artist"]) and n["artist"] != song["artist"]), None)
+            if args.native_artist and not native_artist:
+                continue
+            song["askedArtist"] = native_artist if args.native_artist else song["artist"]
+            artists = deezer_artists(args.out, song["askedArtist"])
+            song["deezerArtistsAnswered"] = artists is not None
+            song["deezerArtists"] = [{"id": a.get("id"), "name": a.get("name")} for a in (artists or [])]
+            query = f"{song['title']} {song['askedArtist']}"
+            songs_answer = ytm(args.out, query, YTM_SONGS)
+            videos_answer = ytm(args.out, query, YTM_VIDEOS)
+            song["ytmSongs"] = songs_answer is not None and "contents" in songs_answer
+            song["ytmVideos"] = videos_answer is not None and "contents" in videos_answer
+            found = deezer(args.out, query)
+            song["deezerAnswered"] = found is not None
+            song["deezer"] = [{"title": d.get("title"), "title_short": d.get("title_short"), "title_version": d.get("title_version"), "artist": d.get("artist", {}), "album": d.get("album", {}), "duration": d.get("duration")} for d in (found or [])]
             song["query"] = query
             songs.append(song)
     with open(os.path.join(args.out, "songs.json"), "w", encoding="utf-8") as kept:

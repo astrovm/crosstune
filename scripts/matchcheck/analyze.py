@@ -239,10 +239,15 @@ RIGHT_BY_EYE = {
     # Named the same, with the Latin name after a dash, which the halves split up.
     ("Kenshi Yonezu", "烏 - Raven - Karasu - Raven"),
     ("Keisuke Kuwata & Yumi Matsutoya", "Kissin' Christmas (クリスマスだからじゃない) 2023 - Kissin' Christmas (Christmas Dakarajanai) 2023"),
-    ("Toshiki Kadomatsu", "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best"),
     # Korea's names for the songs the stores give only in Latin letters.
     ("Lee Sun Hee", "아! 옛날이여"),
     ("Lee Sun Hee", "A girl's pray (소녀의 기도)"),
+}
+
+# Both medleys occur in the corpus, so the asked title is part of the checked match.
+RIGHT_MEDLEYS = {
+    ("After 5 Crash / Tokyo Tower / Hatsukoi", "After 5 Crash / Tokyo Tower / 初恋 - After 5 Crash / Tokyo Tower / Hatsukoi"),
+    ("After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best", "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best"),
 }
 
 
