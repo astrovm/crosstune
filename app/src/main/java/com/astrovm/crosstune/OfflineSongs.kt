@@ -98,10 +98,7 @@ internal class OfflineSongs(
         withContext(ioDispatcher) {
             try {
                 file.parentFile?.mkdirs()
-                // Written aside first, so a crash midway never leaves a broken file.
-                val temporary = File(file.path + ".tmp")
-                temporary.writeText(json)
-                temporary.renameTo(file)
+                file.writeWhole(json)
             } catch (_: IOException) {
                 // Not written, it's still kept until the app closes.
             }

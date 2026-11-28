@@ -280,10 +280,7 @@ internal class PlayQueue(
         val json = queue.json()
         withContext(ioDispatcher) {
             try {
-                // Written aside first, so one cut short never leaves a broken file.
-                val temporary = File(file.path + ".tmp")
-                temporary.writeText(json)
-                temporary.renameTo(file)
+                file.writeWhole(json)
             } catch (_: IOException) {
                 // Not kept, it only won't carry on after Crosstune is stopped.
             }
