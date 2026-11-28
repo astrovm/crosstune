@@ -19,8 +19,8 @@
     "stores": "node scripts/publish.ts"
   },
   "devDependencies": {
-    "@types/chrome": "0.3.7",
-    "@types/node": "26.6.6",
+    "@types/chrome": "0.3.8",
+    "@types/node": "26.6.7",
     "esbuild": "0.28.2",
     "playwright": "1.65.1",
     "typescript": "7.0.2"
