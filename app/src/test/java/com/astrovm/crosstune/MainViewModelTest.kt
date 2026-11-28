@@ -4699,7 +4699,7 @@ class MainViewModelTest {
         lateinit var model: MainViewModel
         val sound = object : CoverSound {
             override fun keep() {
-                model.viewModelScope.coroutineContext[Job]?.children?.forEach { it.cancel() }
+                if ("kept" !in went) model.viewModelScope.coroutineContext[Job]?.children?.forEach { it.cancel() }
                 went += "kept"
             }
 
@@ -4715,6 +4715,38 @@ class MainViewModelTest {
         assertEquals(listOf("kept", "let go"), went)
         assertTrue(playback.opened.isEmpty())
         assertFalse(model.uiState.coveringApp)
+        // No take is left counted: the next play's cover lets go of the sound when it goes.
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertEquals(listOf("kept", "let go", "kept"), went)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        assertEquals(listOf("kept", "let go", "kept", "let go"), went)
+    }
+
+    @Test
+    fun theSoundIsLetGoOfWithTheModelAndNotTakenForAnAppThatPlaysBehindCrosstune() {
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val went = mutableListOf<String>()
+        val sound = object : CoverSound {
+            override fun keep() {
+                went += "kept"
+            }
+
+            override fun letGo() {
+                went += "let go"
+            }
+        }
+        val model = ytMusicModel(playback, coverSound = sound)
+        model.setCanFloatOverApps(true)
+        // An app not known to play only in front isn't covered when it's opened, so nothing's taken for it.
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        idle()
+        assertEquals(emptyList<String>(), went)
+        // The model gone, as when the app's swiped away, no cover's left to let go of the sound.
+        model.onClearedForTest()
+        assertEquals(listOf("let go"), went)
     }
 
     @Test
