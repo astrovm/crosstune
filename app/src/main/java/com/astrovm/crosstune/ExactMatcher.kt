@@ -977,8 +977,8 @@ internal class ExactMatcher(
 
     /**
      * The song's rows that nothing told apart, e.g. the album's and a collection's: one still opens, as the first did
-     * before. A take the link doesn't say is left out, then the link's album, or the catalog's, picks, with or without
-     * its "(2019 Remaster)", then the link's length to the second, then the order.
+     * before. A take the link doesn't say is left out, by its title or its album. Then the row on the link's album, or
+     * on a store's, that's as long as the link picks, then the link's album alone, then the link's length, then the order.
      */
     private fun plainRecording(
         metadata: MusicMetadata, exact: List<Row>, rows: List<Row>, names: Names, recording: RequestedRecording, disco: DiscoRequest
@@ -989,16 +989,21 @@ internal class ExactMatcher(
         val named = exact.ifEmpty { known }
         val fitting = named.filter { it.id != null && it.id !in names.rejectedCandidates && fitsReleaseLength(it, sourceLength) && disco.allows(it) }
         val group = fitting.groupBy(::candidateName).values.firstOrNull() ?: return null
-        val live = saysLive(metadata.title) || names.linkedEdition?.live == true
-        val plain = group.filter { rowIsLive(it) == live && !pickerNamesDifferentSongTake(it, names) }
-        val albums = listOfNotNull(metadata.album, names.corroboratingAlbum, names.editionAlbum).filter(String::isNotBlank)
-        fun nearest(among: List<Row>) = among.firstOrNull { sourceLength != null && sameRecordingLength(it.lengthMs, sourceLength) } ?: among.firstOrNull()
-        fun onAlbum(named: (String) -> String) = albums.firstNotNullOfOrNull { album ->
-            nearest(plain.filter { SongNames.normalize(named(it.details.getOrNull(1).orEmpty())) == SongNames.normalize(named(album)) })
+        val linkAlbums = listOfNotNull(metadata.album).filter(String::isNotBlank)
+        val live = saysLive(metadata.title) || names.linkedEdition?.live == true || linkAlbums.any(::liveAlbum)
+        val plain = group.filter { rowIsLive(it) == live && if (live) !Takes.saysAnotherVersionBesidesLive(it.name) else !pickerNamesDifferentSongTake(it, names) }
+        fun asLong(row: Row) = sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength)
+        fun nearest(among: List<Row>) = among.firstOrNull { sourceLength != null && asLong(it) } ?: among.firstOrNull()
+        // An album's name, as it is and then without its "(2019 Remaster)". A store's album only picks a row as long as the link.
+        fun onAlbum(albums: List<String>, anyLength: Boolean) = listOf<(String) -> String>({ it }, SongNames::withoutEditionTag).firstNotNullOfOrNull { named ->
+            albums.firstNotNullOfOrNull { album -> plain.firstOrNull { row ->
+                (anyLength || asLong(row)) && SongNames.normalize(named(row.details.getOrNull(1).orEmpty())) == SongNames.normalize(named(album))
+            } }
         }
         // Names a store didn't finish prove no row by its place in the list: there, only an album picks.
         val listed = plain.takeIf { exact.isNotEmpty() || names.complete }.orEmpty()
-        val first = onAlbum { it } ?: onAlbum(SongNames::withoutEditionTag) ?: nearest(listed) ?: return null
+        val first = onAlbum(linkAlbums + listOfNotNull(names.corroboratingAlbum, names.editionAlbum), false) ?: onAlbum(linkAlbums, true)
+            ?: nearest(listed) ?: return null
         return sourceEdition(plain.filter { it.name == first.name && it.details == first.details }, names.sourceExplicit)
     }
 
@@ -1291,8 +1296,11 @@ internal class ExactMatcher(
         val abroad = rows.filter { isTheSongInAnotherScript(it, names) && keepsRerecording(recording, it.name, it.details.getOrNull(1).orEmpty()) }
         val base = sameName.firstOrNull() ?: first
         val edition = linkedEditionInAnotherScript(base, abroad, names.linkedEdition)?.takeIf { disco.allows(it) }
-        return edition ?: chooseNamedRecording(sameName, metadata.album ?: names.corroboratingAlbum, metadata.title, disco, names.sourceExplicit)
-            ?: pickKnownStudioBesideLive(sameName, names)
+        // A store's album, not the link's own, picks no row seconds off the link while another row is as long as it.
+        val named = chooseNamedRecording(sameName, metadata.album ?: names.corroboratingAlbum, metadata.title, disco, names.sourceExplicit)?.takeIf { row ->
+            metadata.album != null || sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength) || sameName.none { sameRecordingLength(it.lengthMs, sourceLength) }
+        }
+        return edition ?: named ?: pickKnownStudioBesideLive(sameName, names)
             ?: sourceLength?.let { sourceNamesBilingualRelease(sameName, metadata.title, it) }
             ?: equivalentAlbumReleases(sameName, names, recording.live).singleOrNull()
     }
@@ -1436,9 +1444,9 @@ internal class ExactMatcher(
         val byAlbum = eligible.filter { row -> names.deezerNames.any { name ->
             name.album.isNotBlank() && SongNames.same(name.album, row.details.getOrNull(1).orEmpty())
         } }.groupBy(::candidateName).mapNotNull { (name, group) -> group.singleOrNull()?.let { name to it.id } }.toMap()
-        // A row that credits someone more, "Artist, Rapper", is their version when another row credits the artist alone.
-        val fewest = eligible.minOfOrNull { SongNames.artists(it.details.first()).size }
-        return eligible.firstOrNull { disco.allows(it) && SongNames.artists(it.details.first()).size == fewest &&
+        // A row that credits someone more than the link does, "Artist, Rapper", is their version when another row doesn't.
+        val credited = maxOf(eligible.minOfOrNull { SongNames.artists(it.details.first()).size } ?: 0, SongNames.artists(metadata.artist).size)
+        return eligible.firstOrNull { disco.allows(it) && SongNames.artists(it.details.first()).size <= credited &&
             (candidateName(it) !in ambiguous || byAlbum[candidateName(it)] == it.id) }
     }
 
@@ -2063,8 +2071,8 @@ internal class ExactMatcher(
                 linkedArtist && SongNames.sameVersion(metadata.title, it.optString("trackName"), "")) &&
                 metadata.linkLengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
         }?.optString("collectionName")?.let(SongNames::normalize)?.takeIf(String::isNotEmpty)
-        val takeOnAlbum = found?.editions.orEmpty().any {
-            val collection = it.optString("collectionName")
+        // The link's own album says so too: a song on "Live at Budokan (Deluxe Edition)" is the live take.
+        val takeOnAlbum = (found?.editions.orEmpty().map { it.optString("collectionName") } + metadata.album.orEmpty()).any { collection ->
             liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
         }
         val searchFailed = found == null && searching.failed

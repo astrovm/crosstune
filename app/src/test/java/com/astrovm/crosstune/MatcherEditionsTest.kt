@@ -203,6 +203,28 @@ class MatcherEditionsTest {
         assertEquals("single00000", opens(MusicMetadata("Song", "Artist"), listOf(single, album), emptyList(), ""))
     }
 
+    /** The review of 415710769: what picks among rows nothing else tells apart must not pick against the link. */
+    @Test
+    fun anAlbumPicksNoRowAgainstTheLink() {
+        val link = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        // A link on a live album, named with its edition: the live rows are the link's, the studio row isn't.
+        val live = row("Song", "Artist • Live at X • 4:00", "live0000000")
+        val later = row("Song", "Artist • Live at X, Vol. 2 • 4:06", "later000000")
+        val studio = row("Song", "Artist • Album • 4:00", "album000000")
+        for (album in listOf("Live at X (Deluxe Edition)", "Live at X - Live")) {
+            assertEquals(album, "live0000000", opens(link.copy(album = album), listOf(live, studio), emptyList(), ""))
+            assertEquals(album, "live0000000", opens(link.copy(album = album), listOf(live, later, studio), emptyList(), null))
+        }
+        // Apple's album for the song picks no row 6 or 7 seconds off the link while another is as long as it.
+        val hits = row("Song", "Artist • Hits • 4:00", "hits0000000")
+        val longer = row("Song", "Artist • Album • 4:07", "longer00000")
+        assertEquals("hits0000000", opens(link, listOf(hits, longer), emptyList(), apple("Song", "Artist", 241_000, 11, "Album")))
+        assertEquals("hits0000000", opens(link, listOf(longer, hits), emptyList(), apple("Song", "Artist", 241_000, 11, "Album")))
+        // The link's own album does, as the row is the link's release, a few seconds off as it's shown.
+        assertEquals("longer00000", opens(link.copy(album = "Album"), listOf(longer, hits), emptyList(), ""))
+        assertEquals("longer00000", opens(link.copy(album = "Album"), listOf(hits, longer), emptyList(), ""))
+    }
+
     /** The link's own length picks no live row while a studio row is as long as the link, and no video comes before a song. */
     @Test
     fun aLiveRowIsNotTheLinksWhenAStudioRowIsAsLongAsTheLink() {
