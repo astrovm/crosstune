@@ -898,7 +898,9 @@ internal class ExactMatcher(
         val exact = named(false)
         if (!isSong) return Answer(asLongAs(metadata, if (loosely && exact.isEmpty()) named(true) else exact) { it.second.lengthMs }?.first)
         val direct = chooseDirectSong(exact, metadata, disco)
-        val edition = namedLinkedEdition(metadata, items, (direct ?: exact.firstOrNull())?.second?.lengthMs)
+        // Unsure of the row, the link's length is held to the one main opened: the first as long as the link.
+        val nearest = direct ?: asLongAs(metadata, exact.filter { disco.allows(it.second) }) { it.second.lengthMs }
+        val edition = namedLinkedEdition(metadata, items, nearest?.second?.lengthMs)
         if (edition != null && disco.allows(edition)) return Answer(watchUrl + edition.id)
         if (direct != null) return Answer(direct.first)
         if (loosely) chooseDirectSong(named(true), metadata, disco)?.let { return Answer(it.first) }
@@ -948,6 +950,9 @@ internal class ExactMatcher(
             songRow(metadata, rows, videoRows, available, recording, appleSong, disco)
         }
         song?.let { return Answer(watchUrl + it.id, lasting = available.everyStore) }
+        // A song row nothing told apart from its like still comes before a video.
+        plainRecording(metadata, exact.map { it.second }, rows, available, recording, disco)
+            ?.let { return Answer(watchUrl + it.id, lasting = available.everyStore) }
         matchingVideo(metadata, rows, videoRows, available, recording, watchUrl, disco)?.let { return it }
         namedFallback(exact, rows, available, metadata, disco)?.let { return Answer(it.first, lasting = available.everyStore) }
         val localize = if (available.complete) null else suspend {
@@ -968,6 +973,33 @@ internal class ExactMatcher(
             namedVideos.ifEmpty { listedVideos }.filter { it.id != null }.take(PICK_FROM), watchUrl, available, pickableSongs, conflictingLengths,
             videoNamesAnotherRecording),
             final = available.complete, lasting = available.everyStore, localizedUrl = localize)
+    }
+
+    /**
+     * The song's rows that nothing told apart, e.g. the album's and a collection's: one still opens, as the first did
+     * before. A take the link doesn't say is left out, then the link's album, or the catalog's, picks, with or without
+     * its "(2019 Remaster)", then the link's length to the second, then the order.
+     */
+    private fun plainRecording(
+        metadata: MusicMetadata, exact: List<Row>, rows: List<Row>, names: Names, recording: RequestedRecording, disco: DiscoRequest
+    ): Row? {
+        val sourceLength = metadata.linkLengthMs
+        // A row known only by a store's name for the song has no title of the link's to go by, so its length is held closer.
+        val known = rows.filter { isTheSong(it, names) && keepsRequestedRecording(recording, it) && !isAnotherTake(it, names) && fitsSource(it, sourceLength) }
+        val named = exact.ifEmpty { known }
+        val fitting = named.filter { it.id != null && it.id !in names.rejectedCandidates && fitsReleaseLength(it, sourceLength) && disco.allows(it) }
+        val group = fitting.groupBy(::candidateName).values.firstOrNull() ?: return null
+        val live = saysLive(metadata.title) || names.linkedEdition?.live == true
+        val plain = group.filter { rowIsLive(it) == live && !pickerNamesDifferentSongTake(it, names) }
+        val albums = listOfNotNull(metadata.album, names.corroboratingAlbum, names.editionAlbum).filter(String::isNotBlank)
+        fun nearest(among: List<Row>) = among.firstOrNull { sourceLength != null && sameRecordingLength(it.lengthMs, sourceLength) } ?: among.firstOrNull()
+        fun onAlbum(named: (String) -> String) = albums.firstNotNullOfOrNull { album ->
+            nearest(plain.filter { SongNames.normalize(named(it.details.getOrNull(1).orEmpty())) == SongNames.normalize(named(album)) })
+        }
+        // Names a store didn't finish prove no row by its place in the list: there, only an album picks.
+        val listed = plain.takeIf { exact.isNotEmpty() || names.complete }.orEmpty()
+        val first = onAlbum { it } ?: onAlbum(SongNames::withoutEditionTag) ?: nearest(listed) ?: return null
+        return sourceEdition(plain.filter { it.name == first.name && it.details == first.details }, names.sourceExplicit)
     }
 
     /**
@@ -1404,7 +1436,10 @@ internal class ExactMatcher(
         val byAlbum = eligible.filter { row -> names.deezerNames.any { name ->
             name.album.isNotBlank() && SongNames.same(name.album, row.details.getOrNull(1).orEmpty())
         } }.groupBy(::candidateName).mapNotNull { (name, group) -> group.singleOrNull()?.let { name to it.id } }.toMap()
-        return eligible.firstOrNull { disco.allows(it) && (candidateName(it) !in ambiguous || byAlbum[candidateName(it)] == it.id) }
+        // A row that credits someone more, "Artist, Rapper", is their version when another row credits the artist alone.
+        val fewest = eligible.minOfOrNull { SongNames.artists(it.details.first()).size }
+        return eligible.firstOrNull { disco.allows(it) && SongNames.artists(it.details.first()).size == fewest &&
+            (candidateName(it) !in ambiguous || byAlbum[candidateName(it)] == it.id) }
     }
 
     /** An explicit and a clean edition are one recording: the link's badge picks, or else the first. */
@@ -1955,13 +1990,15 @@ internal class ExactMatcher(
          * the artist's own row may be missing. See [namesOf].
          */
         var complete: Boolean,
-        val failedLookups: Set<String>
+        val failedLookups: Set<String>,
+        /** The one album Apple has the song on, among its editions as long as the link, whoever it credits. */
+        val editionAlbum: String?
     ) {
         val rejectedCandidates: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         fun copyForDeezer() = withTitles(titles)
 
         fun withTitles(titles: Set<String>) = Names(titles, artists, lengthsMs, japaneseTitle, requestedTitle, requestedArtist, linkedEdition, corroboratingAlbum, deezerNames,
-            appleFound, appleIds, ambiguousSourceEdition, primaryEdition, sourceExplicit, takeOnAlbum, searchFailed, complete, failedLookups)
+            appleFound, appleIds, ambiguousSourceEdition, primaryEdition, sourceExplicit, takeOnAlbum, searchFailed, complete, failedLookups, editionAlbum)
 
         // A failed lookup can leave a name missing even where the names are complete, as for Lemon (Music Box).
         val everyStore get() = complete && failedLookups.isEmpty()
@@ -2036,7 +2073,7 @@ internal class ExactMatcher(
         return Names(
             titles, artists, lengthsMs, japaneseTitle, metadata.title, metadata.artist, linkedAppleEdition(metadata, found?.editions.orEmpty()), album,
             emptyList(), found != null, ids, hasAmbiguousSourceEdition(metadata, found), primaryEdition(metadata, found),
-            explicitness(metadata, found?.editions.orEmpty()), takeOnAlbum, searchFailed, complete, unanswered
+            explicitness(metadata, found?.editions.orEmpty()), takeOnAlbum, searchFailed, complete, unanswered, editionAlbum(metadata, found)
         )
     }
 
@@ -2078,6 +2115,10 @@ internal class ExactMatcher(
                 }
             }.awaitAll()
         }
+
+    private fun editionAlbum(metadata: MusicMetadata, found: AppleSong?): String? = found?.editions.orEmpty()
+        .filter { metadata.linkLengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false }
+        .map { SongNames.normalize(it.optString("collectionName")) }.distinct().singleOrNull()?.takeIf(String::isNotEmpty)
 
     /** How long Deezer says [metadata]'s song is, when its search has it. */
     private fun deezerLength(metadata: MusicMetadata, results: List<JSONObject>): Long? =

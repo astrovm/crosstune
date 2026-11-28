@@ -2500,8 +2500,11 @@ class ExactMatcherTest {
         val song = MusicMetadata("Song", "アーティスト", lengthMs = 240_000)
         val timed = youTubeMusicRow("Song", "アーティスト • First • 4:00", videoId = "first000000")
         val untimed = youTubeMusicRow("Song", "アーティスト • Second", videoId = "second00000")
-        namesAndTabs(songs = listOf(timed, untimed), apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
-        assertNull(matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        // Nothing tells the two apart, so the first as long as the link opens, as on main, wherever it's listed.
+        for (rows in listOf(listOf(timed, untimed), listOf(untimed, timed))) {
+            namesAndTabs(songs = rows, apple = mapOf("US" to appleSong("Song", "アーティスト", 240_000)))
+            assertEquals("https://music.youtube.com/watch?v=first000000", matcher("US").find(MusicService.YOUTUBE_MUSIC, song))
+        }
     }
 
     @Test

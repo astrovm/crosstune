@@ -179,18 +179,92 @@ class MatcherEditionsTest {
         assertEquals("album000000", opens(link, listOf(studio, row("Other Song - Live", "Artist • Album • 4:00", "live0000000")), emptyList(), single))
     }
 
-    /** No answer from MusicBrainz leaves the native name unproved: retried, never a lasting wrong take. */
+    /**
+     * The review of 60aa617fe: rows of one name that nothing told apart opened nothing, where main opened its first row as
+     * long as the link. One opens again: the link's album's, then the one as long as the link, then the first.
+     */
+    @Test
+    fun rowsOfOneNameThatNothingTellsApartStillOpenOne() {
+        val link = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val album = row("Song", "Artist • Album • 4:00", "album000000")
+        // A collection's row 4 to 8 seconds longer may be the same recording or not.
+        for (length in listOf("4:04", "4:05", "4:08")) {
+            val collection = row("Song", "Artist • Collection • $length", "collection0")
+            assertEquals(length, "album000000", opens(link, listOf(album, collection), emptyList(), null))
+            assertEquals(length, "album000000", opens(link, listOf(collection, album), emptyList(), ""))
+        }
+        // The explicit and the clean edition, and a third row.
+        val third = row("Song", "Artist • Collection • 4:04", "collection0")
+        assertEquals("explicit000", opens(song, explicitFirst + third, emptyList(), bothAtApple))
+        assertEquals("explicit000", opens(song, listOf(third) + explicitFirst, emptyList(), null))
+        // No length on the link, and two recordings: the first.
+        val single = row("Song", "Artist • Song - Single • 3:30", "single00000")
+        assertEquals("album000000", opens(MusicMetadata("Song", "Artist"), listOf(album, single), emptyList(), ""))
+        assertEquals("single00000", opens(MusicMetadata("Song", "Artist"), listOf(single, album), emptyList(), ""))
+    }
+
+    /** The link's own length picks no live row while a studio row is as long as the link, and no video comes before a song. */
+    @Test
+    fun aLiveRowIsNotTheLinksWhenAStudioRowIsAsLongAsTheLink() {
+        val songs = listOf(row("Song (Live)", "Artist • Live at X • 4:00", "live0000000"), row("Song", "Artist • Song - Single • 3:30", "single00000"),
+            row("Song", "Artist • Greatest Hits • 4:05", "hits0000000"), row("Song", "Artist • Album (Deluxe Edition) • 4:00", "deluxe00000"))
+        val video = row("Artist - Song (Official Video)", "Artist • 10M views • 4:05", "video000000")
+        assertEquals("deluxe00000", opens(song, songs, emptyList(), null))
+        assertEquals("deluxe00000", opens(song, songs, listOf(video), ""))
+        assertEquals("deluxe00000", opens(song.copy(album = null), songs.reversed(), emptyList(), ""))
+    }
+
+    /** A row that credits a guest more is the guest's version: Deezer's name for the song proves the artist's own row. */
+    @Test
+    fun deezersNameProvesNoRowThatCreditsSomeoneMore() {
+        val songs = listOf(row("Song", "Artist • Album (Deluxe Edition) • 4:00", "deluxe00000"), row("Song", "Artist • Collection • 4:04", "collection0"),
+            row("Song", "Artist, Rapper • Song (Rapper Version) • 4:02", "rapper00000"), row("Song", "Artist • Album • 4:00", "album000000"))
+        val deezer = """[{"title":"Song","artist":{"id":1,"name":"Artist"},"album":{"title":""},"duration":240}]"""
+        assertEquals("deluxe00000", opens(MusicMetadata("Song", "Artist", lengthMs = 240_000), songs, emptyList(), "", deezer))
+    }
+
+    /** Rows named in another script: the link's album picks, also when it says its remaster and the row doesn't. */
+    @Test
+    fun theLinksAlbumPicksAmongRowsInAnotherScript() {
+        val native = "突然の贈りもの"
+        val studio = row(native, "大貫妙子 • Mignonne • 5:04", "studio00000")
+        val compilation = row(native, "大貫妙子 • Another Compilation • 5:04", "compilation")
+        val us = apple("Totsuzen No Okurimono", "Taeko Onuki", 304_000, 7, "Mignonne")
+        val jp = apple(native, "大貫妙子", 304_000, 7, "Mignonne")
+        for (album in listOf(null, "Mignonne", "Mignonne (2019 Remaster)")) for (length in listOf(304_000L, null)) {
+            for (rows in listOf(listOf(studio, compilation), listOf(compilation, studio))) {
+                fake.handler = { request: Request ->
+                    val url = request.url
+                    when {
+                        url.host == "itunes.apple.com" && url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[$us]}""")
+                        url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[${jp.takeIf { url.queryParameter("country") == "JP" }.orEmpty()}]}""")
+                        url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                        else -> FakeSpotify.html(request, page(if (FakeSpotify.bodyOf(request).contains(VIDEO_PARAMS)) emptyList() else rows))
+                    }
+                }
+                val link = MusicMetadata("Totsuzen No Okurimono", "Taeko Onuki", album = album, lengthMs = length)
+                val opened = runBlocking { ExactMatcher(fake.client(), "US").find(MusicService.YOUTUBE_MUSIC, link) }?.removePrefix(WATCH)
+                assertEquals("album $album, length $length", "studio00000", opened)
+            }
+        }
+    }
+
+    /**
+     * No answer from MusicBrainz leaves the native name unproved: never the concert take, and nothing lasting. The row on
+     * the one album Apple has the song on opens meanwhile, wherever it's listed; with Apple down too, it's retried.
+     */
     @Test
     fun aNativeArtistWithNoAliasAnswerIsNotTheConcertTake() {
-        val songs = listOf(row("突然の贈りもの - Totsuzen No Okurimono", "Taeko Onuki • Symphonic Concert 2016 • 5:02", "concert0000"),
+        val listed = listOf(row("突然の贈りもの - Totsuzen No Okurimono", "Taeko Onuki • Symphonic Concert 2016 • 5:02", "concert0000"),
             row("突然の贈りもの - Totsuzen No Okurimono", "Taeko Onuki • Mignonne • 5:05", "studio00000"))
         val apple = """{"trackId":7,"trackName":"Totsuzen No Okurimono","artistName":"Taeko Onuki","trackTimeMillis":304293,"collectionName":"Mignonne"}"""
         val deezer = """[{"title":"Totsuzen No Okurimono","artist":{"id":1,"name":"Taeko Onuki"},"album":{"title":"Mignonne"},"duration":304}]"""
-        for (appleUp in listOf(true, false)) {
+        for (appleUp in listOf(true, false)) for (songs in listOf(listed, listed.reversed())) {
             serve(songs, emptyList(), apple.takeIf { appleUp }, deezer, artist = "Taeko Onuki")
             val match = runBlocking { ExactMatcher(fake.client(), "US").lookFor(MusicService.YOUTUBE_MUSIC,
                 MusicMetadata("Totsuzen No Okurimono", "大貫妙子", lengthMs = 304_293)) }
-            assertEquals("Apple up: $appleUp", ExactMatcher.Match.Failed, match)
+            val studio = ExactMatcher.Match.Found(WATCH + "studio00000", lasting = false)
+            assertEquals("Apple up: $appleUp", if (appleUp) studio else ExactMatcher.Match.Failed, match)
         }
     }
 

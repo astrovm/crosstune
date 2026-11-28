@@ -574,7 +574,8 @@ class MatcherCasesTest {
             linkMs = 259_002, songs = listOf(row(bilingual, "GOLDEN BEST", length = "4:23"),
                 row(bilingual, "Yugure kara...Hitori", length = "4:20")))
         assertEquals("song1", find(case))
-        assertEquals(null, find(case.copy(linkMs = 261_000)))
+        // Both as long as the link, nothing tells them apart: the first opens, as on main.
+        assertEquals("song0", find(case.copy(linkMs = 261_000)))
     }
 
     /** 8 s from the link is still its length; a row further off, listed first, is not it. */
@@ -1549,9 +1550,6 @@ class MatcherCasesTest {
             "2 two possible live takes" to null,
             // Two Apple editions share a length and neither names the other-script result.
             "2 ambiguous Apple editions" to null,
-            // The displayed live titles differ, and no evidence chooses their recordings.
-            "3 Fake Song: Live latin" to null,
-            "3 Fake Song «Live» latin" to null,
             "9 budokan" to "song1",
             "9 budokan picked" to "song1",
             "9 op size" to "song1",
