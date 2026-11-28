@@ -4662,6 +4662,8 @@ class MainViewModelTest {
         val sound = object : CoverSound {
             override fun keep() {
                 covered = model.uiState.coveringApp
+                // Crosstune back in sight meanwhile, as when Android's ask closes, isn't the cover going: it's still to come.
+                model.uncover()
                 went += "kept"
             }
 

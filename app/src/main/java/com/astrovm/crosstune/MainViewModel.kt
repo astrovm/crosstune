@@ -4871,8 +4871,11 @@ internal class MainViewModel(
     /** Crosstune no longer covers the app playing, closed or back in sight itself. */
     fun uncover() {
         uiState = uiState.copy(coveringApp = false)
-        coverSound?.letGo()
+        // Not while it's being taken for a cover about to come up: this is then the end of one before, or of none.
+        if (!takingSound) coverSound?.letGo()
     }
+
+    private var takingSound = false
 
     /**
      * The phone's own sound is taken before an app is covered, while Crosstune's still in front, and kept until
@@ -4881,7 +4884,12 @@ internal class MainViewModel(
      */
     private suspend fun hearUnderCover() {
         val sound = coverSound?.takeIf { !uiState.coveringApp } ?: return
-        withContext(systemDispatcher) { sound.keep() }
+        takingSound = true
+        try {
+            withContext(systemDispatcher) { sound.keep() }
+        } finally {
+            takingSound = false
+        }
     }
 
     /**
