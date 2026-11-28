@@ -203,6 +203,21 @@ class MatcherEditionsTest {
         assertEquals("single00000", opens(MusicMetadata("Song", "Artist"), listOf(single, album), emptyList(), ""))
     }
 
+    /** Among rows of the song's name, one that says another take isn't the link's, wherever it is in the list. */
+    @Test
+    fun aRowOfAnotherTakeIsNotOpenedForItsPlaceInTheList() {
+        val link = MusicMetadata("Song", "Artist", lengthMs = 240_000)
+        val album = row("Song", "Artist • Album • 4:00", "album000000")
+        val karaoke = row("Song", "Artist • Karaoke Hits • 4:00", "karaoke0000")
+        assertEquals("album000000", opens(link, listOf(karaoke, album), emptyList(), ""))
+        assertEquals("album000000", opens(link, listOf(album, karaoke), emptyList(), null))
+        // A live link's rows are live, and the first of them is the link's.
+        val live = row("Song (Live)", "Artist • Live at X • 4:00", "live0000000")
+        val remix = row("Song (Live Remix)", "Artist • Live at X • 4:00", "remix000000")
+        assertEquals("live0000000", opens(MusicMetadata("Song (Live)", "Artist", lengthMs = 240_000), listOf(live, remix), emptyList(), null))
+        assertEquals("remix000000", opens(MusicMetadata("Song (Live Remix)", "Artist", lengthMs = 240_000), listOf(remix, live), emptyList(), ""))
+    }
+
     /** The review of 415710769: what picks among rows nothing else tells apart must not pick against the link. */
     @Test
     fun anAlbumPicksNoRowAgainstTheLink() {
