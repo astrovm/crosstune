@@ -12,6 +12,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -188,8 +189,10 @@ internal class MainViewModel(
                 if (!play) return source.playPause(song, false, app, session)
                 viewModelScope.launch {
                     if (source.resume(song, app, session)) return@launch
-                    if (uiState.canFloatOverApps) hearUnderCover()
-                    if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
+                    if (uiState.canFloatOverApps) {
+                        hearUnderCover()
+                        uiState = uiState.copy(coveringApp = true)
+                    }
                     if (!source.bringToFront(song, app, session)) uncover()
                 }
             }
@@ -4872,10 +4875,11 @@ internal class MainViewModel(
     fun uncover() {
         uiState = uiState.copy(coveringApp = false)
         // Not while it's being taken for a cover about to come up: this is then the end of one before, or of none.
-        if (!takingSound) coverSound?.letGo()
+        if (takingSound == 0) coverSound?.letGo()
     }
 
-    private var takingSound = false
+    /** How many plays are taking the sound for their covers now. */
+    private var takingSound = 0
 
     /**
      * The phone's own sound is taken before an app is covered, while Crosstune's still in front, and kept until
@@ -4884,11 +4888,15 @@ internal class MainViewModel(
      */
     private suspend fun hearUnderCover() {
         val sound = coverSound?.takeIf { !uiState.coveringApp } ?: return
-        takingSound = true
+        takingSound++
         try {
             withContext(systemDispatcher) { sound.keep() }
+        } catch (canceled: CancellationException) {
+            // The play given up meanwhile, no cover comes to let go of it.
+            sound.letGo()
+            throw canceled
         } finally {
-            takingSound = false
+            takingSound--
         }
     }
 

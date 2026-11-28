@@ -4693,6 +4693,31 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aPlayGivenUpWhileTheSoundIsTakenLetsGoOfItAsNoCoverComes() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val went = mutableListOf<String>()
+        lateinit var model: MainViewModel
+        val sound = object : CoverSound {
+            override fun keep() {
+                model.viewModelScope.coroutineContext[Job]?.children?.forEach { it.cancel() }
+                went += "kept"
+            }
+
+            override fun letGo() {
+                went += "let go"
+            }
+        }
+        model = ytMusicModel(playback, coverSound = sound)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("taken") { "kept" in went }
+        idle()
+        assertEquals(listOf("kept", "let go"), went)
+        assertTrue(playback.opened.isEmpty())
+        assertFalse(model.uiState.coveringApp)
+    }
+
+    @Test
     fun aSongPlayedOnFromUnderTheCoverTakesNoSoundAsTheAskWouldOpenOverTheApp() {
         val playback = FakePlayback().apply { access = true; startsInBackground = false }
         val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
