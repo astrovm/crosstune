@@ -113,6 +113,7 @@ class MainViewModelTest {
         sungReadings: SungReadings? = null,
         mayCalibrate: () -> Boolean = { false },
         mayCapture: () -> Boolean = { false },
+        coverSound: CoverSound? = null,
         systemDispatcher: CoroutineDispatcher = Dispatchers.Unconfined
     ): MainViewModel {
         val client = fake.client()
@@ -144,7 +145,8 @@ class MainViewModelTest {
             reminders = reminders,
             sungReadings = sungReadings,
             mayCalibrate = mayCalibrate,
-            mayCapture = mayCapture
+            mayCapture = mayCapture,
+            coverSound = coverSound
         ).also { made += it }
     }
 
@@ -4390,11 +4392,11 @@ class MainViewModelTest {
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
-    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null, playQueue: PlayQueue? = null): MainViewModel {
+    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null, packageName: String = ytMusic, lyricsFinder: LyricsFinder? = null, playQueue: PlayQueue? = null, coverSound: CoverSound? = null): MainViewModel {
         shadowOf(app.packageManager).installPackage(installedApp(packageName, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
-        val model = model(playback = playback, phone = phone, oneTap = oneTap, lyricsFinder = lyricsFinder, playQueue = playQueue)
+        val model = model(playback = playback, phone = phone, oneTap = oneTap, lyricsFinder = lyricsFinder, playQueue = playQueue, coverSound = coverSound)
         model.refreshSystemState()
         idle()
         model.onUrlChange(ytLink)
@@ -4645,6 +4647,81 @@ class MainViewModelTest {
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(model.uiState.coveringApp)
         assertEquals("Dakare Ni Kita Onna", model.uiState.lyricsFor?.title)
+    }
+
+    @Test
+    fun thePhonesOwnSoundIsTakenBeforeAnAppIsCoveredAndKeptUntilTheCoverGoes() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        // What happened, in order: Android's ask opens a screen, so the sound is taken before the app opens, not over it.
+        val went = mutableListOf<String>()
+        val watched = object : PlaybackSource by playback {
+            override fun openSong(app: String, link: String) = playback.openSong(app, link).also { went += "opened" }
+        }
+        var covered: Boolean? = null
+        lateinit var model: MainViewModel
+        val sound = object : CoverSound {
+            override fun keep() {
+                covered = model.uiState.coveringApp
+                went += "kept"
+            }
+
+            override fun letGo() {
+                went += "let go"
+            }
+        }
+        model = ytMusicModel(watched, coverSound = sound)
+        // Not covered, as Android doesn't let Crosstune show over other apps, nothing's taken.
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertFalse("kept" in went)
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it") { !model.uiState.playingResult }
+        went.clear()
+        playback.opened.clear()
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there again") { playback.opened.isNotEmpty() }
+        assertEquals(listOf("kept", "opened"), went)
+        assertEquals(false, covered)
+        assertTrue(model.uiState.coveringApp)
+        // Never playing, it comes out from under the cover, and the sound is let go of.
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("given up on it again") { !model.uiState.playingResult }
+        assertEquals("let go", went.last())
+    }
+
+    @Test
+    fun aSongPlayedOnFromUnderTheCoverTakesNoSoundAsTheAskWouldOpenOverTheApp() {
+        val playback = FakePlayback().apply { access = true; startsInBackground = false }
+        val finder = LyricsFinder(fake.inlineClient(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        var kept = 0
+        val sound = object : CoverSound {
+            override fun keep() {
+                kept++
+            }
+
+            override fun letGo() = Unit
+        }
+        val model = ytMusicModel(playback, lyricsFinder = finder, coverSound = sound)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("opened there") { playback.opened.isNotEmpty() }
+        appPlays(playback)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(model.uiState.coveringApp)
+        assertEquals(1, kept)
+        // Paused and played on, it's brought to the front under the same cover.
+        appPlays(playback, playing = false)
+        until("seen paused") { model.uiState.player?.following?.clock?.playing == false }
+        model.playerPlayPause()
+        until("brought to the front") { playback.broughtToFront.isNotEmpty() }
+        assertEquals(1, kept)
+        // Out from under the cover, played on it's taken again, before the app is in front.
+        model.uncover()
+        playback.broughtToFront.clear()
+        model.playerPlayPause()
+        until("brought to the front again") { playback.broughtToFront.isNotEmpty() }
+        assertEquals(2, kept)
     }
 
     @Test

@@ -2,8 +2,12 @@ package com.astrovm.crosstune
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.Application
+import android.content.Intent
+import android.os.Binder
+import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Before
@@ -104,6 +108,72 @@ class PlaybackCaptureTest {
             assertNull(heard.get(1, TimeUnit.SECONDS))
         } finally {
             FloatingLyricsService.covering = false
+            listening.shutdownNow()
+        }
+    }
+
+    @Test
+    fun keptFromInFrontItAsksAndOutOfSightOrWithoutTheGrantItAsksNothing() {
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val inFront = PlaybackCapture.inFront
+        val listening = Executors.newSingleThreadExecutor()
+        try {
+            // In a test, as in front, Android says the process is in front.
+            assertTrue(inFront())
+            // Without Shizuku's or root's grant, Android would ask the user.
+            PlaybackCapture.keep(app)
+            assertNull(shadowOf(app).nextStartedActivity)
+            // Out of sight, the ask would open over whatever app is in front.
+            PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+            PlaybackCapture.inFront = { false }
+            PlaybackCapture.keep(app)
+            assertNull(shadowOf(app).nextStartedActivity)
+            // In front with the grant, it asks, through the screen that shows nothing.
+            PlaybackCapture.inFront = { true }
+            val kept = listening.submit { PlaybackCapture.keep(app) }
+            val asked = waitFor { shadowOf(app).nextStartedActivity }
+            assertEquals(CaptureAsk::class.java.name, asked.component?.className)
+            val ask = Robolectric.buildActivity(CaptureAsk::class.java, asked).create().get()
+            shadowOf(ask).receiveResult(shadowOf(ask).nextStartedActivityForResult.intent, Activity.RESULT_CANCELED, null)
+            kept.get(1, TimeUnit.SECONDS)
+            // Nothing was given, so there's nothing to let go of.
+            PlaybackCapture.letGo()
+        } finally {
+            PlaybackCapture.inFront = inFront
+            listening.shutdownNow()
+        }
+    }
+
+    @Test
+    fun keptItStaysWhileNothingListensAndGoesAMinuteAfterItsLetGoOf() {
+        PhoneAppOps.projectMedia = AppOpsManager.MODE_ALLOWED
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val listening = Executors.newSingleThreadExecutor()
+        try {
+            val kept = listening.submit { PlaybackCapture.keep(app) }
+            val asked = waitFor { shadowOf(app).nextStartedActivity }
+            val ask = Robolectric.buildActivity(CaptureAsk::class.java, asked).create().get()
+            // Android gives it, to the service that holds it.
+            val given = Intent().putExtras(Bundle().apply { putBinder("android.media.projection.extra.EXTRA_MEDIA_PROJECTION", Binder()) })
+            shadowOf(ask).receiveResult(shadowOf(ask).nextStartedActivityForResult.intent, Activity.RESULT_OK, given)
+            val holds = shadowOf(app).nextStartedService
+            assertEquals(CaptureService::class.java.name, holds.component?.className)
+            Robolectric.buildService(CaptureService::class.java, holds).create().startCommand(0, 1)
+            kept.get(1, TimeUnit.SECONDS)
+            // Kept again, as under the same cover, it asks nothing more.
+            shadowOf(app).clearNextStartedActivities()
+            PlaybackCapture.keep(app)
+            assertNull(shadowOf(app).nextStartedActivity)
+            // Long after a listen would have let it go, it's still held.
+            ShadowLooper.idleMainLooper(5, TimeUnit.MINUTES)
+            assertNull(shadowOf(app).nextStoppedService)
+            // Let go of, it goes as after any last listen: a minute on.
+            PlaybackCapture.letGo()
+            ShadowLooper.idleMainLooper(59, TimeUnit.SECONDS)
+            assertNull(shadowOf(app).nextStoppedService)
+            ShadowLooper.idleMainLooper(2, TimeUnit.SECONDS)
+            assertEquals(CaptureService::class.java.name, shadowOf(app).nextStoppedService.component?.className)
+        } finally {
             listening.shutdownNow()
         }
     }

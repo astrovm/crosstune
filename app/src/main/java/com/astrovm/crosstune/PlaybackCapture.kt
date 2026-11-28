@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -103,9 +104,27 @@ internal class PlaybackCapture(private val context: Context) : Microphone {
     }
 
     companion object {
-        /** A no from Android is forgotten, so a test starts and ends without another's. */
+        /** A no from Android is forgotten, and a capture kept let go of, so a test starts and ends without another's. */
         @VisibleForTesting
         fun forget() = Projections.forget()
+
+        /**
+         * Takes the capture ahead and keeps it until [letGo], for an app about to be covered: under the cover it
+         * can't be asked for, as the ask opens a screen over the app. Only with Crosstune in front, where that
+         * screen opens over Crosstune. Blocks while Android's asked.
+         */
+        fun keep(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && allowed(context) && inFront()) Projections.keep(context)
+        }
+
+        /** Lets go of what [keep] took, which then goes as any does once nothing listens. */
+        fun letGo() = Projections.unkeep()
+
+        /** Whether Crosstune's own screen is in front, by what Android makes of its process; a test says, as its Android doesn't. */
+        @VisibleForTesting
+        internal var inFront: () -> Boolean = {
+            ActivityManager.RunningAppProcessInfo().also(ActivityManager::getMyMemoryState).importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+        }
 
         /** Whether Shizuku or root allowed it, so Android won't ask, and the microphone's allowed. */
         @RequiresApi(Build.VERSION_CODES.Q)
@@ -123,6 +142,7 @@ internal class PlaybackCapture(private val context: Context) : Microphone {
 private object Projections {
     private var projection: MediaProjection? = null
     private var users = 0
+    private var kept = false
     private var asking: CountDownLatch? = null
     private var refusedAt: Long? = null
     private var app: Context? = null
@@ -161,6 +181,21 @@ private object Projections {
         if (--users == 0) main.postDelayed(end, LINGER_MS)
     }
 
+    /** One more use of the projection, by nothing that listens, until [unkeep]. */
+    fun keep(context: Context) {
+        synchronized(this) { if (kept) return }
+        take(context) ?: return
+        // Taken twice at once, one's enough.
+        synchronized(this) { if (kept) letGo() else kept = true }
+    }
+
+    @Synchronized
+    fun unkeep() {
+        if (!kept) return
+        kept = false
+        letGo()
+    }
+
     @Synchronized
     fun given(projection: MediaProjection) {
         this.projection = projection
@@ -183,6 +218,7 @@ private object Projections {
     @Synchronized
     fun forget() {
         refusedAt = null
+        unkeep()
     }
 
     @Synchronized

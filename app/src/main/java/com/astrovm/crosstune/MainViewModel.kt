@@ -132,6 +132,8 @@ internal class MainViewModel(
     private val mayCalibrate: () -> Boolean = { false },
     /** Whether Shizuku or root let Crosstune hear the phone's own sound cleanly, as playback capture. */
     private val mayCapture: () -> Boolean,
+    /** Keeps the phone's own sound to hear under a cover, see [hearUnderCover]; nullable so tests need none. */
+    private val coverSound: CoverSound? = null,
     /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
     private val singing: SingingHearing? = null,
     /** Where reports on the words go, kept private; nullable so tests need none. */
@@ -186,6 +188,7 @@ internal class MainViewModel(
                 if (!play) return source.playPause(song, false, app, session)
                 viewModelScope.launch {
                     if (source.resume(song, app, session)) return@launch
+                    if (uiState.canFloatOverApps) hearUnderCover()
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
                     if (!source.bringToFront(song, app, session)) uncover()
                 }
@@ -2204,7 +2207,8 @@ internal class MainViewModel(
     }
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
-    private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+    private suspend fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+        if (uiState.canFloatOverApps && (uiState.phone == Phone.TV || source.playsOnlyInFront(app))) hearUnderCover()
         val pending = if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.prepare(song, app, link) else null
         return source.openSong(app, link).also { pending?.started(it) }
     }
@@ -2465,7 +2469,7 @@ internal class MainViewModel(
             // Still being asked for, a second ask would start it over.
             if (!uiState.playingResult) viewModelScope.launch {
                 // On a TV, YouTube lets go of a song once Crosstune is in front, so it's opened on it again, covered.
-                if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { playback.openSong(app, it) } }
+                if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { hearUnderCover(); playback.openSong(app, it) } }
             }
         }
         playback?.playPause(player.song, !following.clock.playing, player.askedOf, following.session)
@@ -4866,6 +4870,17 @@ internal class MainViewModel(
     /** Crosstune no longer covers the app playing, closed or back in sight itself. */
     fun uncover() {
         uiState = uiState.copy(coveringApp = false)
+        coverSound?.letGo()
+    }
+
+    /**
+     * The phone's own sound is taken before an app is covered, while Crosstune's still in front, and kept until
+     * the cover goes: under it Android can't be asked, as the ask opens a screen over the app, and one that only
+     * plays in front then stops. Already covering, it's kept as it is.
+     */
+    private suspend fun hearUnderCover() {
+        val sound = coverSound?.takeIf { !uiState.coveringApp } ?: return
+        withContext(systemDispatcher) { sound.keep() }
     }
 
     /**

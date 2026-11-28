@@ -156,6 +156,7 @@ class MainActivity : ComponentActivity() {
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     mayCapture = { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && PlaybackCapture.allowed(applicationContext) },
+                    coverSound = CapturedCoverSound(applicationContext),
                     singing = singingFactory(applicationContext, client),
                     reminders = remindersFactory(applicationContext),
                     reports = ReportSender(

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.content.Context
 import kotlin.math.abs
 
 /**
@@ -38,4 +39,19 @@ internal class CleanFirst(private val clean: Microphone?, private val played: Mi
         /** Off by this much from silence is still silence. scripts/syncreplay/syncreplay.py takes it the same, and a test there checks. */
         private const val QUIET = 2
     }
+}
+
+/** The phone's own sound kept for as long as Crosstune covers an app, so the words under the cover hear it. */
+internal interface CoverSound {
+    /** Taken now, if it may be; blocks while Android's asked. */
+    fun keep()
+
+    fun letGo()
+}
+
+/** [PlaybackCapture]'s, which Shizuku or root allows. */
+internal class CapturedCoverSound(private val context: Context) : CoverSound {
+    override fun keep() = PlaybackCapture.keep(context)
+
+    override fun letGo() = PlaybackCapture.letGo()
 }
