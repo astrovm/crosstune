@@ -990,8 +990,12 @@ internal class ExactMatcher(
         val fitting = named.filter { it.id != null && it.id !in names.rejectedCandidates && fitsReleaseLength(it, sourceLength) && disco.allows(it) }
         val group = fitting.groupBy(::candidateName).values.firstOrNull() ?: return null
         val linkAlbums = listOfNotNull(metadata.album).filter(String::isNotBlank)
-        val live = saysLive(metadata.title) || names.linkedEdition?.live == true || linkAlbums.any(::liveAlbum)
-        val plain = group.filter { rowIsLive(it) == live && if (live) !Takes.saysAnotherVersionBesidesLive(it.name) else !pickerNamesDifferentSongTake(it, names) }
+        val live = saysLive(metadata.title) || names.linkedEdition?.live == true || linkAlbums.any(::liveRelease)
+        // A live link's rows are live: only a version the link doesn't say itself, "Song (Live Remix)", is another.
+        val versioned = Takes.saysAnotherVersionBesidesLive(metadata.title)
+        val plain = group.filter { row ->
+            rowIsLive(row) == live && if (live) versioned || !Takes.saysAnotherVersionBesidesLive(row.name) else !pickerNamesDifferentSongTake(row, names)
+        }
         fun asLong(row: Row) = sourceLength == null || sameRecordingLength(row.lengthMs, sourceLength)
         fun nearest(among: List<Row>) = among.firstOrNull { sourceLength != null && asLong(it) } ?: among.firstOrNull()
         // An album's name, as it is and then without its "(2019 Remaster)". A store's album only picks a row as long as the link.
@@ -1652,6 +1656,9 @@ internal class ExactMatcher(
         return saysLive(album) || liveAlbumStarts.any(album::startsWith)
     }
 
+    /** A live album as a link names it, with its edition: "Hits (Live) (2019 Remaster)". */
+    private fun liveRelease(album: String): Boolean = liveAlbum(album) || liveAlbum(SongNames.withoutEditionTag(album))
+
     private val liveLabels = setOf(
         "live", "live ver", "live version", "en vivo", "ao vivo", "ライブ", "ライヴ", "ライブバージョン", "ライヴバージョン",
         "现场版", "現場版", "라이브", "라이브버전"
@@ -2072,9 +2079,8 @@ internal class ExactMatcher(
                 metadata.linkLengthMs?.let { length -> sameRecordingLength(it.optLong("trackTimeMillis"), length) } != false
         }?.optString("collectionName")?.let(SongNames::normalize)?.takeIf(String::isNotEmpty)
         // The link's own album says so too: a song on "Live at Budokan (Deluxe Edition)" is the live take.
-        val takeOnAlbum = (found?.editions.orEmpty().map { it.optString("collectionName") } + metadata.album.orEmpty()).any { collection ->
-            liveAlbum(collection) || Takes.saysAnotherTake(collection) != null
-        }
+        val takeOnAlbum = liveRelease(metadata.album.orEmpty()) || (found?.editions.orEmpty().map { it.optString("collectionName") } + metadata.album.orEmpty())
+            .any { collection -> liveAlbum(collection) || Takes.saysAnotherTake(collection) != null }
         val searchFailed = found == null && searching.failed
         val complete = !searchFailed && unanswered.none { it == "US" || it in homes }
         val ids = appleRecordingIds(metadata, found)

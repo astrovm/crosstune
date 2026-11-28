@@ -215,6 +215,10 @@ class MatcherEditionsTest {
             assertEquals(album, "live0000000", opens(link.copy(album = album), listOf(live, studio), emptyList(), ""))
             assertEquals(album, "live0000000", opens(link.copy(album = album), listOf(live, later, studio), emptyList(), null))
         }
+        // The live album named with its remaster.
+        val hitsLive = row("Song", "Artist • Hits (Live) • 4:00", "hitslive000")
+        assertEquals("hitslive000", opens(link.copy(album = "Hits (Live) (2019 Remaster)"), listOf(hitsLive, studio), emptyList(), ""))
+        assertEquals("hitslive000", opens(link.copy(album = "Hits (Live) (2019 Remaster)"), listOf(studio, hitsLive), emptyList(), ""))
         // Apple's album for the song picks no row 6 or 7 seconds off the link while another is as long as it.
         val hits = row("Song", "Artist • Hits • 4:00", "hits0000000")
         val longer = row("Song", "Artist • Album • 4:07", "longer00000")
